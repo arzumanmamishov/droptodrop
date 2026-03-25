@@ -15,7 +15,18 @@
       "Bash(gh repo:*)",
       "Bash(git rm:*)",
       "Bash(git status:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git remote:*)",
+      "Bash(gh auth:*)",
+      "Bash(scalingo apps:*)",
+      "Bash(scalingo create:*)",
+      "Bash(scalingo config:*)",
+      "Bash(scalingo billing-info:*)",
+      "Bash(scalingo self:*)",
+      "Bash(scalingo --app droptodrop --region osc-fr1 addons-add postgresql postgresql-starter-512)",
+      "Bash(scalingo --app droptodrop --region osc-fr1 addons-add redis redis-starter-512)"
     ]
   }
 }
