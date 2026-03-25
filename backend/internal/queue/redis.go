@@ -36,7 +36,9 @@ func NewClient(cfg config.RedisConfig, logger zerolog.Logger) (*Client, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse redis URL: %w", err)
 	}
-	opts.Password = cfg.Password
+	if cfg.Password != "" {
+		opts.Password = cfg.Password
+	}
 	opts.MaxRetries = cfg.MaxRetries
 
 	rdb := redis.NewClient(opts)
