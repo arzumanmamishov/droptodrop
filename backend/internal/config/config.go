@@ -67,7 +67,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
 			Host: getEnv("SERVER_HOST", "0.0.0.0"),
-			Port: getEnv("SERVER_PORT", "8080"),
+			Port: getEnv("PORT", getEnv("SERVER_PORT", "8080")),
 			Env:  getEnv("APP_ENV", "development"),
 		},
 		Shopify: ShopifyConfig{

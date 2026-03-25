@@ -1,0 +1,63 @@
+{
+  "name": "droptodrop",
+  "description": "Shopify Dropshipping Network - supplier-to-reseller platform",
+  "addons": [
+    {
+      "plan": "postgresql:postgresql-sandbox"
+    },
+    {
+      "plan": "redis:redis-sandbox"
+    }
+  ],
+  "env": {
+    "APP_ENV": {
+      "description": "Application environment",
+      "value": "production"
+    },
+    "SHOPIFY_API_KEY": {
+      "description": "Shopify app API key",
+      "required": true
+    },
+    "SHOPIFY_API_SECRET": {
+      "description": "Shopify app API secret",
+      "required": true
+    },
+    "SHOPIFY_SCOPES": {
+      "description": "Shopify OAuth scopes",
+      "value": "read_products,write_products,read_orders,write_orders,read_fulfillments,write_fulfillments,read_inventory,write_inventory,read_shipping"
+    },
+    "SHOPIFY_APP_URL": {
+      "description": "Public app URL",
+      "value": "https://droptodrop.osc-fr1.scalingo.io"
+    },
+    "SHOPIFY_REDIRECT_URI": {
+      "description": "OAuth callback URL",
+      "value": "https://droptodrop.osc-fr1.scalingo.io/auth/callback"
+    },
+    "SESSION_SECRET": {
+      "description": "Session signing secret (min 32 chars)",
+      "generator": "secret"
+    },
+    "ENCRYPTION_KEY": {
+      "description": "AES-256 encryption key (min 32 chars)",
+      "generator": "secret"
+    },
+    "WEBHOOK_SECRET": {
+      "description": "Webhook verification secret",
+      "generator": "secret"
+    }
+  },
+  "formation": {
+    "web": {
+      "amount": 1,
+      "size": "S"
+    },
+    "worker": {
+      "amount": 1,
+      "size": "S"
+    }
+  },
+  "scripts": {
+    "postdeploy": "echo 'Deployment complete'"
+  }
+}

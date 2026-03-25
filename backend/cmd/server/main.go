@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -514,6 +517,31 @@ func main() {
 			}
 			c.JSON(http.StatusOK, gin.H{"entries": entries, "total": total})
 		})
+	}
+
+	// Serve frontend static files if available (production single-container mode)
+	staticDir := os.Getenv("STATIC_DIR")
+	if staticDir == "" {
+		staticDir = "/app/static"
+	}
+	if info, err := os.Stat(staticDir); err == nil && info.IsDir() {
+		r.NoRoute(func(c *gin.Context) {
+			path := c.Request.URL.Path
+			// Serve static files directly if they exist
+			if !strings.HasPrefix(path, "/api/") && !strings.HasPrefix(path, "/auth/") &&
+				!strings.HasPrefix(path, "/webhooks/") && !strings.HasPrefix(path, "/health") {
+				fullPath := filepath.Join(staticDir, path)
+				if _, err := fs.Stat(os.DirFS(staticDir), strings.TrimPrefix(path, "/")); err == nil {
+					c.File(fullPath)
+					return
+				}
+				// SPA fallback: serve index.html for unmatched routes
+				c.File(filepath.Join(staticDir, "index.html"))
+				return
+			}
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		})
+		logger.Info().Str("dir", staticDir).Msg("serving frontend static files")
 	}
 
 	// Start server
