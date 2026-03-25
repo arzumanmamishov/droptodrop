@@ -522,7 +522,7 @@ func main() {
 	// Serve frontend static files if available (production single-container mode)
 	staticDir := os.Getenv("STATIC_DIR")
 	if staticDir == "" {
-		staticDir = "/app/static"
+		staticDir = "static"
 	}
 	if info, err := os.Stat(staticDir); err == nil && info.IsDir() {
 		r.NoRoute(func(c *gin.Context) {

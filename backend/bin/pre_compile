@@ -1,0 +1,20 @@
+#!/bin/bash
+set -e
+
+echo "-----> Installing Node.js for frontend build"
+NODE_VERSION="22.14.0"
+curl -sL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" | tar xJ -C /tmp
+export PATH="/tmp/node-v${NODE_VERSION}-linux-x64/bin:$PATH"
+
+echo "-----> Node.js $(node --version) installed"
+
+echo "-----> Building frontend"
+cd "$1/../frontend"
+npm ci --production=false
+npm run build
+
+echo "-----> Copying frontend build to static directory"
+mkdir -p "$1/static"
+cp -r dist/* "$1/static/"
+
+echo "-----> Frontend build complete"

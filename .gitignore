@@ -1,5 +1,6 @@
 # Go
 backend/bin/
+!backend/bin/pre_compile
 backend/tmp/
 *.exe
 *.exe~
