@@ -11,7 +11,11 @@
       "Bash(go test:*)",
       "Bash(npx tsc:*)",
       "Bash(npm install:*)",
-      "Bash(bash scripts/setup-local.sh)"
+      "Bash(bash scripts/setup-local.sh)",
+      "Bash(gh repo:*)",
+      "Bash(git rm:*)",
+      "Bash(git status:*)",
+      "Bash(git add:*)"
     ]
   }
 }
