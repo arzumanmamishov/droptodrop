@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(go version:*)",
+      "Bash(npm --version)",
+      "Bash(docker --version)",
+      "Bash(git --version)",
+      "Bash(psql --version)",
+      "Bash(git init:*)",
+      "Bash(go build:*)",
+      "Bash(go test:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npm install:*)",
+      "Bash(bash scripts/setup-local.sh)"
+    ]
+  }
+}

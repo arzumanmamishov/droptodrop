@@ -1,0 +1,308 @@
+package webhooks
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+
+	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog"
+
+	"github.com/droptodrop/droptodrop/internal/audit"
+	"github.com/droptodrop/droptodrop/internal/orders"
+	"github.com/droptodrop/droptodrop/internal/queue"
+	"github.com/droptodrop/droptodrop/internal/shops"
+	verifyhmac "github.com/droptodrop/droptodrop/pkg/hmac"
+)
+
+// Handler processes Shopify webhooks with HMAC verification.
+type Handler struct {
+	db        *pgxpool.Pool
+	queue     *queue.Client
+	shopsSvc  *shops.Service
+	ordersSvc *orders.Service
+	secret    string
+	logger    zerolog.Logger
+	audit     *audit.Service
+}
+
+// NewHandler creates a webhook handler.
+func NewHandler(db *pgxpool.Pool, q *queue.Client, shopsSvc *shops.Service, ordersSvc *orders.Service, secret string, logger zerolog.Logger, auditSvc *audit.Service) *Handler {
+	return &Handler{
+		db:        db,
+		queue:     q,
+		shopsSvc:  shopsSvc,
+		ordersSvc: ordersSvc,
+		secret:    secret,
+		logger:    logger,
+		audit:     auditSvc,
+	}
+}
+
+// verifyAndExtract reads the raw body, verifies HMAC, and returns the raw bytes and parsed payload.
+func (h *Handler) verifyAndExtract(c *gin.Context) ([]byte, map[string]interface{}, error) {
+	// Read raw body BEFORE any JSON parsing
+	rawBody, err := io.ReadAll(c.Request.Body)
+	if err != nil {
+		return nil, nil, fmt.Errorf("read body: %w", err)
+	}
+	// Restore body for any downstream use
+	c.Request.Body = io.NopCloser(bytes.NewReader(rawBody))
+
+	// Verify HMAC using raw body bytes
+	hmacHeader := c.GetHeader("X-Shopify-Hmac-Sha256")
+	if !verifyhmac.VerifyWebhook(rawBody, h.secret, hmacHeader) {
+		return nil, nil, fmt.Errorf("HMAC verification failed")
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(rawBody, &payload); err != nil {
+		return nil, nil, fmt.Errorf("parse payload: %w", err)
+	}
+
+	return rawBody, payload, nil
+}
+
+// recordWebhookEvent stores the webhook in the database for idempotency and audit.
+func (h *Handler) recordWebhookEvent(c *gin.Context, topic string, rawBody []byte) (string, bool) {
+	shopDomain := c.GetHeader("X-Shopify-Shop-Domain")
+	webhookID := c.GetHeader("X-Shopify-Webhook-Id")
+
+	// Compute payload hash for deduplication
+	hash := fmt.Sprintf("%x", sha256.Sum256(rawBody))
+
+	// Check for duplicate
+	var existingID string
+	err := h.db.QueryRow(c.Request.Context(), `
+		SELECT id FROM webhook_events WHERE payload_hash = $1 AND topic = $2 AND status IN ('processed', 'processing')
+	`, hash, topic).Scan(&existingID)
+	if err == nil {
+		h.logger.Info().Str("topic", topic).Str("existing_id", existingID).Msg("duplicate webhook, skipping")
+		return existingID, true
+	}
+
+	// Get shop ID
+	var shopID *string
+	_ = h.db.QueryRow(c.Request.Context(), `SELECT id FROM shops WHERE shopify_domain = $1`, shopDomain).Scan(&shopID)
+
+	// Insert event record
+	var eventID string
+	err = h.db.QueryRow(c.Request.Context(), `
+		INSERT INTO webhook_events (shop_id, topic, shopify_webhook_id, payload_hash, status)
+		VALUES ($1, $2, $3, $4, 'processing')
+		RETURNING id
+	`, shopID, topic, webhookID, hash).Scan(&eventID)
+	if err != nil {
+		h.logger.Error().Err(err).Str("topic", topic).Msg("failed to record webhook event")
+		return "", false
+	}
+
+	return eventID, false
+}
+
+// markWebhookProcessed updates the webhook event status.
+func (h *Handler) markWebhookProcessed(c *gin.Context, eventID, status, errorMsg string) {
+	_, err := h.db.Exec(c.Request.Context(), `
+		UPDATE webhook_events SET status = $2, error_message = $3, processed_at = NOW(), attempts = attempts + 1
+		WHERE id = $1
+	`, eventID, status, errorMsg)
+	if err != nil {
+		h.logger.Error().Err(err).Str("event_id", eventID).Msg("failed to update webhook status")
+	}
+}
+
+// AppUninstalled handles the app/uninstalled webhook.
+func (h *Handler) AppUninstalled(c *gin.Context) {
+	rawBody, _, err := h.verifyAndExtract(c)
+	if err != nil {
+		h.logger.Warn().Err(err).Msg("webhook verification failed: app/uninstalled")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	eventID, isDuplicate := h.recordWebhookEvent(c, "app/uninstalled", rawBody)
+	if isDuplicate {
+		c.JSON(http.StatusOK, gin.H{"status": "already_processed"})
+		return
+	}
+
+	shopDomain := c.GetHeader("X-Shopify-Shop-Domain")
+	if err := h.shopsSvc.Deactivate(c.Request.Context(), shopDomain); err != nil {
+		h.logger.Error().Err(err).Str("shop", shopDomain).Msg("failed to deactivate shop")
+		h.markWebhookProcessed(c, eventID, "failed", err.Error())
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "processing failed"})
+		return
+	}
+
+	h.markWebhookProcessed(c, eventID, "processed", "")
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// OrdersCreate handles the orders/create webhook.
+func (h *Handler) OrdersCreate(c *gin.Context) {
+	rawBody, payload, err := h.verifyAndExtract(c)
+	if err != nil {
+		h.logger.Warn().Err(err).Msg("webhook verification failed: orders/create")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	eventID, isDuplicate := h.recordWebhookEvent(c, "orders/create", rawBody)
+	if isDuplicate {
+		c.JSON(http.StatusOK, gin.H{"status": "already_processed"})
+		return
+	}
+
+	shopDomain := c.GetHeader("X-Shopify-Shop-Domain")
+
+	// Look up shop
+	var shopID string
+	err = h.db.QueryRow(c.Request.Context(), `SELECT id FROM shops WHERE shopify_domain = $1 AND role = 'reseller'`, shopDomain).Scan(&shopID)
+	if err != nil {
+		h.logger.Info().Str("shop", shopDomain).Msg("order webhook from non-reseller, skipping")
+		h.markWebhookProcessed(c, eventID, "skipped", "not a reseller shop")
+		c.JSON(http.StatusOK, gin.H{"status": "skipped"})
+		return
+	}
+
+	// Queue the order routing asynchronously
+	_, queueErr := h.queue.Enqueue(c.Request.Context(), "orders", "route_order", map[string]interface{}{
+		"shop_id":      shopID,
+		"shop_domain":  shopDomain,
+		"order_payload": payload,
+	}, 3)
+	if queueErr != nil {
+		// Fallback: process inline
+		h.logger.Warn().Err(queueErr).Msg("failed to enqueue, processing inline")
+		if err := h.ordersSvc.RouteOrder(c.Request.Context(), shopID, payload); err != nil {
+			h.markWebhookProcessed(c, eventID, "failed", err.Error())
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "routing failed"})
+			return
+		}
+	}
+
+	h.markWebhookProcessed(c, eventID, "processed", "")
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// ProductsUpdate handles the products/update webhook.
+func (h *Handler) ProductsUpdate(c *gin.Context) {
+	rawBody, payload, err := h.verifyAndExtract(c)
+	if err != nil {
+		h.logger.Warn().Err(err).Msg("webhook verification failed: products/update")
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	eventID, isDuplicate := h.recordWebhookEvent(c, "products/update", rawBody)
+	if isDuplicate {
+		c.JSON(http.StatusOK, gin.H{"status": "already_processed"})
+		return
+	}
+
+	// Queue product sync
+	shopDomain := c.GetHeader("X-Shopify-Shop-Domain")
+	_, err = h.queue.Enqueue(c.Request.Context(), "products", "sync_product_update", map[string]interface{}{
+		"shop_domain": shopDomain,
+		"product":     payload,
+	}, 3)
+	if err != nil {
+		h.logger.Error().Err(err).Msg("failed to enqueue product update")
+		h.markWebhookProcessed(c, eventID, "failed", err.Error())
+	} else {
+		h.markWebhookProcessed(c, eventID, "processed", "")
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// ProductsDelete handles the products/delete webhook.
+func (h *Handler) ProductsDelete(c *gin.Context) {
+	rawBody, payload, err := h.verifyAndExtract(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	eventID, isDuplicate := h.recordWebhookEvent(c, "products/delete", rawBody)
+	if isDuplicate {
+		c.JSON(http.StatusOK, gin.H{"status": "already_processed"})
+		return
+	}
+
+	productID, _ := payload["id"].(float64)
+	shopDomain := c.GetHeader("X-Shopify-Shop-Domain")
+
+	// Archive the listing
+	_, err = h.db.Exec(c.Request.Context(), `
+		UPDATE supplier_listings SET status = 'archived'
+		WHERE shopify_product_id = $1 AND supplier_shop_id = (SELECT id FROM shops WHERE shopify_domain = $2)
+	`, int64(productID), shopDomain)
+	if err != nil {
+		h.logger.Error().Err(err).Msg("failed to archive listing")
+		h.markWebhookProcessed(c, eventID, "failed", err.Error())
+	} else {
+		h.markWebhookProcessed(c, eventID, "processed", "")
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// InventoryUpdate handles the inventory_levels/update webhook.
+func (h *Handler) InventoryUpdate(c *gin.Context) {
+	rawBody, payload, err := h.verifyAndExtract(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	eventID, isDuplicate := h.recordWebhookEvent(c, "inventory_levels/update", rawBody)
+	if isDuplicate {
+		c.JSON(http.StatusOK, gin.H{"status": "already_processed"})
+		return
+	}
+
+	// Queue inventory sync
+	_, err = h.queue.Enqueue(c.Request.Context(), "inventory", "sync_inventory", map[string]interface{}{
+		"shop_domain":     c.GetHeader("X-Shopify-Shop-Domain"),
+		"inventory_level": payload,
+	}, 3)
+	if err != nil {
+		h.markWebhookProcessed(c, eventID, "failed", err.Error())
+	} else {
+		h.markWebhookProcessed(c, eventID, "processed", "")
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
+
+// FulfillmentsCreate handles the fulfillments/create webhook.
+func (h *Handler) FulfillmentsCreate(c *gin.Context) {
+	rawBody, payload, err := h.verifyAndExtract(c)
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
+	eventID, isDuplicate := h.recordWebhookEvent(c, "fulfillments/create", rawBody)
+	if isDuplicate {
+		c.JSON(http.StatusOK, gin.H{"status": "already_processed"})
+		return
+	}
+
+	_, err = h.queue.Enqueue(c.Request.Context(), "fulfillments", "process_fulfillment", map[string]interface{}{
+		"shop_domain": c.GetHeader("X-Shopify-Shop-Domain"),
+		"fulfillment": payload,
+	}, 3)
+	if err != nil {
+		h.markWebhookProcessed(c, eventID, "failed", err.Error())
+	} else {
+		h.markWebhookProcessed(c, eventID, "processed", "")
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ok"})
+}
