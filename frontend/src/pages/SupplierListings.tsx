@@ -15,6 +15,7 @@ import {
   InlineStack,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
+import { api } from '../utils/api';
 import { SupplierListing } from '../types';
 import ProductPicker from '../components/ProductPicker';
 
@@ -37,14 +38,7 @@ export default function SupplierListings() {
   const handleStatusChange = useCallback(
     async (listingId: string, newStatus: string) => {
       try {
-        await fetch(`/api/v1/supplier/listings/${listingId}/status`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${localStorage.getItem('droptodrop_session') || ''}`,
-          },
-          body: JSON.stringify({ status: newStatus }),
-        });
+        await api.put(`/supplier/listings/${listingId}/status`, { status: newStatus });
         refetch();
       } catch {
         // Error handling
