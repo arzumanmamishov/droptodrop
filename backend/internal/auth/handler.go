@@ -144,30 +144,20 @@ func (h *Handler) Callback(c *gin.Context) {
 		return
 	}
 
-	// Upsert installation
+	// Upsert installation: deactivate old, insert new
+	_, _ = h.db.Exec(ctx, `
+		UPDATE app_installations SET is_active = FALSE, updated_at = NOW()
+		WHERE shop_id = $1 AND is_active = TRUE
+	`, shopID)
+
 	_, err = h.db.Exec(ctx, `
 		INSERT INTO app_installations (shop_id, access_token, scopes, is_active)
 		VALUES ($1, $2, $3, TRUE)
-		ON CONFLICT (shop_id) WHERE is_active = TRUE
-		DO UPDATE SET access_token = $2, scopes = $3, updated_at = NOW()
 	`, shopID, encryptedToken, tokenResp.Scope)
 	if err != nil {
-		// Try without conflict clause
-		_, err = h.db.Exec(ctx, `
-			UPDATE app_installations SET access_token = $2, scopes = $3, is_active = TRUE, updated_at = NOW()
-			WHERE shop_id = $1
-		`, shopID, encryptedToken, tokenResp.Scope)
-		if err != nil {
-			_, err = h.db.Exec(ctx, `
-				INSERT INTO app_installations (shop_id, access_token, scopes, is_active)
-				VALUES ($1, $2, $3, TRUE)
-			`, shopID, encryptedToken, tokenResp.Scope)
-		}
-		if err != nil {
-			h.logger.Error().Err(err).Msg("failed to save installation")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
-			return
-		}
+		h.logger.Error().Err(err).Msg("failed to save installation")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
 	}
 
 	// Create app settings if not exist

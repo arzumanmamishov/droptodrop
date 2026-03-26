@@ -37,7 +37,8 @@
       "Bash(scalingo --region osc-fr1 --app droptodrop logs --filter one-off-1967 --lines 30)",
       "Bash(scalingo --app droptodrop --region osc-fr1 env-set STATIC_DIR=\"/app/static\")",
       "Bash(scalingo --app droptodrop --region osc-fr1 logs --lines 15)",
-      "Bash(scalingo --app droptodrop --region osc-fr1 logs --lines 10)"
+      "Bash(scalingo --app droptodrop --region osc-fr1 logs --lines 10)",
+      "Bash(DATABASE_URL=\"postgres://droptodrop_5959:GTJyQJba6VGe8SgeHgjryarrpzsX8_3yXFRnn35DI0mgRnd61s_mrtThgYCjUo_S@127.0.0.1:10001/droptodrop_5959?sslmode=disable\" go run ./cmd/migrate list-installs)"
     ]
   }
 }
