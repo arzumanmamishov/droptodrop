@@ -59,7 +59,6 @@ export default function App() {
 
   return (
     <AppProvider i18n={enTranslations}>
-      <AppBridgeProvider>
       <BrowserRouter>
         {needsOnboarding ? (
           <Routes>
@@ -94,7 +93,6 @@ export default function App() {
           </div>
         )}
       </BrowserRouter>
-      </AppBridgeProvider>
     </AppProvider>
   );
 }

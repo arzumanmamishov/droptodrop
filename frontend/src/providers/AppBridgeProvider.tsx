@@ -1,21 +1,6 @@
-import { useEffect, ReactNode } from 'react';
+import { useEffect, useState, ReactNode } from 'react';
 import { registerAppBridgeTokenProvider } from '../utils/api';
 
-/**
- * AppBridgeProvider initializes the Shopify App Bridge session token flow.
- *
- * When running inside Shopify Admin, App Bridge provides `shopify.idToken()`
- * which returns a signed JWT. This provider registers that function so the
- * API client can retrieve fresh tokens for every request.
- *
- * When running outside Shopify (local dev), this is a no-op and the API client
- * falls back to the session token from OAuth callback / localStorage.
- *
- * Shopify App Bridge v4 automatically injects `window.shopify` when the app
- * is loaded inside the Shopify Admin iframe.
- */
-
-// Type definition for the global shopify object injected by App Bridge
 declare global {
   interface Window {
     shopify?: {
@@ -32,13 +17,41 @@ interface AppBridgeProviderProps {
   children: ReactNode;
 }
 
+// Register App Bridge immediately (not in useEffect) so it's available
+// before any child component's useEffect runs.
+function initAppBridge() {
+  if (window.shopify?.idToken) {
+    registerAppBridgeTokenProvider(() => window.shopify!.idToken());
+    return true;
+  }
+  return false;
+}
+
+// Try to register immediately on module load
+const initializedEarly = initAppBridge();
+
 export default function AppBridgeProvider({ children }: AppBridgeProviderProps) {
+  const [ready, setReady] = useState(initializedEarly);
+
   useEffect(() => {
-    // Check if we're running inside Shopify Admin (App Bridge v4+ injects window.shopify)
-    if (window.shopify?.idToken) {
-      registerAppBridgeTokenProvider(() => window.shopify!.idToken());
-    }
-  }, []);
+    if (ready) return;
+
+    // If not ready yet, poll briefly for window.shopify to become available
+    let attempts = 0;
+    const interval = setInterval(() => {
+      if (initAppBridge() || attempts > 20) {
+        clearInterval(interval);
+        setReady(true);
+      }
+      attempts++;
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [ready]);
+
+  if (!ready) {
+    return null;
+  }
 
   return <>{children}</>;
 }
