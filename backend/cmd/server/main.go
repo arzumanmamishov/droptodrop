@@ -542,6 +542,24 @@ func main() {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		})
 		logger.Info().Str("dir", staticDir).Msg("serving frontend static files")
+	} else {
+		// Fallback: serve minimal Shopify App Bridge page when no frontend build exists
+		r.NoRoute(func(c *gin.Context) {
+			path := c.Request.URL.Path
+			if strings.HasPrefix(path, "/api/") || strings.HasPrefix(path, "/auth/") ||
+				strings.HasPrefix(path, "/webhooks/") || strings.HasPrefix(path, "/health") {
+				c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+				return
+			}
+			c.Header("Content-Type", "text/html; charset=utf-8")
+			c.String(http.StatusOK, `<!DOCTYPE html>
+<html><head>
+<meta name="shopify-api-key" content="`+cfg.Shopify.APIKey+`" />
+<script src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>
+<style>body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,sans-serif;display:flex;justify-content:center;align-items:center;height:100vh;margin:0;background:#f6f6f7}
+.card{background:#fff;border-radius:12px;padding:40px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.08)}</style>
+</head><body><div class="card"><h1>DropToDrop</h1><p>Shopify Dropshipping Network</p><p>App is running. Frontend deployment pending.</p></div></body></html>`)
+		})
 	}
 
 	// Start server
