@@ -56,7 +56,7 @@ func FetchShopProducts(ctx context.Context, client *shopify.Client, logger zerol
 	}
 
 	query := fmt.Sprintf(`{
-		products(first: %d%s) {
+		products(first: %d%s, query: "status:active OR status:draft") {
 			edges {
 				cursor
 				node {
