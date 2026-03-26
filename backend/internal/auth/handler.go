@@ -66,6 +66,7 @@ func (h *Handler) Install(c *gin.Context) {
 
 	// If shop doesn't exist yet, that's fine - we create it on callback
 	// Store nonce in a simpler way as fallback
+	c.SetSameSite(http.SameSiteNoneMode)
 	c.SetCookie("shopify_nonce", nonce, 600, "/", "", true, true)
 
 	oauthCfg := shopify.OAuthConfig{
