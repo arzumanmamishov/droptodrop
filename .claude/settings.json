@@ -26,7 +26,17 @@
       "Bash(scalingo billing-info:*)",
       "Bash(scalingo self:*)",
       "Bash(scalingo --app droptodrop --region osc-fr1 addons-add postgresql postgresql-starter-512)",
-      "Bash(scalingo --app droptodrop --region osc-fr1 addons-add redis redis-starter-512)"
+      "Bash(scalingo --app droptodrop --region osc-fr1 addons-add redis redis-starter-512)",
+      "Bash(DATABASE_URL=\"postgres://droptodrop_5959:GTJyQJba6VGe8SgeHgjryarrpzsX8_3yXFRnn35DI0mgRnd61s_mrtThgYCjUo_S@127.0.0.1:10000/droptodrop_5959?sslmode=disable\" go run ./cmd/migrate list)",
+      "Bash(curl -s https://droptodrop.osc-fr1.scalingo.io/health/ready)",
+      "Bash(scalingo --app droptodrop --region osc-fr1 logs --lines 20)",
+      "Bash(scalingo --app droptodrop --region osc-fr1 deployments)",
+      "Bash(scalingo --app droptodrop --region osc-fr1 deployment-logs 36eeef75-2868-4af8-a086-ed41aa1a93af)",
+      "Bash(curl -s https://droptodrop.osc-fr1.scalingo.io/)",
+      "Bash(scalingo --app droptodrop --region osc-fr1 run --detached 'ls -la /app/static/ 2>&1 || echo \"\"NO STATIC DIR\"\"; ls -la /app/ | head -20')",
+      "Bash(scalingo --region osc-fr1 --app droptodrop logs --filter one-off-1967 --lines 30)",
+      "Bash(scalingo --app droptodrop --region osc-fr1 env-set STATIC_DIR=\"/app/static\")",
+      "Bash(scalingo --app droptodrop --region osc-fr1 logs --lines 15)"
     ]
   }
 }

@@ -124,8 +124,10 @@ func main() {
 		// Shop
 		api.GET("/shop", func(c *gin.Context) {
 			shopID, _ := c.Get("shop_id")
+			logger.Info().Str("shop_id", shopID.(string)).Msg("fetching shop")
 			shop, err := shopsSvc.GetByID(c.Request.Context(), shopID.(string))
 			if err != nil {
+				logger.Error().Err(err).Str("shop_id", shopID.(string)).Msg("shop not found")
 				c.JSON(http.StatusNotFound, gin.H{"error": "shop not found"})
 				return
 			}
