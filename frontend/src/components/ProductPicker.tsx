@@ -10,7 +10,9 @@ import {
   Checkbox,
   InlineStack,
   TextField,
+  Thumbnail,
 } from '@shopify/polaris';
+import { ImageIcon } from '@shopify/polaris-icons';
 import { api } from '../utils/api';
 
 interface ShopVariant {
@@ -192,11 +194,16 @@ export default function ProductPicker({ open, onClose, onImport }: ProductPicker
               </Text>
               {products.map((product) => (
                 <BlockStack gap="200" key={product.id}>
-                  <InlineStack gap="200" align="start">
+                  <InlineStack gap="300" align="start" blockAlign="center">
                     <Checkbox
                       label=""
                       checked={selected.has(product.id)}
                       onChange={() => toggleSelect(product.id)}
+                    />
+                    <Thumbnail
+                      source={product.images?.[0]?.url || ImageIcon}
+                      alt={product.title}
+                      size="small"
                     />
                     <BlockStack gap="100">
                       <Text as="span" variant="headingSm" fontWeight="semibold">
@@ -210,15 +217,14 @@ export default function ProductPicker({ open, onClose, onImport }: ProductPicker
                   {selected.has(product.id) && product.variants.length > 0 && (
                     <div style={{ paddingLeft: '2rem' }}>
                       <DataTable
-                        columnContentTypes={['text', 'text', 'numeric', 'numeric', 'text']}
-                        headings={['Variant', 'SKU', 'Retail Price', 'Stock', 'Wholesale Price']}
+                        columnContentTypes={['text', 'text', 'numeric', 'text']}
+                        headings={['Variant', 'SKU', 'Retail Price', 'Wholesale Price']}
                         rows={product.variants.map((v) => {
                           const key = `${product.id}-${v.id}`;
                           return [
                             v.title || 'Default',
                             v.sku || '-',
                             `$${v.price}`,
-                            v.inventory_quantity,
                             <TextField
                               key={key}
                               label=""
