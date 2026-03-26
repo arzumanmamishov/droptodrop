@@ -1,0 +1,11 @@
+{
+  "name": "droptodrop-frontend-builder",
+  "private": true,
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "build": "echo 'Frontend build handled by heroku-postbuild'",
+    "heroku-postbuild": "cd ../frontend && npm ci && npm run build && mkdir -p ../backend/static && cp -r dist/* ../backend/static/"
+  }
+}
