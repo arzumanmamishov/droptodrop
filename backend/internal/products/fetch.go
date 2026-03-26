@@ -82,10 +82,12 @@ func FetchShopProducts(ctx context.Context, client *shopify.Client, logger zerol
 								title
 								sku
 								price
-								inventoryQuantity
 								weight
 								weightUnit
 								requiresShipping
+								inventoryItem {
+									tracked
+								}
 							}
 						}
 					}
@@ -122,14 +124,16 @@ func FetchShopProducts(ctx context.Context, client *shopify.Client, logger zerol
 						Variants struct {
 							Edges []struct {
 								Node struct {
-									ID                string  `json:"id"`
-									Title             string  `json:"title"`
-									SKU               string  `json:"sku"`
-									Price             string  `json:"price"`
-									InventoryQuantity int     `json:"inventoryQuantity"`
-									Weight            float64 `json:"weight"`
-									WeightUnit        string  `json:"weightUnit"`
-									RequiresShipping  bool    `json:"requiresShipping"`
+									ID               string  `json:"id"`
+									Title            string  `json:"title"`
+									SKU              string  `json:"sku"`
+									Price            string  `json:"price"`
+									Weight           float64 `json:"weight"`
+									WeightUnit       string  `json:"weightUnit"`
+									RequiresShipping bool    `json:"requiresShipping"`
+									InventoryItem    *struct {
+										Tracked bool `json:"tracked"`
+									} `json:"inventoryItem"`
 								} `json:"node"`
 							} `json:"edges"`
 						} `json:"variants"`
@@ -146,6 +150,8 @@ func FetchShopProducts(ctx context.Context, client *shopify.Client, logger zerol
 	if err := client.GraphQL(ctx, query, nil, &result); err != nil {
 		return nil, "", fmt.Errorf("fetch products: %w", err)
 	}
+
+	logger.Info().Int("product_count", len(result.Data.Products.Edges)).Msg("fetched products from Shopify")
 
 	products := make([]ShopProduct, 0, len(result.Data.Products.Edges))
 	for _, edge := range result.Data.Products.Edges {
@@ -166,15 +172,14 @@ func FetchShopProducts(ctx context.Context, client *shopify.Client, logger zerol
 			vn := vEdge.Node
 			variantID, _ := shopify.ParseGID(vn.ID)
 			variants = append(variants, ShopVariant{
-				ID:                variantID,
-				GID:               vn.ID,
-				Title:             vn.Title,
-				SKU:               vn.SKU,
-				Price:             vn.Price,
-				InventoryQuantity: vn.InventoryQuantity,
-				Weight:            vn.Weight,
-				WeightUnit:        vn.WeightUnit,
-				RequiresShipping:  vn.RequiresShipping,
+				ID:               variantID,
+				GID:              vn.ID,
+				Title:            vn.Title,
+				SKU:              vn.SKU,
+				Price:            vn.Price,
+				Weight:           vn.Weight,
+				WeightUnit:       vn.WeightUnit,
+				RequiresShipping: vn.RequiresShipping,
 			})
 		}
 
