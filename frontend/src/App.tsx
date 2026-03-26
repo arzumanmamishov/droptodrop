@@ -7,7 +7,6 @@ import '@shopify/polaris/build/esm/styles.css';
 import { api, setSessionToken } from './utils/api';
 import { Shop } from './types';
 
-import AppBridgeProvider from './providers/AppBridgeProvider';
 import AppFrame from './components/AppFrame';
 import Dashboard from './pages/Dashboard';
 import SupplierSetup from './pages/SupplierSetup';
