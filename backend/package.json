@@ -6,6 +6,6 @@
   },
   "scripts": {
     "build": "echo 'Frontend build handled by heroku-postbuild'",
-    "heroku-postbuild": "cd ../frontend && npm ci && npm run build && mkdir -p ../backend/static && cp -r dist/* ../backend/static/"
+    "heroku-postbuild": "cd ../frontend && npm ci --include=dev && npm run build && mkdir -p ../backend/static && cp -r dist/* ../backend/static/"
   }
 }
