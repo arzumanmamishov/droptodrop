@@ -232,12 +232,14 @@ func main() {
 					WHERE s.id = $1
 				`, sid).Scan(&shopDomain, &encryptedToken)
 				if err != nil {
+					logger.Error().Err(err).Str("shop_id", sid).Msg("shop credentials not found")
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "shop credentials not found"})
 					return
 				}
 
 				token, err := authpkg.Decrypt(encryptedToken, cfg.Security.EncryptionKey)
 				if err != nil {
+					logger.Error().Err(err).Str("shop", shopDomain).Msg("failed to decrypt token")
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to decrypt credentials"})
 					return
 				}
@@ -246,6 +248,7 @@ func main() {
 				cursor := c.Query("cursor")
 				prods, nextCursor, err := products.FetchShopProducts(c.Request.Context(), client, logger, cursor, 20)
 				if err != nil {
+					logger.Error().Err(err).Str("shop", shopDomain).Msg("failed to fetch shop products")
 					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 					return
 				}
