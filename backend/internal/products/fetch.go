@@ -83,9 +83,6 @@ func FetchShopProducts(ctx context.Context, client *shopify.Client, logger zerol
 								title
 								sku
 								price
-								weight
-								weightUnit
-								requiresShipping
 							}
 						}
 					}
@@ -126,9 +123,6 @@ func FetchShopProducts(ctx context.Context, client *shopify.Client, logger zerol
 									Title            string  `json:"title"`
 									SKU              string  `json:"sku"`
 									Price            string  `json:"price"`
-									Weight           float64 `json:"weight"`
-									WeightUnit       string  `json:"weightUnit"`
-									RequiresShipping bool    `json:"requiresShipping"`
 								} `json:"node"`
 							} `json:"edges"`
 						} `json:"variants"`
@@ -174,14 +168,11 @@ func FetchShopProducts(ctx context.Context, client *shopify.Client, logger zerol
 			vn := vEdge.Node
 			variantID, _ := shopify.ParseGID(vn.ID)
 			variants = append(variants, ShopVariant{
-				ID:               variantID,
-				GID:              vn.ID,
-				Title:            vn.Title,
-				SKU:              vn.SKU,
-				Price:            vn.Price,
-				Weight:           vn.Weight,
-				WeightUnit:       vn.WeightUnit,
-				RequiresShipping: vn.RequiresShipping,
+				ID:    variantID,
+				GID:   vn.ID,
+				Title: vn.Title,
+				SKU:   vn.SKU,
+				Price: vn.Price,
 			})
 		}
 
