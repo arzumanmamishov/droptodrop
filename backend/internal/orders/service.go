@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
@@ -30,8 +31,8 @@ type RoutedOrder struct {
 	Currency               string            `json:"currency"`
 	Notes                  string            `json:"notes"`
 	Items                  []RoutedOrderItem `json:"items,omitempty"`
-	CreatedAt              string            `json:"created_at"`
-	UpdatedAt              string            `json:"updated_at"`
+	CreatedAt              time.Time         `json:"created_at"`
+	UpdatedAt              time.Time         `json:"updated_at"`
 }
 
 // RoutedOrderItem represents a line item in a routed order.

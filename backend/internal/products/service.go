@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
@@ -27,8 +28,8 @@ type SupplierListing struct {
 	ShippingCountries json.RawMessage   `json:"shipping_countries"`
 	BlindFulfillment  bool              `json:"blind_fulfillment"`
 	Variants          []ListingVariant  `json:"variants,omitempty"`
-	CreatedAt         string            `json:"created_at"`
-	UpdatedAt         string            `json:"updated_at"`
+	CreatedAt         time.Time         `json:"created_at"`
+	UpdatedAt         time.Time         `json:"updated_at"`
 }
 
 // ListingVariant represents a variant within a supplier listing.

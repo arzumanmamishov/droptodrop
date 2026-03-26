@@ -3,6 +3,7 @@ package fulfillments
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
@@ -21,10 +22,10 @@ type FulfillmentEvent struct {
 	TrackingCompany      string `json:"tracking_company"`
 	Status               string `json:"status"`
 	SyncedToReseller     bool   `json:"synced_to_reseller"`
-	SyncedAt             string `json:"synced_at,omitempty"`
-	SyncError            string `json:"sync_error,omitempty"`
-	CreatedAt            string `json:"created_at"`
-	UpdatedAt            string `json:"updated_at"`
+	SyncedAt             *time.Time `json:"synced_at,omitempty"`
+	SyncError            string     `json:"sync_error,omitempty"`
+	CreatedAt            time.Time  `json:"created_at"`
+	UpdatedAt            time.Time  `json:"updated_at"`
 }
 
 // AddTrackingInput is input for adding fulfillment tracking.

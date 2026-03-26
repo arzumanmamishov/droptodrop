@@ -3,6 +3,7 @@ package imports
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
@@ -23,12 +24,12 @@ type Import struct {
 	SyncImages        bool            `json:"sync_images"`
 	SyncDescription   bool            `json:"sync_description"`
 	SyncTitle         bool            `json:"sync_title"`
-	LastSyncAt        *string         `json:"last_sync_at,omitempty"`
+	LastSyncAt        *time.Time      `json:"last_sync_at,omitempty"`
 	LastSyncError     *string         `json:"last_sync_error,omitempty"`
 	Variants          []ImportVariant `json:"variants,omitempty"`
 	SupplierTitle     string          `json:"supplier_title,omitempty"`
-	CreatedAt         string          `json:"created_at"`
-	UpdatedAt         string          `json:"updated_at"`
+	CreatedAt         time.Time       `json:"created_at"`
+	UpdatedAt         time.Time       `json:"updated_at"`
 }
 
 // ImportVariant represents a variant in the reseller's imported product.

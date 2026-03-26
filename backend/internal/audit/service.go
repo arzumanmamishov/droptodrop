@@ -3,6 +3,7 @@ package audit
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
@@ -50,7 +51,7 @@ type Entry struct {
 	Details      json.RawMessage `json:"details"`
 	Outcome      string          `json:"outcome"`
 	ErrorPayload string          `json:"error_payload,omitempty"`
-	CreatedAt    string          `json:"created_at"`
+	CreatedAt    time.Time       `json:"created_at"`
 }
 
 // List returns audit entries for a shop with pagination.
