@@ -1,20 +1,33 @@
 #!/bin/bash
 set -e
 
+BUILD_DIR=$1
+CACHE_DIR=$2
+
 echo "-----> Installing Node.js for frontend build"
 NODE_VERSION="22.14.0"
-curl -sL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" | tar xJ -C /tmp
-export PATH="/tmp/node-v${NODE_VERSION}-linux-x64/bin:$PATH"
 
-echo "-----> Node.js $(node --version) installed"
+if [ -d "$CACHE_DIR/node-v${NODE_VERSION}-linux-x64" ]; then
+  echo "       Using cached Node.js"
+else
+  curl -sL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" | tar xJ -C "$CACHE_DIR"
+fi
+
+export PATH="$CACHE_DIR/node-v${NODE_VERSION}-linux-x64/bin:$PATH"
+echo "       Node.js $(node --version) installed"
 
 echo "-----> Building frontend"
-cd "$1/../frontend"
-npm ci --production=false
+cd "$BUILD_DIR/../frontend" 2>/dev/null || cd "$BUILD_DIR/frontend" 2>/dev/null || {
+  # When PROJECT_DIR is set, frontend is at the repo root level
+  REPO_DIR=$(dirname "$BUILD_DIR")
+  cd "$REPO_DIR/frontend"
+}
+
+npm ci
 npm run build
 
 echo "-----> Copying frontend build to static directory"
-mkdir -p "$1/static"
-cp -r dist/* "$1/static/"
+mkdir -p "$BUILD_DIR/static"
+cp -r dist/* "$BUILD_DIR/static/"
 
 echo "-----> Frontend build complete"
