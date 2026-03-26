@@ -13,7 +13,9 @@ import {
   BlockStack,
   Text,
   InlineStack,
+  Thumbnail,
 } from '@shopify/polaris';
+import { ImageIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
 import { api } from '../utils/api';
 import { SupplierListing } from '../types';
@@ -67,7 +69,11 @@ export default function SupplierListings() {
     return <Badge tone={toneMap[status]}>{status}</Badge>;
   };
 
-  const rows = (data?.listings || []).map((listing) => [
+  const rows = (data?.listings || []).map((listing) => {
+    const images = typeof listing.images === 'string' ? JSON.parse(listing.images || '[]') : (listing.images || []);
+    const imgUrl = images[0]?.url || images[0]?.URL;
+    return [
+    <Thumbnail key={`img-${listing.id}`} source={imgUrl || ImageIcon} alt={listing.title} size="small" />,
     listing.title,
     String(listing.variants?.length || 0),
     statusBadge(listing.status),
@@ -90,7 +96,7 @@ export default function SupplierListings() {
         </Button>
       )}
     </InlineStack>,
-  ]);
+  ];});
 
   const totalPages = Math.ceil((data?.total || 0) / limit);
 
@@ -138,8 +144,8 @@ export default function SupplierListings() {
 
               {rows.length > 0 ? (
                 <DataTable
-                  columnContentTypes={['text', 'numeric', 'text', 'text', 'text', 'text']}
-                  headings={['Product', 'Variants', 'Status', 'Processing', 'Updated', 'Actions']}
+                  columnContentTypes={['text', 'text', 'numeric', 'text', 'text', 'text', 'text']}
+                  headings={['', 'Product', 'Variants', 'Status', 'Processing', 'Updated', 'Actions']}
                   rows={rows}
                 />
               ) : (

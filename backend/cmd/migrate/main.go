@@ -42,6 +42,22 @@ func main() {
 		return
 	}
 
+	if len(os.Args) > 1 && os.Args[1] == "list-listings" {
+		rows, err := conn.Query(ctx, "SELECT id, title, status, supplier_shop_id FROM supplier_listings ORDER BY created_at")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "query error: %v\n", err)
+			os.Exit(1)
+		}
+		defer rows.Close()
+		fmt.Println("Listings:")
+		for rows.Next() {
+			var id, title, status, shopID string
+			rows.Scan(&id, &title, &status, &shopID)
+			fmt.Printf("  - %s | %s | status=%s | shop=%s\n", id, title, status, shopID)
+		}
+		return
+	}
+
 	if len(os.Args) > 1 && os.Args[1] == "list-installs" {
 		rows, err := conn.Query(ctx, "SELECT id, shop_id, is_active, scopes FROM app_installations ORDER BY created_at")
 		if err != nil {

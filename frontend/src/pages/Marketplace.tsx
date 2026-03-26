@@ -15,7 +15,9 @@ import {
   Modal,
   FormLayout,
   Select,
+  Thumbnail,
 } from '@shopify/polaris';
+import { ImageIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
 import { api } from '../utils/api';
 import { SupplierListing } from '../types';
@@ -109,6 +111,19 @@ export default function Marketplace() {
               {data!.listings.map((listing) => (
                 <Card key={listing.id}>
                   <BlockStack gap="300">
+                    {(() => {
+                      const images = typeof listing.images === 'string' ? JSON.parse(listing.images || '[]') : (listing.images || []);
+                      const imgUrl = images[0]?.url || images[0]?.URL;
+                      return imgUrl ? (
+                        <div style={{ textAlign: 'center' }}>
+                          <Thumbnail source={imgUrl} alt={listing.title} size="large" />
+                        </div>
+                      ) : (
+                        <div style={{ textAlign: 'center' }}>
+                          <Thumbnail source={ImageIcon} alt={listing.title} size="large" />
+                        </div>
+                      );
+                    })()}
                     <Text as="h3" variant="headingSm">{listing.title}</Text>
                     <InlineStack gap="200">
                       <Badge>{listing.product_type || 'General'}</Badge>
