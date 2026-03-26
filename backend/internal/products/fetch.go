@@ -2,6 +2,7 @@ package products
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -56,7 +57,7 @@ func FetchShopProducts(ctx context.Context, client *shopify.Client, logger zerol
 	}
 
 	query := fmt.Sprintf(`{
-		products(first: %d%s, query: "status:active OR status:draft") {
+		products(first: %d%s) {
 			edges {
 				cursor
 				node {
@@ -85,9 +86,6 @@ func FetchShopProducts(ctx context.Context, client *shopify.Client, logger zerol
 								weight
 								weightUnit
 								requiresShipping
-								inventoryItem {
-									tracked
-								}
 							}
 						}
 					}
@@ -131,9 +129,6 @@ func FetchShopProducts(ctx context.Context, client *shopify.Client, logger zerol
 									Weight           float64 `json:"weight"`
 									WeightUnit       string  `json:"weightUnit"`
 									RequiresShipping bool    `json:"requiresShipping"`
-									InventoryItem    *struct {
-										Tracked bool `json:"tracked"`
-									} `json:"inventoryItem"`
 								} `json:"node"`
 							} `json:"edges"`
 						} `json:"variants"`
@@ -147,8 +142,15 @@ func FetchShopProducts(ctx context.Context, client *shopify.Client, logger zerol
 		} `json:"data"`
 	}
 
-	if err := client.GraphQL(ctx, query, nil, &result); err != nil {
+	var rawResponse json.RawMessage
+	if err := client.GraphQL(ctx, query, nil, &rawResponse); err != nil {
 		return nil, "", fmt.Errorf("fetch products: %w", err)
+	}
+
+	logger.Info().RawJSON("shopify_response", rawResponse).Msg("raw Shopify GraphQL response")
+
+	if err := json.Unmarshal(rawResponse, &result); err != nil {
+		return nil, "", fmt.Errorf("parse products response: %w", err)
 	}
 
 	logger.Info().Int("product_count", len(result.Data.Products.Edges)).Msg("fetched products from Shopify")
