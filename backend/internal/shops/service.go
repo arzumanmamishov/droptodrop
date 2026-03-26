@@ -3,6 +3,7 @@ package shops
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
@@ -20,8 +21,8 @@ type Shop struct {
 	Role          string `json:"role"`
 	Status        string `json:"status"`
 	Currency      string `json:"currency"`
-	CreatedAt     string `json:"created_at"`
-	UpdatedAt     string `json:"updated_at"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 // SupplierProfile represents supplier-specific settings.

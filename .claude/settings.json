@@ -36,7 +36,8 @@
       "Bash(scalingo --app droptodrop --region osc-fr1 run --detached 'ls -la /app/static/ 2>&1 || echo \"\"NO STATIC DIR\"\"; ls -la /app/ | head -20')",
       "Bash(scalingo --region osc-fr1 --app droptodrop logs --filter one-off-1967 --lines 30)",
       "Bash(scalingo --app droptodrop --region osc-fr1 env-set STATIC_DIR=\"/app/static\")",
-      "Bash(scalingo --app droptodrop --region osc-fr1 logs --lines 15)"
+      "Bash(scalingo --app droptodrop --region osc-fr1 logs --lines 15)",
+      "Bash(scalingo --app droptodrop --region osc-fr1 logs --lines 10)"
     ]
   }
 }
