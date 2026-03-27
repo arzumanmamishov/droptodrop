@@ -16,12 +16,10 @@ import {
   Thumbnail,
   InlineGrid,
   Icon,
-  Box,
-  Divider,
   EmptyState,
   TextField,
 } from '@shopify/polaris';
-import { ImageIcon, ProductIcon, CheckIcon, ClockIcon, PauseCircleIcon } from '@shopify/polaris-icons';
+import { ImageIcon, CheckIcon, ClockIcon, PauseCircleIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
 import { api } from '../utils/api';
 import { SupplierListing } from '../types';
