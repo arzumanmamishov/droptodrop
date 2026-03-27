@@ -161,10 +161,17 @@ func main() {
 			if role == "supplier" {
 				listings, total, _ := productsSvc.ListSupplierListings(c.Request.Context(), sid, "active", 100, 0)
 				orders, orderTotal, _ := ordersSvc.ListRoutedOrders(c.Request.Context(), sid, "supplier", "", 10, 0)
+				draftListings, draftTotal, _ := productsSvc.ListSupplierListings(c.Request.Context(), sid, "draft", 100, 0)
+				_ = draftListings
 				dashboard["active_listings"] = total
+				dashboard["draft_listings"] = draftTotal
 				dashboard["listings_preview"] = listings
 				dashboard["recent_orders"] = orders
 				dashboard["order_count"] = orderTotal
+				// Count pending orders
+				pendingOrders, pendingTotal, _ := ordersSvc.ListRoutedOrders(c.Request.Context(), sid, "supplier", "pending", 100, 0)
+				_ = pendingOrders
+				dashboard["pending_order_count"] = pendingTotal
 			} else if role == "reseller" {
 				imports, importTotal, _ := importsSvc.List(c.Request.Context(), sid, 100, 0)
 				orders, orderTotal, _ := ordersSvc.ListRoutedOrders(c.Request.Context(), sid, "reseller", "", 10, 0)
@@ -172,6 +179,9 @@ func main() {
 				dashboard["imports_preview"] = imports
 				dashboard["recent_orders"] = orders
 				dashboard["order_count"] = orderTotal
+				pendingOrders, pendingTotal, _ := ordersSvc.ListRoutedOrders(c.Request.Context(), sid, "reseller", "pending", 100, 0)
+				_ = pendingOrders
+				dashboard["pending_order_count"] = pendingTotal
 			}
 
 			c.JSON(http.StatusOK, dashboard)
