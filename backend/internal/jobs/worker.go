@@ -313,7 +313,7 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 		defaultVariantGID := product.Variants.Edges[0].Node.ID
 		updateQuery := `mutation variantUpdate($input: ProductVariantInput!) {
 			productVariantUpdate(input: $input) {
-				productVariant { id }
+				productVariant { id price }
 				userErrors { field message }
 			}
 		}`
@@ -327,7 +327,31 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 		var updateResp json.RawMessage
 		if err := client.GraphQL(ctx, updateQuery, updateVars, &updateResp); err != nil {
 			w.logger.Warn().Err(err).Msg("failed to update default variant price")
+		} else {
+			w.logger.Info().RawJSON("variant_update_response", updateResp).
+				Float64("price", variants[0].ResellerPrice).
+				Msg("variant price updated")
 		}
+	}
+
+	// Set product status to ACTIVE so it appears in the store
+	publishQuery := `mutation publishProduct($input: ProductInput!) {
+		productUpdate(input: $input) {
+			product { id status }
+			userErrors { field message }
+		}
+	}`
+	publishVars := map[string]interface{}{
+		"input": map[string]interface{}{
+			"id":     product.ID,
+			"status": "ACTIVE",
+		},
+	}
+	var publishResp json.RawMessage
+	if err := client.GraphQL(ctx, publishQuery, publishVars, &publishResp); err != nil {
+		w.logger.Warn().Err(err).Msg("failed to set product to active")
+	} else {
+		w.logger.Info().Msg("product set to ACTIVE")
 	}
 
 	// Start a transaction for all DB updates
