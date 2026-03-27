@@ -84,6 +84,7 @@ export interface ResellerImport {
   last_sync_at: string | null;
   last_sync_error: string | null;
   supplier_title: string;
+  supplier_images: string | Array<{ url?: string; URL?: string }>;
   created_at: string;
   updated_at: string;
 }

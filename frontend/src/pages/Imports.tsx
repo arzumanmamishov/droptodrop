@@ -15,8 +15,9 @@ import {
   InlineGrid,
   Icon,
   EmptyState,
+  Thumbnail,
 } from '@shopify/polaris';
-import { CheckIcon, ClockIcon, AlertCircleIcon } from '@shopify/polaris-icons';
+import { CheckIcon, ClockIcon, AlertCircleIcon, ImageIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
 import { api } from '../utils/api';
 import { ResellerImport } from '../types';
@@ -74,7 +75,17 @@ export default function Imports() {
     return <Badge tone={toneMap[status]}>{status}</Badge>;
   };
 
-  const rows = imports.map((imp) => [
+  const getImportImage = (imp: ResellerImport): string | null => {
+    try {
+      const imgs = typeof imp.supplier_images === 'string' ? JSON.parse(imp.supplier_images || '[]') : (imp.supplier_images || []);
+      return imgs[0]?.url || imgs[0]?.URL || null;
+    } catch { return null; }
+  };
+
+  const rows = imports.map((imp) => {
+    const imgUrl = getImportImage(imp);
+    return [
+    <Thumbnail key={`img-${imp.id}`} source={imgUrl || ImageIcon} alt={imp.supplier_title} size="small" />,
     imp.supplier_title || imp.supplier_listing_id.slice(0, 8),
     statusBadge(imp.status),
     `${imp.markup_type === 'percentage' ? imp.markup_value + '%' : '$' + imp.markup_value.toFixed(2)}`,
@@ -90,7 +101,7 @@ export default function Imports() {
         Delete
       </Button>
     </InlineStack>,
-  ]);
+  ];});
 
   const totalPages = Math.ceil((data?.total || 0) / limit);
 
@@ -142,8 +153,8 @@ export default function Imports() {
             <BlockStack gap="400">
               {rows.length > 0 ? (
                 <DataTable
-                  columnContentTypes={['text', 'text', 'text', 'text', 'text', 'text']}
-                  headings={['Source Product', 'Status', 'Markup', 'Last Sync', 'Health', 'Actions']}
+                  columnContentTypes={['text', 'text', 'text', 'text', 'text', 'text', 'text']}
+                  headings={['', 'Source Product', 'Status', 'Markup', 'Last Sync', 'Health', 'Actions']}
                   rows={rows}
                 />
               ) : (
