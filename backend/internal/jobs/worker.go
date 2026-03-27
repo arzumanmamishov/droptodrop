@@ -257,7 +257,16 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 	// Add images to the product if sync_images is enabled
 	if syncImages && images != nil {
 		var imageList []map[string]interface{}
-		if err := json.Unmarshal(images, &imageList); err == nil && len(imageList) > 0 {
+		// Handle double-encoded JSON strings (images stored as JSON string in JSONB)
+		var rawStr string
+		if err := json.Unmarshal(images, &rawStr); err == nil {
+			// It was a JSON string - parse the inner JSON
+			json.Unmarshal([]byte(rawStr), &imageList)
+		} else {
+			// Try direct parse as array
+			json.Unmarshal(images, &imageList)
+		}
+		if len(imageList) > 0 {
 			var mediaSources []map[string]interface{}
 			for _, img := range imageList {
 				src := ""

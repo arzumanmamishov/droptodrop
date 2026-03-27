@@ -57,6 +57,22 @@ func main() {
 		return
 	}
 
+	if len(os.Args) > 1 && os.Args[1] == "check-images" {
+		rows, err := conn.Query(ctx, "SELECT id, title, images FROM supplier_listings LIMIT 5")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "query error: %v\n", err)
+			os.Exit(1)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id, title string
+			var images []byte
+			rows.Scan(&id, &title, &images)
+			fmt.Printf("Listing: %s | %s\nImages: %s\n\n", id, title, string(images))
+		}
+		return
+	}
+
 	if len(os.Args) > 1 && os.Args[1] == "list-listings" {
 		rows, err := conn.Query(ctx, "SELECT id, title, status, supplier_shop_id FROM supplier_listings ORDER BY created_at")
 		if err != nil {
