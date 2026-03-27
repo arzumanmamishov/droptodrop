@@ -254,6 +254,51 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 		Int("variant_count", len(product.Variants.Edges)).
 		Msg("product created in reseller store")
 
+	// Add images to the product if sync_images is enabled
+	if syncImages && images != nil {
+		var imageList []map[string]interface{}
+		if err := json.Unmarshal(images, &imageList); err == nil && len(imageList) > 0 {
+			var mediaSources []map[string]interface{}
+			for _, img := range imageList {
+				src := ""
+				if u, ok := img["url"].(string); ok && u != "" {
+					src = u
+				} else if u, ok := img["URL"].(string); ok && u != "" {
+					src = u
+				}
+				if src != "" {
+					alt := ""
+					if a, ok := img["altText"].(string); ok {
+						alt = a
+					}
+					mediaSources = append(mediaSources, map[string]interface{}{
+						"originalSource": src,
+						"alt":            alt,
+						"mediaContentType": "IMAGE",
+					})
+				}
+			}
+			if len(mediaSources) > 0 {
+				mediaQuery := `mutation createMedia($productId: ID!, $media: [CreateMediaInput!]!) {
+					productCreateMedia(productId: $productId, media: $media) {
+						media { id }
+						mediaUserErrors { field message }
+					}
+				}`
+				mediaVars := map[string]interface{}{
+					"productId": product.ID,
+					"media":     mediaSources,
+				}
+				var mediaResp json.RawMessage
+				if err := client.GraphQL(ctx, mediaQuery, mediaVars, &mediaResp); err != nil {
+					w.logger.Warn().Err(err).Msg("failed to add product images")
+				} else {
+					w.logger.Info().Int("image_count", len(mediaSources)).Msg("product images added")
+				}
+			}
+		}
+	}
+
 	// Update the default variant's price if we have variant data
 	if len(product.Variants.Edges) > 0 && len(variants) > 0 {
 		defaultVariantGID := product.Variants.Edges[0].Node.ID
