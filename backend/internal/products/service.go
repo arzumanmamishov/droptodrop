@@ -329,6 +329,57 @@ func (s *Service) ListMarketplace(ctx context.Context, filters MarketplaceFilter
 	return listings, total, nil
 }
 
+// UpdateListingInput is the input for updating a listing's editable fields.
+type UpdateListingInput struct {
+	Title         string             `json:"title"`
+	Description   string             `json:"description"`
+	Category      string             `json:"category"`
+	ProcessingDays int               `json:"processing_days"`
+	VariantPrices map[string]float64 `json:"variant_prices"`
+}
+
+// UpdateListing updates a listing's title, description, category, processing_days,
+// and optionally variant wholesale prices.
+func (s *Service) UpdateListing(ctx context.Context, shopID, listingID string, input UpdateListingInput) error {
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	result, err := tx.Exec(ctx, `
+		UPDATE supplier_listings
+		SET title = $1, description = $2, category = $3, processing_days = $4, updated_at = NOW()
+		WHERE id = $5 AND supplier_shop_id = $6
+	`, input.Title, input.Description, input.Category, input.ProcessingDays, listingID, shopID)
+	if err != nil {
+		return fmt.Errorf("update listing: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("listing not found")
+	}
+
+	for variantID, price := range input.VariantPrices {
+		_, err := tx.Exec(ctx, `
+			UPDATE supplier_listing_variants SET wholesale_price = $1
+			WHERE id = $2 AND listing_id = $3
+		`, price, variantID, listingID)
+		if err != nil {
+			return fmt.Errorf("update variant price: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+
+	s.audit.Log(ctx, shopID, "merchant", shopID, "listing_updated", "supplier_listing", listingID, map[string]interface{}{
+		"title":    input.Title,
+		"category": input.Category,
+	}, "success", "")
+	return nil
+}
+
 // MarketplaceFilters holds filtering options for marketplace search.
 type MarketplaceFilters struct {
 	Search            string  `form:"search"`

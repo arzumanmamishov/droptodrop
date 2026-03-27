@@ -283,6 +283,20 @@ func main() {
 				c.JSON(http.StatusOK, listing)
 			})
 
+			supplier.PUT("/listings/:id", func(c *gin.Context) {
+				shopID, _ := c.Get("shop_id")
+				var input products.UpdateListingInput
+				if err := c.ShouldBindJSON(&input); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
+				if err := productsSvc.UpdateListing(c.Request.Context(), shopID.(string), c.Param("id"), input); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
+				c.JSON(http.StatusOK, gin.H{"status": "ok"})
+			})
+
 			supplier.PUT("/listings/:id/status", func(c *gin.Context) {
 				shopID, _ := c.Get("shop_id")
 				var body struct {

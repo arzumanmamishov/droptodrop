@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Page,
   Layout,
@@ -32,6 +33,7 @@ interface ListingsResponse {
 }
 
 export default function SupplierListings() {
+  const navigate = useNavigate();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [page, setPage] = useState(0);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
@@ -154,6 +156,7 @@ export default function SupplierListings() {
       `${listing.processing_days}d`,
       new Date(listing.updated_at).toLocaleDateString(),
       <InlineStack gap="200" key={listing.id}>
+        <Button size="slim" onClick={() => navigate(`/supplier/listings/${listing.id}`)}>Edit</Button>
         {listing.status === 'draft' && (
           <Button size="slim" onClick={() => handleStatusChange(listing.id, 'active')}>Publish</Button>
         )}

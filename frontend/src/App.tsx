@@ -17,6 +17,7 @@ import Orders from './pages/Orders';
 import OrderDetail from './pages/OrderDetail';
 import Settings from './pages/Settings';
 import AuditLog from './pages/AuditLog';
+import ListingEdit from './pages/ListingEdit';
 import Onboarding from './pages/Onboarding';
 
 export default function App() {
@@ -71,6 +72,7 @@ export default function App() {
                 <>
                   <Route path="/supplier/setup" element={<SupplierSetup />} />
                   <Route path="/supplier/listings" element={<SupplierListings />} />
+                  <Route path="/supplier/listings/:id" element={<ListingEdit />} />
                 </>
               )}
               {shop.role === 'reseller' && (
