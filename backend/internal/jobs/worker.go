@@ -354,6 +354,101 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 		w.logger.Info().Msg("product set to ACTIVE")
 	}
 
+	// Set inventory for the default variant so the product is available for purchase
+	if len(product.Variants.Edges) > 0 {
+		variantGID := product.Variants.Edges[0].Node.ID
+
+		// First get the inventory item ID and location
+		invQuery := `query getInventory($variantId: ID!) {
+			productVariant(id: $variantId) {
+				inventoryItem {
+					id
+					tracked
+				}
+			}
+		}`
+		var invResp struct {
+			Data struct {
+				ProductVariant struct {
+					InventoryItem struct {
+						ID      string `json:"id"`
+						Tracked bool   `json:"tracked"`
+					} `json:"inventoryItem"`
+				} `json:"productVariant"`
+			} `json:"data"`
+		}
+		if err := client.GraphQL(ctx, invQuery, map[string]interface{}{"variantId": variantGID}, &invResp); err != nil {
+			w.logger.Warn().Err(err).Msg("failed to get inventory item")
+		} else if invResp.Data.ProductVariant.InventoryItem.ID != "" {
+			// Get the shop's primary location
+			locQuery := `{ locations(first: 1) { edges { node { id } } } }`
+			var locResp struct {
+				Data struct {
+					Locations struct {
+						Edges []struct {
+							Node struct {
+								ID string `json:"id"`
+							} `json:"node"`
+						} `json:"edges"`
+					} `json:"locations"`
+				} `json:"data"`
+			}
+			if err := client.GraphQL(ctx, locQuery, nil, &locResp); err != nil {
+				w.logger.Warn().Err(err).Msg("failed to get location")
+			} else if len(locResp.Data.Locations.Edges) > 0 {
+				locationID := locResp.Data.Locations.Edges[0].Node.ID
+				inventoryItemID := invResp.Data.ProductVariant.InventoryItem.ID
+
+				// Get supplier's inventory quantity for this variant
+				supplierQty := 100 // default
+				if len(variants) > 0 {
+					var q int
+					err := w.db.QueryRow(ctx, `SELECT COALESCE(inventory_quantity, 100) FROM supplier_listing_variants WHERE id = $1`, variants[0].SupplierVariantDBID).Scan(&q)
+					if err == nil && q > 0 {
+						supplierQty = q
+					}
+				}
+
+				// Apply marketplace stock percentage
+				var stockPct int
+				err := w.db.QueryRow(ctx, `SELECT COALESCE(marketplace_stock_percent, 100) FROM supplier_listings WHERE id = $1`, supplierListingID).Scan(&stockPct)
+				if err != nil {
+					stockPct = 100
+				}
+				availableQty := (supplierQty * stockPct) / 100
+				if availableQty < 1 {
+					availableQty = 1
+				}
+
+				setInvQuery := `mutation setInventory($input: InventorySetQuantitiesInput!) {
+					inventorySetQuantities(input: $input) {
+						inventoryAdjustmentGroup { reason }
+						userErrors { field message }
+					}
+				}`
+				setInvVars := map[string]interface{}{
+					"input": map[string]interface{}{
+						"name":   "available",
+						"reason": "correction",
+						"quantities": []map[string]interface{}{
+							{
+								"inventoryItemId": inventoryItemID,
+								"locationId":      locationID,
+								"quantity":        availableQty,
+							},
+						},
+					},
+				}
+				var setInvResp json.RawMessage
+				if err := client.GraphQL(ctx, setInvQuery, setInvVars, &setInvResp); err != nil {
+					w.logger.Warn().Err(err).Msg("failed to set inventory")
+				} else {
+					w.logger.Info().Int("quantity", availableQty).Int("stock_pct", stockPct).Msg("inventory set for imported product")
+				}
+			}
+		}
+	}
+
 	// Start a transaction for all DB updates
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
