@@ -169,6 +169,21 @@ func (s *Service) Create(ctx context.Context, resellerShopID string, input Impor
 	return &imp, nil
 }
 
+// DeleteImport removes an import and its variants.
+func (s *Service) DeleteImport(ctx context.Context, resellerShopID, importID string) error {
+	result, err := s.db.Exec(ctx, `
+		DELETE FROM reseller_imports WHERE id = $1 AND reseller_shop_id = $2
+	`, importID, resellerShopID)
+	if err != nil {
+		return fmt.Errorf("delete import: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("import not found")
+	}
+	s.audit.Log(ctx, resellerShopID, "merchant", resellerShopID, "import_deleted", "reseller_import", importID, nil, "success", "")
+	return nil
+}
+
 // List returns imports for a reseller shop.
 func (s *Service) List(ctx context.Context, resellerShopID string, limit, offset int) ([]Import, int, error) {
 	var total int

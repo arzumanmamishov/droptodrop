@@ -476,6 +476,15 @@ func main() {
 				c.JSON(http.StatusOK, gin.H{"status": "ok"})
 			})
 
+			reseller.DELETE("/imports/:id", func(c *gin.Context) {
+				shopID, _ := c.Get("shop_id")
+				if err := importsSvc.DeleteImport(c.Request.Context(), shopID.(string), c.Param("id")); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
+				c.JSON(http.StatusOK, gin.H{"status": "ok"})
+			})
+
 			reseller.GET("/orders", func(c *gin.Context) {
 				shopID, _ := c.Get("shop_id")
 				status := c.Query("status")

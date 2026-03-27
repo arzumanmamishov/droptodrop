@@ -45,6 +45,13 @@ export default function Imports() {
     finally { setSyncing(null); }
   }, [refetch]);
 
+  const handleDelete = useCallback(async (importId: string) => {
+    try {
+      await api.delete(`/reseller/imports/${importId}`);
+      refetch();
+    } catch { /* */ }
+  }, [refetch]);
+
   if (loading) {
     return (
       <Page title="Imported Products">
@@ -75,9 +82,14 @@ export default function Imports() {
     imp.last_sync_error
       ? <Badge key={`err-${imp.id}`} tone="critical">Error</Badge>
       : <Badge key={`ok-${imp.id}`} tone="success">OK</Badge>,
-    <Button key={imp.id} size="slim" loading={syncing === imp.id} onClick={() => handleResync(imp.id)}>
-      Re-sync
-    </Button>,
+    <InlineStack key={imp.id} gap="200">
+      <Button size="slim" loading={syncing === imp.id} onClick={() => handleResync(imp.id)}>
+        Re-sync
+      </Button>
+      <Button size="slim" tone="critical" onClick={() => handleDelete(imp.id)}>
+        Delete
+      </Button>
+    </InlineStack>,
   ]);
 
   const totalPages = Math.ceil((data?.total || 0) / limit);
