@@ -12,6 +12,7 @@ import {
   ChartVerticalFilledIcon,
   AlertCircleIcon,
   NotificationIcon,
+  CashDollarIcon,
 } from '@shopify/polaris-icons';
 import { Shop } from '../types';
 
@@ -35,6 +36,7 @@ export default function AppFrame({ shop, children }: AppFrameProps) {
     { url: '/analytics', label: 'Analytics', icon: ChartVerticalFilledIcon, selected: location.pathname === '/analytics' },
     { url: '/disputes', label: 'Disputes', icon: AlertCircleIcon, selected: location.pathname === '/disputes' },
     { url: '/notifications', label: 'Notifications', icon: NotificationIcon, selected: location.pathname === '/notifications' },
+    { url: '/billing', label: 'Billing', icon: CashDollarIcon, selected: location.pathname === '/billing' },
     { url: '/audit', label: 'Audit Log', icon: ListBulletedIcon, selected: location.pathname === '/audit' },
     { url: '/settings', label: 'Settings', icon: SettingsIcon, selected: location.pathname === '/settings' },
   ];
@@ -47,6 +49,7 @@ export default function AppFrame({ shop, children }: AppFrameProps) {
     { url: '/analytics', label: 'Analytics', icon: ChartVerticalFilledIcon, selected: location.pathname === '/analytics' },
     { url: '/disputes', label: 'Disputes', icon: AlertCircleIcon, selected: location.pathname === '/disputes' },
     { url: '/notifications', label: 'Notifications', icon: NotificationIcon, selected: location.pathname === '/notifications' },
+    { url: '/billing', label: 'Billing', icon: CashDollarIcon, selected: location.pathname === '/billing' },
     { url: '/audit', label: 'Audit Log', icon: ListBulletedIcon, selected: location.pathname === '/audit' },
     { url: '/settings', label: 'Settings', icon: SettingsIcon, selected: location.pathname === '/settings' },
   ];

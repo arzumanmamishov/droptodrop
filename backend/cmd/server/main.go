@@ -32,6 +32,7 @@ import (
 	"github.com/droptodrop/droptodrop/internal/products"
 	"github.com/droptodrop/droptodrop/internal/queue"
 	"github.com/droptodrop/droptodrop/internal/shops"
+	"github.com/droptodrop/droptodrop/internal/trust"
 	"github.com/droptodrop/droptodrop/internal/webhooks"
 	"github.com/droptodrop/droptodrop/pkg/shopify"
 )
@@ -79,6 +80,7 @@ func main() {
 	webhookHandler := webhooks.NewHandler(db, redisClient, shopsSvc, ordersSvc, cfg.Shopify.APISecret, logger, auditSvc)
 	complianceHandler := compliance.NewHandler(db, cfg.Shopify.APISecret, logger, auditSvc)
 	billingHandler := billing.NewHandler(db, logger)
+	trustSvc := trust.NewService(db, logger)
 
 	// Setup Gin
 	if cfg.IsProduction() {
@@ -669,7 +671,58 @@ func main() {
 		})
 
 		// Billing
-		api.GET("/billing", billingHandler.GetStatus)
+		api.GET("/billing", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			status, err := billingHandler.GetSvc().GetStatus(c.Request.Context(), shopID.(string))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, status)
+		})
+		api.GET("/billing/plans", func(c *gin.Context) {
+			plans, err := billingHandler.GetSvc().ListPlans(c.Request.Context())
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"plans": plans})
+		})
+		api.POST("/billing/subscribe", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			var body struct {
+				PlanID string `json:"plan_id" binding:"required"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			sub, err := billingHandler.GetSvc().Subscribe(c.Request.Context(), shopID.(string), body.PlanID)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, sub)
+		})
+		api.POST("/billing/cancel", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			if err := billingHandler.GetSvc().CancelSubscription(c.Request.Context(), shopID.(string)); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		})
+
+		// Supplier Trust/Stats
+		api.GET("/supplier-stats/:id", func(c *gin.Context) {
+			stats, err := trustSvc.GetStats(c.Request.Context(), c.Param("id"))
+			if err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "stats not found"})
+				return
+			}
+			verified := trustSvc.IsVerified(c.Request.Context(), c.Param("id"))
+			c.JSON(http.StatusOK, gin.H{"stats": stats, "is_verified": verified})
+		})
 
 		// Audit logs
 		api.GET("/audit", func(c *gin.Context) {
