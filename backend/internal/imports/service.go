@@ -109,24 +109,32 @@ func (s *Service) Create(ctx context.Context, resellerShopID string, input Impor
 		return nil, fmt.Errorf("create import: %w", err)
 	}
 
-	// Create import variants for each listing variant
+	// Collect listing variants first (must close rows before doing more queries on tx)
+	type variantData struct {
+		ID             string
+		WholesalePrice float64
+	}
 	rows, err := tx.Query(ctx, `
-		SELECT id, wholesale_price, COALESCE(suggested_retail_price, 0)
+		SELECT id, wholesale_price
 		FROM supplier_listing_variants WHERE listing_id = $1 AND is_active = TRUE
 	`, input.SupplierListingID)
 	if err != nil {
 		return nil, fmt.Errorf("get variants: %w", err)
 	}
-	defer rows.Close()
-
+	var variantList []variantData
 	for rows.Next() {
-		var supplierVariantID string
-		var wholesalePrice, suggestedRetail float64
-		if err := rows.Scan(&supplierVariantID, &wholesalePrice, &suggestedRetail); err != nil {
+		var v variantData
+		if err := rows.Scan(&v.ID, &v.WholesalePrice); err != nil {
+			rows.Close()
 			return nil, fmt.Errorf("scan variant: %w", err)
 		}
+		variantList = append(variantList, v)
+	}
+	rows.Close()
 
-		resellerPrice := calculateResellerPrice(wholesalePrice, markupType, markupValue)
+	// Now insert import variants (rows closed, connection is free)
+	for _, v := range variantList {
+		resellerPrice := calculateResellerPrice(v.WholesalePrice, markupType, markupValue)
 
 		var iv ImportVariant
 		err = tx.QueryRow(ctx, `
@@ -134,7 +142,7 @@ func (s *Service) Create(ctx context.Context, resellerShopID string, input Impor
 			VALUES ($1, $2, $3)
 			ON CONFLICT (import_id, supplier_variant_id) DO UPDATE SET reseller_price = EXCLUDED.reseller_price
 			RETURNING id, import_id, supplier_variant_id, shopify_variant_id, reseller_price
-		`, imp.ID, supplierVariantID, resellerPrice,
+		`, imp.ID, v.ID, resellerPrice,
 		).Scan(&iv.ID, &iv.ImportID, &iv.SupplierVariantID, &iv.ShopifyVariantID, &iv.ResellerPrice)
 		if err != nil {
 			return nil, fmt.Errorf("create import variant: %w", err)
