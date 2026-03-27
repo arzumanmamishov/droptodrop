@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"strings"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -11,6 +13,13 @@ func SecurityHeaders() gin.HandlerFunc {
 		c.Header("X-XSS-Protection", "1; mode=block")
 		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
 		c.Header("Content-Security-Policy", "frame-ancestors https://*.myshopify.com https://admin.shopify.com;")
+
+		// Cache static assets aggressively (hashed filenames)
+		path := c.Request.URL.Path
+		if strings.HasPrefix(path, "/assets/") {
+			c.Header("Cache-Control", "public, max-age=31536000, immutable")
+		}
+
 		c.Next()
 	}
 }
