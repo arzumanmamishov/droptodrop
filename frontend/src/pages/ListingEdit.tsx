@@ -36,6 +36,7 @@ export default function ListingEdit() {
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('other');
   const [processingDays, setProcessingDays] = useState('3');
+  const [stockPercent, setStockPercent] = useState('100');
   const [variants, setVariants] = useState<VariantPriceEntry[]>([]);
 
   useEffect(() => {
@@ -48,6 +49,7 @@ export default function ListingEdit() {
         setDescription(listing.description || '');
         setCategory(listing.category || 'other');
         setProcessingDays(String(listing.processing_days));
+        setStockPercent(String(listing.marketplace_stock_percent || 100));
         setVariants(
           (listing.variants || []).map((v) => ({
             id: v.id,
@@ -77,6 +79,7 @@ export default function ListingEdit() {
         description,
         category,
         processing_days: parseInt(processingDays, 10) || 3,
+        marketplace_stock_percent: parseInt(stockPercent, 10) || 100,
         variant_prices: variantPrices,
       });
       setSuccess('Listing updated successfully.');
@@ -86,7 +89,7 @@ export default function ListingEdit() {
     } finally {
       setSaving(false);
     }
-  }, [id, title, description, category, processingDays, variants]);
+  }, [id, title, description, category, processingDays, stockPercent, variants]);
 
   const handleVariantPriceChange = useCallback(
     (variantId: string, value: string) => {
@@ -168,6 +171,17 @@ export default function ListingEdit() {
                   autoComplete="off"
                   min={1}
                   max={30}
+                />
+                <TextField
+                  label="Marketplace Stock Allocation"
+                  type="number"
+                  value={stockPercent}
+                  onChange={setStockPercent}
+                  suffix="%"
+                  autoComplete="off"
+                  min={1}
+                  max={100}
+                  helpText="Percentage of your inventory available for resellers. E.g., 50% means if you have 10 items, only 5 are available on the marketplace."
                 />
               </FormLayout>
             </BlockStack>

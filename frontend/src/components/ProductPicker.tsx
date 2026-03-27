@@ -71,6 +71,7 @@ export default function ProductPicker({ open, onClose, onImport }: ProductPicker
   const [importing, setImporting] = useState(false);
   const [wholesalePrices, setWholesalePrices] = useState<Record<string, string>>({});
   const [categories, setCategories] = useState<Record<number, string>>({});
+  const [stockPercents, setStockPercents] = useState<Record<number, string>>({});
 
   const fetchProducts = useCallback(async (cursor?: string) => {
     setLoading(true);
@@ -155,6 +156,7 @@ export default function ProductPicker({ open, onClose, onImport }: ProductPicker
           tags: product.tags,
           images: JSON.stringify(images),
           category: categories[product.id] || 'other',
+          marketplace_stock_percent: parseInt(stockPercents[product.id] || '100', 10),
           processing_days: 3,
           shipping_countries: ['US'],
           blind_fulfillment: false,
@@ -169,7 +171,7 @@ export default function ProductPicker({ open, onClose, onImport }: ProductPicker
     } finally {
       setImporting(false);
     }
-  }, [products, selected, wholesalePrices, categories, onImport, onClose]);
+  }, [products, selected, wholesalePrices, categories, stockPercents, onImport, onClose]);
 
   return (
     <Modal
@@ -220,13 +222,30 @@ export default function ProductPicker({ open, onClose, onImport }: ProductPicker
                     </BlockStack>
                   </InlineStack>
                   {selected.has(product.id) && (
-                    <div style={{ paddingLeft: '2rem', maxWidth: '250px' }}>
-                      <Select
-                        label="Category"
-                        options={CATEGORY_OPTIONS}
-                        value={categories[product.id] || 'other'}
-                        onChange={(val) => setCategories((prev) => ({ ...prev, [product.id]: val }))}
-                      />
+                    <div style={{ paddingLeft: '2rem' }}>
+                      <InlineStack gap="400">
+                        <div style={{ maxWidth: '200px' }}>
+                          <Select
+                            label="Category"
+                            options={CATEGORY_OPTIONS}
+                            value={categories[product.id] || 'other'}
+                            onChange={(val) => setCategories((prev) => ({ ...prev, [product.id]: val }))}
+                          />
+                        </div>
+                        <div style={{ maxWidth: '180px' }}>
+                          <TextField
+                            label="Stock for marketplace"
+                            type="number"
+                            value={stockPercents[product.id] || '100'}
+                            onChange={(val) => setStockPercents((prev) => ({ ...prev, [product.id]: val }))}
+                            suffix="%"
+                            min={1}
+                            max={100}
+                            helpText="% of your inventory available to resellers"
+                            autoComplete="off"
+                          />
+                        </div>
+                      </InlineStack>
                     </div>
                   )}
                   <Divider />

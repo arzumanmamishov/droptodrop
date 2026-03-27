@@ -62,6 +62,7 @@ export interface SupplierListing {
   category: string;
   status: 'draft' | 'active' | 'paused' | 'archived';
   processing_days: number;
+  marketplace_stock_percent: number;
   shipping_countries: string[];
   blind_fulfillment: boolean;
   variants: ListingVariant[];
