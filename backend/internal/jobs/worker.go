@@ -218,50 +218,15 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 		return fmt.Errorf("no variants found for import %s", params.ImportID)
 	}
 
-	// Build Shopify product input
-	variantInputs := make([]map[string]interface{}, len(variants))
-	for i, v := range variants {
-		vi := map[string]interface{}{
-			"title": v.Title,
-			"price": fmt.Sprintf("%.2f", v.ResellerPrice),
-			"sku":   v.SKU,
-		}
-		if v.Weight > 0 {
-			vi["weight"] = v.Weight
-			vi["weightUnit"] = v.WeightUnit
-		}
-		variantInputs[i] = vi
-	}
-
+	// Build Shopify product input (API 2024-10: no variants or images in ProductInput)
 	productInput := map[string]interface{}{
-		"title":    title,
-		"variants": variantInputs,
+		"title": title,
 	}
 	if syncDescription && description != "" {
-		productInput["bodyHtml"] = description
+		productInput["descriptionHtml"] = description
 	}
 
-	// Parse and attach images if sync_images is enabled
-	if syncImages && images != nil {
-		var imageList []map[string]interface{}
-		if err := json.Unmarshal(images, &imageList); err == nil && len(imageList) > 0 {
-			imgInputs := make([]map[string]interface{}, 0, len(imageList))
-			for _, img := range imageList {
-				if src, ok := img["url"].(string); ok && src != "" {
-					imgInput := map[string]interface{}{"src": src}
-					if alt, ok := img["altText"].(string); ok {
-						imgInput["altText"] = alt
-					}
-					imgInputs = append(imgInputs, imgInput)
-				}
-			}
-			if len(imgInputs) > 0 {
-				productInput["images"] = imgInputs
-			}
-		}
-	}
-
-	// Call Shopify API
+	// Call Shopify API to create product (without variants)
 	client, _, err := w.getShopifyClient(ctx, params.ResellerShopID)
 	if err != nil {
 		return err
@@ -289,6 +254,28 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 		Int("variant_count", len(product.Variants.Edges)).
 		Msg("product created in reseller store")
 
+	// Update the default variant's price if we have variant data
+	if len(product.Variants.Edges) > 0 && len(variants) > 0 {
+		defaultVariantGID := product.Variants.Edges[0].Node.ID
+		updateQuery := `mutation variantUpdate($input: ProductVariantInput!) {
+			productVariantUpdate(input: $input) {
+				productVariant { id }
+				userErrors { field message }
+			}
+		}`
+		updateVars := map[string]interface{}{
+			"input": map[string]interface{}{
+				"id":    defaultVariantGID,
+				"price": fmt.Sprintf("%.2f", variants[0].ResellerPrice),
+				"sku":   variants[0].SKU,
+			},
+		}
+		var updateResp json.RawMessage
+		if err := client.GraphQL(ctx, updateQuery, updateVars, &updateResp); err != nil {
+			w.logger.Warn().Err(err).Msg("failed to update default variant price")
+		}
+	}
+
 	// Start a transaction for all DB updates
 	tx, err := w.db.Begin(ctx)
 	if err != nil {
@@ -306,12 +293,10 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 		return fmt.Errorf("update import: %w", err)
 	}
 
-	// Match created variants to our import variants by position (order preserved)
-	// Shopify returns variants in the same order they were submitted.
+	// Match created variants to our import variants
 	createdVariants := product.Variants.Edges
 	for i, v := range variants {
 		if i >= len(createdVariants) {
-			w.logger.Warn().Int("index", i).Msg("more local variants than Shopify returned, skipping")
 			break
 		}
 
@@ -322,26 +307,22 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 			continue
 		}
 
-		// Update reseller_import_variants with Shopify variant ID
 		_, err = tx.Exec(ctx, `
 			UPDATE reseller_import_variants SET shopify_variant_id = $2 WHERE id = $1
 		`, v.ImportVariantID, resellerVariantID)
 		if err != nil {
-			return fmt.Errorf("update import variant %s: %w", v.ImportVariantID, err)
+			return fmt.Errorf("update import variant: %w", err)
 		}
 
-		// Create product_link connecting supplier variant → reseller variant
 		_, err = tx.Exec(ctx, `
 			INSERT INTO product_links
 				(supplier_shop_id, reseller_shop_id, supplier_product_id, reseller_product_id,
 				 supplier_variant_id, reseller_variant_id, import_id, is_active)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)
 			ON CONFLICT (reseller_shop_id, reseller_variant_id)
-			DO UPDATE SET
-				supplier_variant_id = EXCLUDED.supplier_variant_id,
+			DO UPDATE SET supplier_variant_id = EXCLUDED.supplier_variant_id,
 				supplier_product_id = EXCLUDED.supplier_product_id,
-				import_id = EXCLUDED.import_id,
-				is_active = TRUE
+				import_id = EXCLUDED.import_id, is_active = TRUE
 		`, supplierShopID, params.ResellerShopID,
 			supplierProductID, resellerProductID,
 			v.SupplierVariantID, resellerVariantID,
@@ -349,18 +330,13 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 		if err != nil {
 			return fmt.Errorf("create product link: %w", err)
 		}
-
-		w.logger.Debug().
-			Int64("supplier_variant", v.SupplierVariantID).
-			Int64("reseller_variant", resellerVariantID).
-			Msg("product link created")
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit: %w", err)
 	}
 
-	w.logger.Info().Str("import_id", params.ImportID).Msg("product import completed with links")
+	w.logger.Info().Str("import_id", params.ImportID).Msg("product import completed")
 	return nil
 }
 
