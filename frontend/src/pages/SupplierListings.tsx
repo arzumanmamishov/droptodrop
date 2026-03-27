@@ -49,6 +49,18 @@ export default function SupplierListings() {
     [refetch],
   );
 
+  const handleDelete = useCallback(
+    async (listingId: string) => {
+      try {
+        await api.delete(`/supplier/listings/${listingId}`);
+        refetch();
+      } catch {
+        // Error handling
+      }
+    },
+    [refetch],
+  );
+
   if (loading) {
     return (
       <Page title="Supplier Listings">
@@ -95,6 +107,9 @@ export default function SupplierListings() {
           Resume
         </Button>
       )}
+      <Button size="slim" tone="critical" onClick={() => handleDelete(listing.id)}>
+        Delete
+      </Button>
     </InlineStack>,
   ];});
 

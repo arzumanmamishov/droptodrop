@@ -215,6 +215,21 @@ func (s *Service) UpdateListingStatus(ctx context.Context, shopID, listingID, st
 	return nil
 }
 
+// DeleteListing removes a listing and its variants.
+func (s *Service) DeleteListing(ctx context.Context, shopID, listingID string) error {
+	result, err := s.db.Exec(ctx, `
+		DELETE FROM supplier_listings WHERE id = $1 AND supplier_shop_id = $2
+	`, listingID, shopID)
+	if err != nil {
+		return fmt.Errorf("delete listing: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("listing not found")
+	}
+	s.audit.Log(ctx, shopID, "merchant", shopID, "listing_deleted", "supplier_listing", listingID, nil, "success", "")
+	return nil
+}
+
 // GetListing returns a single listing with variants.
 func (s *Service) GetListing(ctx context.Context, listingID string) (*SupplierListing, error) {
 	var l SupplierListing

@@ -118,19 +118,19 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               <Divider />
               <BlockStack gap="200">
                 <InlineStack gap="200" blockAlign="center">
-                  <Text as="span" variant="bodySm" tone="info">&#10003;</Text>
+                  <Text as="span" variant="bodySm" tone="success">&#10003;</Text>
                   <Text as="span" variant="bodySm">Browse the supplier marketplace</Text>
                 </InlineStack>
                 <InlineStack gap="200" blockAlign="center">
-                  <Text as="span" variant="bodySm" tone="info">&#10003;</Text>
+                  <Text as="span" variant="bodySm" tone="success">&#10003;</Text>
                   <Text as="span" variant="bodySm">Import products with custom markup</Text>
                 </InlineStack>
                 <InlineStack gap="200" blockAlign="center">
-                  <Text as="span" variant="bodySm" tone="info">&#10003;</Text>
+                  <Text as="span" variant="bodySm" tone="success">&#10003;</Text>
                   <Text as="span" variant="bodySm">Auto-route orders to suppliers</Text>
                 </InlineStack>
                 <InlineStack gap="200" blockAlign="center">
-                  <Text as="span" variant="bodySm" tone="info">&#10003;</Text>
+                  <Text as="span" variant="bodySm" tone="success">&#10003;</Text>
                   <Text as="span" variant="bodySm">Tracking synced to your customers</Text>
                 </InlineStack>
               </BlockStack>

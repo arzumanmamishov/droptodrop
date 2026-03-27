@@ -61,7 +61,7 @@ export default function App() {
       <BrowserRouter>
         {needsOnboarding ? (
           <Routes>
-            <Route path="*" element={<Onboarding onComplete={(role) => setShop({ ...shop, role })} />} />
+            <Route path="*" element={<Onboarding onComplete={(role) => setShop({ ...shop, role: role as Shop['role'] })} />} />
           </Routes>
         ) : shop ? (
           <AppFrame shop={shop}>
