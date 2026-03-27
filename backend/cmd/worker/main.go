@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/joho/godotenv"
 
@@ -43,6 +44,27 @@ func main() {
 	defer redisClient.Close()
 
 	worker := jobs.NewWorker(db, redisClient, cfg, logger)
+
+	// Periodic cleanup of expired sessions and old webhook events
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if _, err := db.Exec(ctx, `DELETE FROM shop_sessions WHERE expires_at < NOW()`); err != nil {
+					logger.Warn().Err(err).Msg("failed to cleanup expired sessions")
+				} else {
+					logger.Info().Msg("cleaned up expired sessions")
+				}
+				if _, err := db.Exec(ctx, `DELETE FROM webhook_events WHERE created_at < NOW() - INTERVAL '7 days'`); err != nil {
+					logger.Warn().Err(err).Msg("failed to cleanup old webhook events")
+				}
+			}
+		}
+	}()
 
 	// Handle shutdown
 	go func() {

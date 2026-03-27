@@ -82,6 +82,7 @@ func main() {
 	}
 
 	r := gin.New()
+	r.MaxMultipartMemory = 8 << 20 // 8 MB
 	r.Use(gin.Recovery())
 	r.Use(middleware.RequestLogger(logger))
 	r.Use(middleware.SecurityHeaders())
@@ -592,8 +593,16 @@ func main() {
 					c.File(fullPath)
 					return
 				}
-				// SPA fallback: serve index.html for unmatched routes
-				c.File(filepath.Join(staticDir, "index.html"))
+				// SPA fallback: serve index.html with API key injected
+				indexPath := filepath.Join(staticDir, "index.html")
+				indexBytes, err := os.ReadFile(indexPath)
+				if err != nil {
+					c.File(indexPath)
+					return
+				}
+				html := strings.Replace(string(indexBytes), `content="" id="shopify-api-key"`, fmt.Sprintf(`content="%s" id="shopify-api-key"`, cfg.Shopify.APIKey), 1)
+				c.Header("Content-Type", "text/html; charset=utf-8")
+				c.String(http.StatusOK, html)
 				return
 			}
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})

@@ -1,23 +1,12 @@
 const API_BASE = '/api/v1';
 
-// App Bridge session token retrieval function.
-// Set by the AppBridgeProvider when running inside Shopify Admin.
 let appBridgeGetToken: (() => Promise<string>) | null = null;
 
-/**
- * Register the App Bridge getSessionToken function.
- * Called once by the App Bridge provider on initialization.
- */
 export function registerAppBridgeTokenProvider(fn: () => Promise<string>): void {
   appBridgeGetToken = fn;
 }
 
-/**
- * Get the current session token.
- * Prefers App Bridge JWT (embedded mode), falls back to URL param / localStorage (dev mode).
- */
 async function getSessionToken(): Promise<string> {
-  // In embedded mode, use App Bridge to get a fresh JWT
   if (appBridgeGetToken) {
     try {
       return await appBridgeGetToken();
@@ -25,8 +14,6 @@ async function getSessionToken(): Promise<string> {
       // Fall through to legacy token
     }
   }
-
-  // Fallback: URL param or stored session (OAuth callback flow, dev mode)
   const params = new URLSearchParams(window.location.search);
   return params.get('session') || localStorage.getItem('droptodrop_session') || '';
 }
@@ -39,6 +26,7 @@ async function request<T>(
   method: string,
   path: string,
   body?: unknown,
+  retries = 2,
 ): Promise<T> {
   const token = await getSessionToken();
   const headers: Record<string, string> = {
@@ -48,18 +36,43 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(`${API_BASE}${path}`, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
 
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: 'Request failed' }));
-    throw new Error(error.error || `HTTP ${response.status}`);
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: 'Request failed' }));
+        const message = error.error || `HTTP ${response.status}`;
+
+        // Don't retry client errors (4xx)
+        if (response.status >= 400 && response.status < 500) {
+          throw new Error(message);
+        }
+
+        // Retry server errors (5xx)
+        if (attempt < retries) {
+          await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+          continue;
+        }
+        throw new Error(message);
+      }
+
+      return response.json();
+    } catch (err) {
+      if (err instanceof TypeError && attempt < retries) {
+        // Network error - retry
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
   }
 
-  return response.json();
+  throw new Error('Request failed after retries');
 }
 
 export const api = {
