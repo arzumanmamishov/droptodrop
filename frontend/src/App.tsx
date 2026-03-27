@@ -18,6 +18,7 @@ import OrderDetail from './pages/OrderDetail';
 import Settings from './pages/Settings';
 import AuditLog from './pages/AuditLog';
 import ListingEdit from './pages/ListingEdit';
+import SupplierInfo from './pages/SupplierInfo';
 import Onboarding from './pages/Onboarding';
 
 export default function App() {
@@ -78,6 +79,7 @@ export default function App() {
               {shop.role === 'reseller' && (
                 <>
                   <Route path="/marketplace" element={<Marketplace />} />
+                  <Route path="/supplier/:id" element={<SupplierInfo />} />
                   <Route path="/imports" element={<Imports />} />
                 </>
               )}

@@ -18,7 +18,7 @@ import {
   Divider,
   Box,
 } from '@shopify/polaris';
-import { CheckIcon, ClockIcon, XIcon, PackageIcon } from '@shopify/polaris-icons';
+import { CheckIcon, XIcon, PackageIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
 import { api } from '../utils/api';
 import { RoutedOrder, FulfillmentEvent } from '../types';
@@ -43,7 +43,6 @@ function StatusTimeline({ currentStatus }: { currentStatus: string }) {
       {ORDER_STEPS.map((step, i) => {
         const isCompleted = !isRejected && i <= currentIndex;
         const isCurrent = !isRejected && i === currentIndex;
-        const color = isCompleted ? '#008060' : '#8c8c8c';
         return (
           <InlineStack key={step} gap="100" blockAlign="center">
             <div style={{

@@ -420,6 +420,25 @@ func main() {
 				c.JSON(http.StatusOK, listing)
 			})
 
+			reseller.GET("/suppliers/:id", func(c *gin.Context) {
+				supplierID := c.Param("id")
+				profile, err := shopsSvc.GetSupplierProfile(c.Request.Context(), supplierID)
+				if err != nil {
+					c.JSON(http.StatusNotFound, gin.H{"error": "supplier not found"})
+					return
+				}
+				// Count active listings
+				_, listingCount, _ := productsSvc.ListSupplierListings(c.Request.Context(), supplierID, "active", 1, 0)
+				c.JSON(http.StatusOK, gin.H{
+					"company_name":           profile.CompanyName,
+					"support_email":          profile.SupportEmail,
+					"return_policy_url":      profile.ReturnPolicyURL,
+					"default_processing_days": profile.DefaultProcessingDays,
+					"blind_fulfillment":      profile.BlindFulfillment,
+					"listing_count":          listingCount,
+				})
+			})
+
 			reseller.POST("/imports", func(c *gin.Context) {
 				shopID, _ := c.Get("shop_id")
 				var input imports.ImportInput

@@ -40,7 +40,8 @@
       "Bash(scalingo --app droptodrop --region osc-fr1 logs --lines 10)",
       "Bash(DATABASE_URL=\"postgres://droptodrop_5959:GTJyQJba6VGe8SgeHgjryarrpzsX8_3yXFRnn35DI0mgRnd61s_mrtThgYCjUo_S@127.0.0.1:10001/droptodrop_5959?sslmode=disable\" go run ./cmd/migrate list-installs)",
       "Bash(DATABASE_URL=\"postgres://droptodrop_5959:GTJyQJba6VGe8SgeHgjryarrpzsX8_3yXFRnn35DI0mgRnd61s_mrtThgYCjUo_S@127.0.0.1:10001/droptodrop_5959?sslmode=disable\" go run ./cmd/migrate run-sql migrations/000002_add_category.up.sql)",
-      "Bash(scalingo --app droptodrop --region osc-fr1 deployment-logs 9aee7d6d-0c6f-487a-a22f-436f78f9dcb9)"
+      "Bash(scalingo --app droptodrop --region osc-fr1 deployment-logs 9aee7d6d-0c6f-487a-a22f-436f78f9dcb9)",
+      "Bash(scalingo --app droptodrop --region osc-fr1 deployment-logs 78582b56-edda-4cd7-95e6-6a5344d1b27f)"
     ]
   }
 }

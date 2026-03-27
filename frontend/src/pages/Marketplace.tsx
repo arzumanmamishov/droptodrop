@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Page,
   Layout,
@@ -33,6 +34,7 @@ interface MarketplaceResponse {
 }
 
 export default function Marketplace() {
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState(0);
   const [page, setPage] = useState(0);
@@ -202,9 +204,14 @@ export default function Marketplace() {
                             </InlineStack>
                           </>
                         )}
-                        <Button variant="primary" fullWidth onClick={() => setImportModal(listing)}>
-                          Import Product
-                        </Button>
+                        <InlineStack gap="200">
+                          <Button variant="primary" fullWidth onClick={() => setImportModal(listing)}>
+                            Import
+                          </Button>
+                          <Button fullWidth onClick={() => navigate(`/supplier/${listing.supplier_shop_id}`)}>
+                            Supplier
+                          </Button>
+                        </InlineStack>
                       </BlockStack>
                     </Box>
                   </Card>
