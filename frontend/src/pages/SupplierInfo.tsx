@@ -63,7 +63,7 @@ export default function SupplierInfo() {
                 </div>
                 <BlockStack gap="100">
                   <Text as="h2" variant="headingLg">{data.company_name || 'Unnamed Supplier'}</Text>
-                  <Badge tone="success">{data.listing_count} products listed</Badge>
+                  <Badge tone="success">{`${data.listing_count} products listed`}</Badge>
                 </BlockStack>
               </InlineStack>
               <Divider />
