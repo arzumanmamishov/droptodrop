@@ -9,6 +9,7 @@ import {
   ListBulletedIcon,
   ImportIcon,
   StoreIcon,
+  ChartVerticalFilledIcon,
 } from '@shopify/polaris-icons';
 import { Shop } from '../types';
 
@@ -29,6 +30,7 @@ export default function AppFrame({ shop, children }: AppFrameProps) {
     { url: '/supplier/setup', label: 'Supplier Setup', icon: StoreIcon, selected: location.pathname === '/supplier/setup' },
     { url: '/supplier/listings', label: 'Listings', icon: ProductIcon, selected: location.pathname === '/supplier/listings' },
     { url: '/orders', label: 'Orders', icon: OrderIcon, selected: location.pathname.startsWith('/orders') },
+    { url: '/analytics', label: 'Analytics', icon: ChartVerticalFilledIcon, selected: location.pathname === '/analytics' },
     { url: '/audit', label: 'Audit Log', icon: ListBulletedIcon, selected: location.pathname === '/audit' },
     { url: '/settings', label: 'Settings', icon: SettingsIcon, selected: location.pathname === '/settings' },
   ];
@@ -38,6 +40,7 @@ export default function AppFrame({ shop, children }: AppFrameProps) {
     { url: '/marketplace', label: 'Marketplace', icon: StoreIcon, selected: location.pathname === '/marketplace' },
     { url: '/imports', label: 'Imports', icon: ImportIcon, selected: location.pathname === '/imports' },
     { url: '/orders', label: 'Orders', icon: OrderIcon, selected: location.pathname.startsWith('/orders') },
+    { url: '/analytics', label: 'Analytics', icon: ChartVerticalFilledIcon, selected: location.pathname === '/analytics' },
     { url: '/audit', label: 'Audit Log', icon: ListBulletedIcon, selected: location.pathname === '/audit' },
     { url: '/settings', label: 'Settings', icon: SettingsIcon, selected: location.pathname === '/settings' },
   ];
