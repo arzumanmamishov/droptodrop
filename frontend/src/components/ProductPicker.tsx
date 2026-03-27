@@ -11,9 +11,12 @@ import {
   InlineStack,
   TextField,
   Thumbnail,
+  Select,
+  Divider,
 } from '@shopify/polaris';
 import { ImageIcon } from '@shopify/polaris-icons';
 import { api } from '../utils/api';
+import { CATEGORY_OPTIONS } from '../constants/categories';
 
 interface ShopVariant {
   id: number;
@@ -67,6 +70,7 @@ export default function ProductPicker({ open, onClose, onImport }: ProductPicker
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [importing, setImporting] = useState(false);
   const [wholesalePrices, setWholesalePrices] = useState<Record<string, string>>({});
+  const [categories, setCategories] = useState<Record<number, string>>({});
 
   const fetchProducts = useCallback(async (cursor?: string) => {
     setLoading(true);
@@ -150,6 +154,7 @@ export default function ProductPicker({ open, onClose, onImport }: ProductPicker
           vendor: product.vendor,
           tags: product.tags,
           images: JSON.stringify(images),
+          category: categories[product.id] || 'other',
           processing_days: 3,
           shipping_countries: ['US'],
           blind_fulfillment: false,
@@ -164,7 +169,7 @@ export default function ProductPicker({ open, onClose, onImport }: ProductPicker
     } finally {
       setImporting(false);
     }
-  }, [products, selected, wholesalePrices, onImport, onClose]);
+  }, [products, selected, wholesalePrices, categories, onImport, onClose]);
 
   return (
     <Modal
@@ -214,6 +219,17 @@ export default function ProductPicker({ open, onClose, onImport }: ProductPicker
                       </Text>
                     </BlockStack>
                   </InlineStack>
+                  {selected.has(product.id) && (
+                    <div style={{ paddingLeft: '2rem', maxWidth: '250px' }}>
+                      <Select
+                        label="Category"
+                        options={CATEGORY_OPTIONS}
+                        value={categories[product.id] || 'other'}
+                        onChange={(val) => setCategories((prev) => ({ ...prev, [product.id]: val }))}
+                      />
+                    </div>
+                  )}
+                  <Divider />
                   {selected.has(product.id) && product.variants.length > 0 && (
                     <div style={{ paddingLeft: '2rem' }}>
                       <DataTable

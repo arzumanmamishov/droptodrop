@@ -3,25 +3,28 @@ import {
   Page,
   Layout,
   Card,
-  Text,
   Button,
   BlockStack,
+  Text,
   InlineStack,
   Banner,
+  Icon,
   Box,
+  Divider,
 } from '@shopify/polaris';
+import { PackageIcon, StoreIcon } from '@shopify/polaris-icons';
 import { api } from '../utils/api';
 
 interface OnboardingProps {
-  onComplete: (role: 'supplier' | 'reseller') => void;
+  onComplete: (role: string) => void;
 }
 
 export default function Onboarding({ onComplete }: OnboardingProps) {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const selectRole = async (role: 'supplier' | 'reseller') => {
-    setLoading(true);
+  const handleSelect = async (role: string) => {
+    setLoading(role);
     setError(null);
     try {
       await api.post('/shop/role', { role });
@@ -29,72 +32,118 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to set role');
     } finally {
-      setLoading(false);
+      setLoading(null);
     }
   };
 
   return (
-    <Page title="Welcome to DropToDrop">
+    <Page>
       <Layout>
+        <Layout.Section>
+          <Box paddingBlockStart="800" paddingBlockEnd="400">
+            <BlockStack gap="200" align="center">
+              <Text as="h1" variant="heading2xl" alignment="center">
+                Welcome to DropToDrop
+              </Text>
+              <Text as="p" variant="bodyLg" tone="subdued" alignment="center">
+                The dropshipping network that connects suppliers with resellers.
+                Choose your role to get started.
+              </Text>
+            </BlockStack>
+          </Box>
+        </Layout.Section>
+
         {error && (
           <Layout.Section>
             <Banner tone="critical">{error}</Banner>
           </Layout.Section>
         )}
-        <Layout.Section>
-          <BlockStack gap="400">
-            <Text as="p" variant="bodyLg">
-              Choose your role to get started. This determines how you use the app.
-            </Text>
-          </BlockStack>
-        </Layout.Section>
+
         <Layout.Section variant="oneHalf">
           <Card>
             <BlockStack gap="400">
-              <Text as="h2" variant="headingLg">Supplier</Text>
-              <Text as="p" variant="bodyMd">
-                You manufacture or source products and want to distribute them to resellers.
-                Resellers will import your products and sell them to end customers.
-              </Text>
-              <Box>
-                <BlockStack gap="200">
-                  <Text as="p" variant="bodyMd">You will be able to:</Text>
-                  <Text as="p" variant="bodySm">- List products for reseller distribution</Text>
-                  <Text as="p" variant="bodySm">- Set wholesale pricing per variant</Text>
-                  <Text as="p" variant="bodySm">- Receive and fulfill routed orders</Text>
-                  <Text as="p" variant="bodySm">- Manage shipping and branding preferences</Text>
+              <InlineStack gap="300" align="start" blockAlign="center">
+                <div style={{ background: '#e3f1df', borderRadius: '12px', padding: '12px', display: 'flex' }}>
+                  <Icon source={PackageIcon} tone="success" />
+                </div>
+                <BlockStack gap="100">
+                  <Text as="h2" variant="headingLg">Supplier</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">List your products for resellers</Text>
                 </BlockStack>
-              </Box>
-              <InlineStack align="end">
-                <Button variant="primary" loading={loading} onClick={() => selectRole('supplier')}>
-                  I'm a Supplier
-                </Button>
               </InlineStack>
+              <Divider />
+              <BlockStack gap="200">
+                <InlineStack gap="200" blockAlign="center">
+                  <Text as="span" variant="bodySm" tone="success">&#10003;</Text>
+                  <Text as="span" variant="bodySm">Publish products to the marketplace</Text>
+                </InlineStack>
+                <InlineStack gap="200" blockAlign="center">
+                  <Text as="span" variant="bodySm" tone="success">&#10003;</Text>
+                  <Text as="span" variant="bodySm">Set wholesale pricing per variant</Text>
+                </InlineStack>
+                <InlineStack gap="200" blockAlign="center">
+                  <Text as="span" variant="bodySm" tone="success">&#10003;</Text>
+                  <Text as="span" variant="bodySm">Receive and fulfill routed orders</Text>
+                </InlineStack>
+                <InlineStack gap="200" blockAlign="center">
+                  <Text as="span" variant="bodySm" tone="success">&#10003;</Text>
+                  <Text as="span" variant="bodySm">Auto-sync inventory and tracking</Text>
+                </InlineStack>
+              </BlockStack>
+              <Button
+                variant="primary"
+                size="large"
+                fullWidth
+                loading={loading === 'supplier'}
+                onClick={() => handleSelect('supplier')}
+              >
+                Get Started as Supplier
+              </Button>
             </BlockStack>
           </Card>
         </Layout.Section>
+
         <Layout.Section variant="oneHalf">
           <Card>
             <BlockStack gap="400">
-              <Text as="h2" variant="headingLg">Reseller</Text>
-              <Text as="p" variant="bodyMd">
-                You run a store and want to sell products from suppliers without holding inventory.
-                Orders are automatically routed to suppliers for fulfillment.
-              </Text>
-              <Box>
-                <BlockStack gap="200">
-                  <Text as="p" variant="bodyMd">You will be able to:</Text>
-                  <Text as="p" variant="bodySm">- Browse supplier product marketplace</Text>
-                  <Text as="p" variant="bodySm">- Import products with custom markup</Text>
-                  <Text as="p" variant="bodySm">- Auto-route orders to suppliers</Text>
-                  <Text as="p" variant="bodySm">- Track fulfillment and sync tracking</Text>
+              <InlineStack gap="300" align="start" blockAlign="center">
+                <div style={{ background: '#e0f0ff', borderRadius: '12px', padding: '12px', display: 'flex' }}>
+                  <Icon source={StoreIcon} tone="info" />
+                </div>
+                <BlockStack gap="100">
+                  <Text as="h2" variant="headingLg">Reseller</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">Import and sell supplier products</Text>
                 </BlockStack>
-              </Box>
-              <InlineStack align="end">
-                <Button variant="primary" loading={loading} onClick={() => selectRole('reseller')}>
-                  I'm a Reseller
-                </Button>
               </InlineStack>
+              <Divider />
+              <BlockStack gap="200">
+                <InlineStack gap="200" blockAlign="center">
+                  <Text as="span" variant="bodySm" tone="info">&#10003;</Text>
+                  <Text as="span" variant="bodySm">Browse the supplier marketplace</Text>
+                </InlineStack>
+                <InlineStack gap="200" blockAlign="center">
+                  <Text as="span" variant="bodySm" tone="info">&#10003;</Text>
+                  <Text as="span" variant="bodySm">Import products with custom markup</Text>
+                </InlineStack>
+                <InlineStack gap="200" blockAlign="center">
+                  <Text as="span" variant="bodySm" tone="info">&#10003;</Text>
+                  <Text as="span" variant="bodySm">Auto-route orders to suppliers</Text>
+                </InlineStack>
+                <InlineStack gap="200" blockAlign="center">
+                  <Text as="span" variant="bodySm" tone="info">&#10003;</Text>
+                  <Text as="span" variant="bodySm">Tracking synced to your customers</Text>
+                </InlineStack>
+              </BlockStack>
+              <Button
+                variant="primary"
+                tone="success"
+                size="large"
+                fullWidth
+                loading={loading === 'reseller'}
+                onClick={() => handleSelect('reseller')}
+              >
+                Get Started as Reseller
+              </Button>
             </BlockStack>
           </Card>
         </Layout.Section>

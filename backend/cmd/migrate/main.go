@@ -42,6 +42,21 @@ func main() {
 		return
 	}
 
+	if len(os.Args) > 1 && os.Args[1] == "run-sql" && len(os.Args) > 2 {
+		sql, err := os.ReadFile(os.Args[2])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "read file: %v\n", err)
+			os.Exit(1)
+		}
+		_, err = conn.Exec(ctx, string(sql))
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "exec error: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("SQL executed successfully!")
+		return
+	}
+
 	if len(os.Args) > 1 && os.Args[1] == "list-listings" {
 		rows, err := conn.Query(ctx, "SELECT id, title, status, supplier_shop_id FROM supplier_listings ORDER BY created_at")
 		if err != nil {

@@ -59,6 +59,7 @@ export interface SupplierListing {
   vendor: string;
   tags: string;
   images: string[];
+  category: string;
   status: 'draft' | 'active' | 'paused' | 'archived';
   processing_days: number;
   shipping_countries: string[];

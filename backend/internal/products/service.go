@@ -23,6 +23,7 @@ type SupplierListing struct {
 	Vendor            string            `json:"vendor"`
 	Tags              string            `json:"tags"`
 	Images            json.RawMessage   `json:"images"`
+	Category          string            `json:"category"`
 	Status            string            `json:"status"`
 	ProcessingDays    int               `json:"processing_days"`
 	ShippingCountries json.RawMessage   `json:"shipping_countries"`
@@ -56,6 +57,7 @@ type CreateListingInput struct {
 	Vendor            string               `json:"vendor"`
 	Tags              string               `json:"tags"`
 	Images            json.RawMessage      `json:"images"`
+	Category          string               `json:"category"`
 	ProcessingDays    int                  `json:"processing_days"`
 	ShippingCountries []string             `json:"shipping_countries"`
 	BlindFulfillment  bool                 `json:"blind_fulfillment"`
@@ -101,21 +103,25 @@ func (s *Service) CreateListing(ctx context.Context, shopID string, input Create
 	}
 
 	var listing SupplierListing
+	category := input.Category
+	if category == "" {
+		category = "other"
+	}
 	err = tx.QueryRow(ctx, `
-		INSERT INTO supplier_listings (supplier_shop_id, shopify_product_id, title, description, product_type, vendor, tags, images, status, processing_days, shipping_countries, blind_fulfillment)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', $9, $10, $11)
+		INSERT INTO supplier_listings (supplier_shop_id, shopify_product_id, title, description, product_type, vendor, tags, images, category, status, processing_days, shipping_countries, blind_fulfillment)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'draft', $10, $11, $12)
 		ON CONFLICT (supplier_shop_id, shopify_product_id) DO UPDATE SET
 			title = EXCLUDED.title, description = EXCLUDED.description, product_type = EXCLUDED.product_type,
-			vendor = EXCLUDED.vendor, tags = EXCLUDED.tags, images = EXCLUDED.images,
+			vendor = EXCLUDED.vendor, tags = EXCLUDED.tags, images = EXCLUDED.images, category = EXCLUDED.category,
 			processing_days = EXCLUDED.processing_days, shipping_countries = EXCLUDED.shipping_countries,
 			blind_fulfillment = EXCLUDED.blind_fulfillment
 		RETURNING id, supplier_shop_id, shopify_product_id, title, COALESCE(description,''), COALESCE(product_type,''),
-			COALESCE(vendor,''), COALESCE(tags,''), images, status, processing_days, shipping_countries, blind_fulfillment, created_at, updated_at
+			COALESCE(vendor,''), COALESCE(tags,''), images, COALESCE(category,'other'), status, processing_days, shipping_countries, blind_fulfillment, created_at, updated_at
 	`, shopID, input.ShopifyProductID, input.Title, input.Description, input.ProductType,
-		input.Vendor, input.Tags, imagesJSON, input.ProcessingDays, countriesJSON, input.BlindFulfillment,
+		input.Vendor, input.Tags, imagesJSON, category, input.ProcessingDays, countriesJSON, input.BlindFulfillment,
 	).Scan(&listing.ID, &listing.SupplierShopID, &listing.ShopifyProductID, &listing.Title,
 		&listing.Description, &listing.ProductType, &listing.Vendor, &listing.Tags, &listing.Images,
-		&listing.Status, &listing.ProcessingDays, &listing.ShippingCountries, &listing.BlindFulfillment,
+		&listing.Category, &listing.Status, &listing.ProcessingDays, &listing.ShippingCountries, &listing.BlindFulfillment,
 		&listing.CreatedAt, &listing.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("insert listing: %w", err)
@@ -156,7 +162,7 @@ func (s *Service) ListSupplierListings(ctx context.Context, shopID string, statu
 	countQuery := `SELECT COUNT(*) FROM supplier_listings WHERE supplier_shop_id = $1`
 	listQuery := `
 		SELECT id, supplier_shop_id, shopify_product_id, title, COALESCE(description,''), COALESCE(product_type,''),
-			COALESCE(vendor,''), COALESCE(tags,''), images, status, processing_days, shipping_countries, blind_fulfillment, created_at, updated_at
+			COALESCE(vendor,''), COALESCE(tags,''), images, COALESCE(category,'other'), status, processing_days, shipping_countries, blind_fulfillment, created_at, updated_at
 		FROM supplier_listings WHERE supplier_shop_id = $1`
 
 	args := []interface{}{shopID}
@@ -183,7 +189,7 @@ func (s *Service) ListSupplierListings(ctx context.Context, shopID string, statu
 	for rows.Next() {
 		var l SupplierListing
 		if err := rows.Scan(&l.ID, &l.SupplierShopID, &l.ShopifyProductID, &l.Title, &l.Description,
-			&l.ProductType, &l.Vendor, &l.Tags, &l.Images, &l.Status, &l.ProcessingDays,
+			&l.ProductType, &l.Vendor, &l.Tags, &l.Images, &l.Category, &l.Status, &l.ProcessingDays,
 			&l.ShippingCountries, &l.BlindFulfillment, &l.CreatedAt, &l.UpdatedAt); err != nil {
 			return nil, 0, fmt.Errorf("scan listing: %w", err)
 		}
@@ -214,10 +220,10 @@ func (s *Service) GetListing(ctx context.Context, listingID string) (*SupplierLi
 	var l SupplierListing
 	err := s.db.QueryRow(ctx, `
 		SELECT id, supplier_shop_id, shopify_product_id, title, COALESCE(description,''), COALESCE(product_type,''),
-			COALESCE(vendor,''), COALESCE(tags,''), images, status, processing_days, shipping_countries, blind_fulfillment, created_at, updated_at
+			COALESCE(vendor,''), COALESCE(tags,''), images, COALESCE(category,'other'), status, processing_days, shipping_countries, blind_fulfillment, created_at, updated_at
 		FROM supplier_listings WHERE id = $1
 	`, listingID).Scan(&l.ID, &l.SupplierShopID, &l.ShopifyProductID, &l.Title, &l.Description,
-		&l.ProductType, &l.Vendor, &l.Tags, &l.Images, &l.Status, &l.ProcessingDays,
+		&l.ProductType, &l.Vendor, &l.Tags, &l.Images, &l.Category, &l.Status, &l.ProcessingDays,
 		&l.ShippingCountries, &l.BlindFulfillment, &l.CreatedAt, &l.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("get listing: %w", err)
@@ -252,6 +258,11 @@ func (s *Service) ListMarketplace(ctx context.Context, filters MarketplaceFilter
 	args := []interface{}{}
 	argN := 1
 
+	if filters.Category != "" {
+		baseWhere += fmt.Sprintf(` AND sl.category = $%d`, argN)
+		args = append(args, filters.Category)
+		argN++
+	}
 	if filters.ProductType != "" {
 		baseWhere += fmt.Sprintf(` AND sl.product_type = $%d`, argN)
 		args = append(args, filters.ProductType)
@@ -278,7 +289,7 @@ func (s *Service) ListMarketplace(ctx context.Context, filters MarketplaceFilter
 	listQuery := fmt.Sprintf(`
 		SELECT sl.id, sl.supplier_shop_id, sl.shopify_product_id, sl.title, COALESCE(sl.description,''),
 			COALESCE(sl.product_type,''), COALESCE(sl.vendor,''), COALESCE(sl.tags,''), sl.images,
-			sl.status, sl.processing_days, sl.shipping_countries, sl.blind_fulfillment, sl.created_at, sl.updated_at
+			COALESCE(sl.category,'other'), sl.status, sl.processing_days, sl.shipping_countries, sl.blind_fulfillment, sl.created_at, sl.updated_at
 		FROM supplier_listings sl
 		%s ORDER BY sl.updated_at DESC LIMIT %d OFFSET %d
 	`, baseWhere, limit, offset)
@@ -293,7 +304,7 @@ func (s *Service) ListMarketplace(ctx context.Context, filters MarketplaceFilter
 	for rows.Next() {
 		var l SupplierListing
 		if err := rows.Scan(&l.ID, &l.SupplierShopID, &l.ShopifyProductID, &l.Title, &l.Description,
-			&l.ProductType, &l.Vendor, &l.Tags, &l.Images, &l.Status, &l.ProcessingDays,
+			&l.ProductType, &l.Vendor, &l.Tags, &l.Images, &l.Category, &l.Status, &l.ProcessingDays,
 			&l.ShippingCountries, &l.BlindFulfillment, &l.CreatedAt, &l.UpdatedAt); err != nil {
 			return nil, 0, fmt.Errorf("scan listing: %w", err)
 		}
@@ -305,10 +316,11 @@ func (s *Service) ListMarketplace(ctx context.Context, filters MarketplaceFilter
 
 // MarketplaceFilters holds filtering options for marketplace search.
 type MarketplaceFilters struct {
-	Search            string `form:"search"`
-	ProductType       string `form:"product_type"`
-	Country           string `form:"country"`
-	MaxProcessingDays int    `form:"max_processing_days"`
+	Search            string  `form:"search"`
+	Category          string  `form:"category"`
+	ProductType       string  `form:"product_type"`
+	Country           string  `form:"country"`
+	MaxProcessingDays int     `form:"max_processing_days"`
 	MinMargin         float64 `form:"min_margin"`
 	MaxPrice          float64 `form:"max_price"`
 }
