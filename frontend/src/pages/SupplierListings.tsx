@@ -14,11 +14,18 @@ import {
   Text,
   InlineStack,
   Thumbnail,
+  InlineGrid,
+  Icon,
+  Box,
+  Divider,
+  EmptyState,
+  TextField,
 } from '@shopify/polaris';
-import { ImageIcon } from '@shopify/polaris-icons';
+import { ImageIcon, ProductIcon, CheckIcon, ClockIcon, PauseCircleIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
 import { api } from '../utils/api';
 import { SupplierListing } from '../types';
+import { getCategoryLabel } from '../constants/categories';
 import ProductPicker from '../components/ProductPicker';
 
 interface ListingsResponse {
@@ -27,9 +34,12 @@ interface ListingsResponse {
 }
 
 export default function SupplierListings() {
-  const [statusFilter, setStatusFilter] = useState<string[]>([]);
-  const [page, setPage] = useState(0);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [page, setPage] = useState(0);
+  const [statusFilter, setStatusFilter] = useState<string[]>([]);
+  const [search, setSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkAction, setBulkAction] = useState(false);
   const limit = 20;
 
   const statusQuery = statusFilter.length === 1 ? `&status=${statusFilter[0]}` : '';
@@ -61,6 +71,36 @@ export default function SupplierListings() {
     [refetch],
   );
 
+  const handleBulkDelete = useCallback(async () => {
+    setBulkAction(true);
+    for (const id of selectedIds) {
+      try { await api.delete(`/supplier/listings/${id}`); } catch { /* skip */ }
+    }
+    setSelectedIds(new Set());
+    setBulkAction(false);
+    refetch();
+  }, [selectedIds, refetch]);
+
+  const handleBulkPublish = useCallback(async () => {
+    setBulkAction(true);
+    for (const id of selectedIds) {
+      try { await api.put(`/supplier/listings/${id}/status`, { status: 'active' }); } catch { /* skip */ }
+    }
+    setSelectedIds(new Set());
+    setBulkAction(false);
+    refetch();
+  }, [selectedIds, refetch]);
+
+  const handleBulkPause = useCallback(async () => {
+    setBulkAction(true);
+    for (const id of selectedIds) {
+      try { await api.put(`/supplier/listings/${id}/status`, { status: 'paused' }); } catch { /* skip */ }
+    }
+    setSelectedIds(new Set());
+    setBulkAction(false);
+    refetch();
+  }, [selectedIds, refetch]);
+
   if (loading) {
     return (
       <Page title="Supplier Listings">
@@ -71,53 +111,71 @@ export default function SupplierListings() {
     );
   }
 
+  const listings = data?.listings || [];
+  const filteredListings = search
+    ? listings.filter(l => l.title.toLowerCase().includes(search.toLowerCase()))
+    : listings;
+
+  const activeCount = listings.filter(l => l.status === 'active').length;
+  const draftCount = listings.filter(l => l.status === 'draft').length;
+  const pausedCount = listings.filter(l => l.status === 'paused').length;
+
   const statusBadge = (status: string) => {
     const toneMap: Record<string, 'success' | 'attention' | 'critical' | 'info'> = {
-      active: 'success',
-      draft: 'info',
-      paused: 'attention',
-      archived: 'critical',
+      active: 'success', draft: 'info', paused: 'attention', archived: 'critical',
     };
     return <Badge tone={toneMap[status]}>{status}</Badge>;
   };
 
-  const rows = (data?.listings || []).map((listing) => {
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredListings.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredListings.map(l => l.id)));
+    }
+  };
+
+  const rows = filteredListings.map((listing) => {
     const images = typeof listing.images === 'string' ? JSON.parse(listing.images || '[]') : (listing.images || []);
     const imgUrl = images[0]?.url || images[0]?.URL;
     return [
-    <Thumbnail key={`img-${listing.id}`} source={imgUrl || ImageIcon} alt={listing.title} size="small" />,
-    listing.title,
-    String(listing.variants?.length || 0),
-    statusBadge(listing.status),
-    `${listing.processing_days}d`,
-    new Date(listing.updated_at).toLocaleDateString(),
-    <InlineStack gap="200" key={listing.id}>
-      {listing.status === 'draft' && (
-        <Button size="slim" onClick={() => handleStatusChange(listing.id, 'active')}>
-          Publish
-        </Button>
-      )}
-      {listing.status === 'active' && (
-        <Button size="slim" onClick={() => handleStatusChange(listing.id, 'paused')}>
-          Pause
-        </Button>
-      )}
-      {listing.status === 'paused' && (
-        <Button size="slim" onClick={() => handleStatusChange(listing.id, 'active')}>
-          Resume
-        </Button>
-      )}
-      <Button size="slim" tone="critical" onClick={() => handleDelete(listing.id)}>
-        Delete
-      </Button>
-    </InlineStack>,
-  ];});
+      <input key={`cb-${listing.id}`} type="checkbox" checked={selectedIds.has(listing.id)} onChange={() => toggleSelect(listing.id)} />,
+      <Thumbnail key={`img-${listing.id}`} source={imgUrl || ImageIcon} alt={listing.title} size="small" />,
+      listing.title,
+      <Badge key={`cat-${listing.id}`} tone="info">{getCategoryLabel(listing.category)}</Badge>,
+      String(listing.variants?.length || 0),
+      statusBadge(listing.status),
+      `${listing.processing_days}d`,
+      new Date(listing.updated_at).toLocaleDateString(),
+      <InlineStack gap="200" key={listing.id}>
+        {listing.status === 'draft' && (
+          <Button size="slim" onClick={() => handleStatusChange(listing.id, 'active')}>Publish</Button>
+        )}
+        {listing.status === 'active' && (
+          <Button size="slim" onClick={() => handleStatusChange(listing.id, 'paused')}>Pause</Button>
+        )}
+        {listing.status === 'paused' && (
+          <Button size="slim" onClick={() => handleStatusChange(listing.id, 'active')}>Resume</Button>
+        )}
+        <Button size="slim" tone="critical" onClick={() => handleDelete(listing.id)}>Delete</Button>
+      </InlineStack>,
+    ];
+  });
 
   const totalPages = Math.ceil((data?.total || 0) / limit);
 
   return (
     <Page
       title="Supplier Listings"
+      subtitle={`${data?.total || 0} products`}
       primaryAction={{ content: 'Add Products', onAction: () => setPickerOpen(true) }}
     >
       <Layout>
@@ -126,60 +184,118 @@ export default function SupplierListings() {
             <Banner tone="critical">{error}</Banner>
           </Layout.Section>
         )}
+
+        <Layout.Section>
+          <InlineGrid columns={{ xs: 1, md: 3 }} gap="400">
+            <Card>
+              <InlineStack gap="300" blockAlign="center">
+                <div style={{ background: '#e3f1df', borderRadius: '8px', padding: '8px', display: 'flex' }}>
+                  <Icon source={CheckIcon} />
+                </div>
+                <BlockStack gap="050">
+                  <Text as="p" variant="headingLg">{activeCount}</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">Active</Text>
+                </BlockStack>
+              </InlineStack>
+            </Card>
+            <Card>
+              <InlineStack gap="300" blockAlign="center">
+                <div style={{ background: '#e0f0ff', borderRadius: '8px', padding: '8px', display: 'flex' }}>
+                  <Icon source={ClockIcon} />
+                </div>
+                <BlockStack gap="050">
+                  <Text as="p" variant="headingLg">{draftCount}</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">Draft</Text>
+                </BlockStack>
+              </InlineStack>
+            </Card>
+            <Card>
+              <InlineStack gap="300" blockAlign="center">
+                <div style={{ background: '#fef3cd', borderRadius: '8px', padding: '8px', display: 'flex' }}>
+                  <Icon source={PauseCircleIcon} />
+                </div>
+                <BlockStack gap="050">
+                  <Text as="p" variant="headingLg">{pausedCount}</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">Paused</Text>
+                </BlockStack>
+              </InlineStack>
+            </Card>
+          </InlineGrid>
+        </Layout.Section>
+
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
-              <Filters
-                queryValue=""
-                filters={[
-                  {
+              <InlineStack gap="400" align="space-between" blockAlign="end">
+                <div style={{ flex: 1 }}>
+                  <TextField
+                    label=""
+                    labelHidden
+                    value={search}
+                    onChange={setSearch}
+                    placeholder="Search listings..."
+                    autoComplete="off"
+                    clearButton
+                    onClearButtonClick={() => setSearch('')}
+                  />
+                </div>
+                <Filters
+                  queryValue=""
+                  filters={[{
                     key: 'status',
                     label: 'Status',
                     filter: (
                       <ChoiceList
-                        title="Status"
-                        titleHidden
+                        title="Status" titleHidden
                         choices={[
                           { label: 'Active', value: 'active' },
                           { label: 'Draft', value: 'draft' },
                           { label: 'Paused', value: 'paused' },
-                          { label: 'Archived', value: 'archived' },
                         ]}
                         selected={statusFilter}
-                        onChange={setStatusFilter}
+                        onChange={(v) => { setStatusFilter(v); setPage(0); }}
                       />
                     ),
                     shortcut: true,
-                  },
-                ]}
-                onQueryChange={() => {}}
-                onQueryClear={() => {}}
-                onClearAll={() => setStatusFilter([])}
-              />
+                  }]}
+                  onQueryChange={() => {}}
+                  onQueryClear={() => {}}
+                  onClearAll={() => setStatusFilter([])}
+                />
+              </InlineStack>
+
+              {selectedIds.size > 0 && (
+                <InlineStack gap="200">
+                  <Text as="span" variant="bodySm">{selectedIds.size} selected</Text>
+                  <Button size="slim" loading={bulkAction} onClick={handleBulkPublish}>Publish All</Button>
+                  <Button size="slim" loading={bulkAction} onClick={handleBulkPause}>Pause All</Button>
+                  <Button size="slim" tone="critical" loading={bulkAction} onClick={handleBulkDelete}>Delete All</Button>
+                </InlineStack>
+              )}
 
               {rows.length > 0 ? (
-                <DataTable
-                  columnContentTypes={['text', 'text', 'numeric', 'text', 'text', 'text', 'text']}
-                  headings={['', 'Product', 'Variants', 'Status', 'Processing', 'Updated', 'Actions']}
-                  rows={rows}
-                />
+                <>
+                  <InlineStack gap="200">
+                    <input type="checkbox" checked={selectedIds.size === filteredListings.length && filteredListings.length > 0} onChange={toggleSelectAll} />
+                    <Text as="span" variant="bodySm" tone="subdued">Select all</Text>
+                  </InlineStack>
+                  <DataTable
+                    columnContentTypes={['text', 'text', 'text', 'text', 'numeric', 'text', 'text', 'text', 'text']}
+                    headings={['', '', 'Product', 'Category', 'Variants', 'Status', 'Processing', 'Updated', 'Actions']}
+                    rows={rows}
+                  />
+                </>
               ) : (
-                <Text as="p" tone="subdued">
-                  No listings found. Create listings by selecting products from your Shopify store.
-                </Text>
+                <EmptyState heading="No listings yet" image="">
+                  <p>Add products from your Shopify store to list them for resellers.</p>
+                </EmptyState>
               )}
 
               {totalPages > 1 && (
                 <InlineStack align="center" gap="200">
-                  <Button disabled={page === 0} onClick={() => setPage((p) => p - 1)}>
-                    Previous
-                  </Button>
-                  <Text as="span" variant="bodySm">
-                    Page {page + 1} of {totalPages}
-                  </Text>
-                  <Button disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>
-                    Next
-                  </Button>
+                  <Button disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Previous</Button>
+                  <Text as="span" variant="bodySm">Page {page + 1} of {totalPages}</Text>
+                  <Button disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>Next</Button>
                 </InlineStack>
               )}
             </BlockStack>
@@ -190,7 +306,7 @@ export default function SupplierListings() {
       <ProductPicker
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        onImport={() => refetch()}
+        onImport={() => { setPickerOpen(false); refetch(); }}
       />
     </Page>
   );
