@@ -257,7 +257,6 @@ func (c *Client) CreateProduct(ctx context.Context, input map[string]interface{}
 							title
 							sku
 							price
-							inventoryQuantity
 						}
 					}
 				}
@@ -268,9 +267,27 @@ func (c *Client) CreateProduct(ctx context.Context, input map[string]interface{}
 
 	variables := map[string]interface{}{"input": input}
 
-	var result CreateProductResponse
-	if err := c.GraphQL(ctx, query, variables, &result); err != nil {
+	var rawResp json.RawMessage
+	if err := c.GraphQL(ctx, query, variables, &rawResp); err != nil {
 		return nil, err
+	}
+
+	// Log raw response for debugging
+	c.logger.Debug().RawJSON("productCreate_response", rawResp).Msg("productCreate raw response")
+
+	var result CreateProductResponse
+	if err := json.Unmarshal(rawResp, &result); err != nil {
+		return nil, fmt.Errorf("parse productCreate response: %w", err)
+	}
+
+	// Check for GraphQL errors in response
+	var errResp struct {
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(rawResp, &errResp); err == nil && len(errResp.Errors) > 0 {
+		return nil, fmt.Errorf("productCreate GraphQL error: %s", errResp.Errors[0].Message)
 	}
 
 	if len(result.Data.ProductCreate.UserErrors) > 0 {
@@ -280,7 +297,7 @@ func (c *Client) CreateProduct(ctx context.Context, input map[string]interface{}
 	}
 
 	if result.Data.ProductCreate.Product == nil {
-		return nil, fmt.Errorf("productCreate returned nil product")
+		return nil, fmt.Errorf("productCreate returned nil product (raw: %s)", string(rawResp))
 	}
 
 	return &result, nil
