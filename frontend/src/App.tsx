@@ -20,6 +20,8 @@ import AuditLog from './pages/AuditLog';
 import ListingEdit from './pages/ListingEdit';
 import SupplierInfo from './pages/SupplierInfo';
 import Analytics from './pages/Analytics';
+import Disputes from './pages/Disputes';
+import Notifications from './pages/Notifications';
 import Onboarding from './pages/Onboarding';
 
 export default function App() {
@@ -85,6 +87,8 @@ export default function App() {
                 </>
               )}
               <Route path="/analytics" element={<Analytics />} />
+              <Route path="/disputes" element={<Disputes />} />
+              <Route path="/notifications" element={<Notifications />} />
               <Route path="/orders" element={<Orders role={shop.role} />} />
               <Route path="/orders/:id" element={<OrderDetail role={shop.role} />} />
               <Route path="/settings" element={<Settings />} />

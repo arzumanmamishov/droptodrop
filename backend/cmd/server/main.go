@@ -21,9 +21,11 @@ import (
 	"github.com/droptodrop/droptodrop/internal/compliance"
 	"github.com/droptodrop/droptodrop/internal/config"
 	"github.com/droptodrop/droptodrop/internal/database"
+	"github.com/droptodrop/droptodrop/internal/disputes"
 	"github.com/droptodrop/droptodrop/internal/fulfillments"
 	"github.com/droptodrop/droptodrop/internal/health"
 	"github.com/droptodrop/droptodrop/internal/imports"
+	"github.com/droptodrop/droptodrop/internal/inappnotif"
 	"github.com/droptodrop/droptodrop/internal/logging"
 	"github.com/droptodrop/droptodrop/internal/middleware"
 	"github.com/droptodrop/droptodrop/internal/orders"
@@ -68,6 +70,8 @@ func main() {
 	importsSvc := imports.NewService(db, redisClient, logger, auditSvc)
 	ordersSvc := orders.NewService(db, redisClient, logger, auditSvc)
 	fulfillmentsSvc := fulfillments.NewService(db, redisClient, logger, auditSvc)
+	disputesSvc := disputes.NewService(db, logger)
+	inappNotifSvc := inappnotif.NewService(db, logger)
 
 	// Initialize handlers
 	authHandler := authpkg.NewHandler(db, cfg.Shopify, cfg.Session, cfg.Security.EncryptionKey, logger, auditSvc)
@@ -510,6 +514,101 @@ func main() {
 			// Include fulfillment events
 			events, _ := fulfillmentsSvc.ListByOrder(c.Request.Context(), c.Param("id"))
 			c.JSON(http.StatusOK, gin.H{"order": order, "fulfillments": events})
+		})
+
+		// ===== Disputes (shared) =====
+		api.POST("/disputes", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			role, _ := c.Get("shop_role")
+			var input disputes.CreateInput
+			if err := c.ShouldBindJSON(&input); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			d, err := disputesSvc.Create(c.Request.Context(), shopID.(string), role.(string), input)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusCreated, d)
+		})
+
+		api.GET("/disputes", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			limit := getIntQuery(c, "limit", 20)
+			offset := getIntQuery(c, "offset", 0)
+			list, total, err := disputesSvc.ListByShop(c.Request.Context(), shopID.(string), limit, offset)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"disputes": list, "total": total})
+		})
+
+		api.GET("/disputes/:id", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			d, err := disputesSvc.Get(c.Request.Context(), c.Param("id"), shopID.(string))
+			if err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, d)
+		})
+
+		api.PUT("/disputes/:id", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			var input disputes.UpdateInput
+			if err := c.ShouldBindJSON(&input); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			d, err := disputesSvc.UpdateStatus(c.Request.Context(), c.Param("id"), shopID.(string), input)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, d)
+		})
+
+		// ===== In-app Notifications (shared) =====
+		api.GET("/notifications", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			limit := getIntQuery(c, "limit", 20)
+			offset := getIntQuery(c, "offset", 0)
+			notifs, total, err := inappNotifSvc.List(c.Request.Context(), shopID.(string), limit, offset)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"notifications": notifs, "total": total})
+		})
+
+		api.POST("/notifications/read/:id", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			if err := inappNotifSvc.MarkRead(c.Request.Context(), c.Param("id"), shopID.(string)); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		})
+
+		api.POST("/notifications/read-all", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			if err := inappNotifSvc.MarkAllRead(c.Request.Context(), shopID.(string)); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		})
+
+		api.GET("/notifications/count", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			count, err := inappNotifSvc.CountUnread(c.Request.Context(), shopID.(string))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"unread_count": count})
 		})
 
 		// Settings

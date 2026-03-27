@@ -10,6 +10,8 @@ import {
   ImportIcon,
   StoreIcon,
   ChartVerticalFilledIcon,
+  AlertCircleIcon,
+  NotificationIcon,
 } from '@shopify/polaris-icons';
 import { Shop } from '../types';
 
@@ -31,6 +33,8 @@ export default function AppFrame({ shop, children }: AppFrameProps) {
     { url: '/supplier/listings', label: 'Listings', icon: ProductIcon, selected: location.pathname === '/supplier/listings' },
     { url: '/orders', label: 'Orders', icon: OrderIcon, selected: location.pathname.startsWith('/orders') },
     { url: '/analytics', label: 'Analytics', icon: ChartVerticalFilledIcon, selected: location.pathname === '/analytics' },
+    { url: '/disputes', label: 'Disputes', icon: AlertCircleIcon, selected: location.pathname === '/disputes' },
+    { url: '/notifications', label: 'Notifications', icon: NotificationIcon, selected: location.pathname === '/notifications' },
     { url: '/audit', label: 'Audit Log', icon: ListBulletedIcon, selected: location.pathname === '/audit' },
     { url: '/settings', label: 'Settings', icon: SettingsIcon, selected: location.pathname === '/settings' },
   ];
@@ -41,6 +45,8 @@ export default function AppFrame({ shop, children }: AppFrameProps) {
     { url: '/imports', label: 'Imports', icon: ImportIcon, selected: location.pathname === '/imports' },
     { url: '/orders', label: 'Orders', icon: OrderIcon, selected: location.pathname.startsWith('/orders') },
     { url: '/analytics', label: 'Analytics', icon: ChartVerticalFilledIcon, selected: location.pathname === '/analytics' },
+    { url: '/disputes', label: 'Disputes', icon: AlertCircleIcon, selected: location.pathname === '/disputes' },
+    { url: '/notifications', label: 'Notifications', icon: NotificationIcon, selected: location.pathname === '/notifications' },
     { url: '/audit', label: 'Audit Log', icon: ListBulletedIcon, selected: location.pathname === '/audit' },
     { url: '/settings', label: 'Settings', icon: SettingsIcon, selected: location.pathname === '/settings' },
   ];
