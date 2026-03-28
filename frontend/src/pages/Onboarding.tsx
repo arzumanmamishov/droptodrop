@@ -9,7 +9,6 @@ import {
   InlineStack,
   Banner,
   Icon,
-  Box,
   Divider,
 } from '@shopify/polaris';
 import { PackageIcon, StoreIcon } from '@shopify/polaris-icons';
