@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import {
-  Page, Layout, Card, BlockStack, Text, Badge, Spinner,
-  Banner, InlineStack, EmptyState, DataTable, Button,
+  Page, Layout, Card, Badge, Spinner,
+  InlineStack, EmptyState, DataTable, Button,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
 import { api } from '../utils/api';

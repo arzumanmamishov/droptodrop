@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
 import {
-  Page, Layout, Card, BlockStack, Text, Spinner,
-  Banner, InlineStack, Divider, Modal, FormLayout, TextField,
-  EmptyState, DataTable, Button,
+  Page, Layout, Card, Spinner,
+  Banner, InlineStack, Modal, FormLayout, TextField,
+  EmptyState, DataTable,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
 import { api } from '../utils/api';
