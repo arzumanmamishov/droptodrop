@@ -24,6 +24,8 @@ import Disputes from './pages/Disputes';
 import Notifications from './pages/Notifications';
 import Billing from './pages/Billing';
 import BulkImport from './pages/BulkImport';
+import Messages from './pages/Messages';
+import Announcements from './pages/Announcements';
 import Onboarding from './pages/Onboarding';
 
 export default function App() {
@@ -93,6 +95,8 @@ export default function App() {
               <Route path="/disputes" element={<Disputes />} />
               <Route path="/notifications" element={<Notifications />} />
               <Route path="/billing" element={<Billing />} />
+              <Route path="/messages" element={<Messages />} />
+              <Route path="/announcements" element={<Announcements role={shop.role} />} />
               <Route path="/orders" element={<Orders role={shop.role} />} />
               <Route path="/orders/:id" element={<OrderDetail role={shop.role} />} />
               <Route path="/settings" element={<Settings />} />

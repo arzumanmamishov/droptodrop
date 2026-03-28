@@ -32,6 +32,7 @@ import (
 	"github.com/droptodrop/droptodrop/internal/products"
 	"github.com/droptodrop/droptodrop/internal/queue"
 	"github.com/droptodrop/droptodrop/internal/shops"
+	"github.com/droptodrop/droptodrop/internal/messaging"
 	"github.com/droptodrop/droptodrop/internal/trust"
 	"github.com/droptodrop/droptodrop/internal/webhooks"
 	"github.com/droptodrop/droptodrop/pkg/shopify"
@@ -81,6 +82,7 @@ func main() {
 	complianceHandler := compliance.NewHandler(db, cfg.Shopify.APISecret, logger, auditSvc)
 	billingHandler := billing.NewHandler(db, logger)
 	trustSvc := trust.NewService(db, logger)
+	msgSvc := messaging.NewService(db, logger)
 
 	// Setup Gin
 	if cfg.IsProduction() {
@@ -744,6 +746,147 @@ func main() {
 			}
 			verified := trustSvc.IsVerified(c.Request.Context(), c.Param("id"))
 			c.JSON(http.StatusOK, gin.H{"stats": stats, "is_verified": verified})
+		})
+
+		// ===== Messaging =====
+		api.GET("/conversations", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			convs, err := msgSvc.ListConversations(c.Request.Context(), shopID.(string))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"conversations": convs})
+		})
+
+		api.POST("/conversations", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			role, _ := c.Get("shop_role")
+			var body struct {
+				OtherShopID string `json:"other_shop_id" binding:"required"`
+				Subject     string `json:"subject"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			var supplierID, resellerID string
+			if role.(string) == "supplier" {
+				supplierID = shopID.(string)
+				resellerID = body.OtherShopID
+			} else {
+				supplierID = body.OtherShopID
+				resellerID = shopID.(string)
+			}
+			conv, err := msgSvc.GetOrCreateConversation(c.Request.Context(), supplierID, resellerID, body.Subject)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, conv)
+		})
+
+		api.GET("/conversations/:id/messages", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			msgs, err := msgSvc.GetMessages(c.Request.Context(), c.Param("id"), shopID.(string), 100)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"messages": msgs})
+		})
+
+		api.POST("/conversations/:id/messages", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			var body struct {
+				Content string `json:"content" binding:"required"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			msg, err := msgSvc.SendMessage(c.Request.Context(), c.Param("id"), shopID.(string), body.Content)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, msg)
+		})
+
+		// ===== Order Comments =====
+		api.GET("/orders/:id/comments", func(c *gin.Context) {
+			comments, err := msgSvc.ListOrderComments(c.Request.Context(), c.Param("id"))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"comments": comments})
+		})
+
+		api.POST("/orders/:id/comments", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			role, _ := c.Get("shop_role")
+			var body struct {
+				Content string `json:"content" binding:"required"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			comment, err := msgSvc.AddOrderComment(c.Request.Context(), c.Param("id"), shopID.(string), role.(string), body.Content)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, comment)
+		})
+
+		// ===== Announcements =====
+		api.GET("/announcements", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			role, _ := c.Get("shop_role")
+			anns, err := msgSvc.ListAnnouncements(c.Request.Context(), shopID.(string), role.(string))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"announcements": anns})
+		})
+
+		api.POST("/announcements", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			role, _ := c.Get("shop_role")
+			if role.(string) != "supplier" {
+				c.JSON(http.StatusForbidden, gin.H{"error": "only suppliers can create announcements"})
+				return
+			}
+			var body struct {
+				Title    string `json:"title" binding:"required"`
+				Content  string `json:"content" binding:"required"`
+				IsPinned bool   `json:"is_pinned"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			ann, err := msgSvc.CreateAnnouncement(c.Request.Context(), shopID.(string), body.Title, body.Content, body.IsPinned)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, ann)
+		})
+
+		api.POST("/announcements/:id/read", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			msgSvc.MarkAnnouncementRead(c.Request.Context(), c.Param("id"), shopID.(string))
+			c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		})
+
+		api.DELETE("/announcements/:id", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			msgSvc.DeleteAnnouncement(c.Request.Context(), c.Param("id"), shopID.(string))
+			c.JSON(http.StatusOK, gin.H{"status": "ok"})
 		})
 
 		// Audit logs
