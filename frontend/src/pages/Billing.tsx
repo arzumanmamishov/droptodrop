@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import {
   Page, Layout, Card, BlockStack, Text, Badge, Button, Spinner,
-  Banner, InlineStack, InlineGrid, Divider, Icon, Box,
+  Banner, InlineStack, InlineGrid, Divider, Icon,
   ProgressBar,
 } from '@shopify/polaris';
 import { CashDollarIcon, CheckIcon, PackageIcon } from '@shopify/polaris-icons';

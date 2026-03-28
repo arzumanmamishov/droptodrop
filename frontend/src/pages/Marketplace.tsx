@@ -90,7 +90,9 @@ export default function Marketplace() {
   };
 
   return (
-    <Page title="Marketplace" subtitle={`${data?.total || 0} products available`}>
+    <Page title="Marketplace" subtitle={`${data?.total || 0} products available`}
+      secondaryActions={[{ content: 'Bulk Import', onAction: () => navigate('/bulk-import') }]}
+    >
       <Layout>
         {error && (
           <Layout.Section>
@@ -289,7 +291,7 @@ export default function Marketplace() {
                 />
                 {importModal.variants && importModal.variants.length > 0 && (
                   <BlockStack gap="200">
-                    <Text as="h3" variant="headingSm">Price Preview</Text>
+                    <Text as="h3" variant="headingSm">Price Preview & Smart Pricing</Text>
                     {importModal.variants.slice(0, 5).map((v) => {
                       const markup = parseFloat(markupValue) || 0;
                       const resellerPrice =
@@ -297,13 +299,22 @@ export default function Marketplace() {
                           ? v.wholesale_price * (1 + markup / 100)
                           : v.wholesale_price + markup;
                       const margin = ((resellerPrice - v.wholesale_price) / resellerPrice) * 100;
+                      // Smart pricing suggestion
+                      const w = v.wholesale_price;
+                      const aiPrice = w < 20 ? Math.ceil(w * 1.9 * 100) / 100 : w < 100 ? Math.ceil(w * 1.5 * 100) / 100 : Math.ceil(w * 1.3 * 100) / 100;
+                      const aiMargin = ((aiPrice - w) / aiPrice) * 100;
                       return (
-                        <InlineStack key={v.id} gap="200" align="space-between">
-                          <Text as="span" variant="bodySm">{v.title || 'Default'}</Text>
-                          <Text as="span" variant="bodySm">
-                            ${v.wholesale_price.toFixed(2)} → ${resellerPrice.toFixed(2)} ({margin.toFixed(1)}% margin)
-                          </Text>
-                        </InlineStack>
+                        <BlockStack key={v.id} gap="100">
+                          <InlineStack gap="200" align="space-between">
+                            <Text as="span" variant="bodySm" fontWeight="semibold">{v.title || 'Default'}</Text>
+                            <Text as="span" variant="bodySm">
+                              ${w.toFixed(2)} → ${resellerPrice.toFixed(2)} ({margin.toFixed(1)}% margin)
+                            </Text>
+                          </InlineStack>
+                          <InlineStack gap="200" align="end">
+                            <Badge tone="success">{`AI suggests: $${aiPrice.toFixed(2)} (${aiMargin.toFixed(0)}% margin)`}</Badge>
+                          </InlineStack>
+                        </BlockStack>
                       );
                     })}
                   </BlockStack>

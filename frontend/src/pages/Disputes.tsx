@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Page, Layout, Card, DataTable, Badge, Button, Spinner, Banner,
-  BlockStack, Text, InlineStack, Modal, FormLayout, TextField, Select,
+  BlockStack, Modal, FormLayout, TextField, Select,
   EmptyState,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
@@ -36,7 +36,6 @@ const DISPUTE_TYPES = [
 
 export default function Disputes() {
   const navigate = useNavigate();
-  const [page, setPage] = useState(0);
   const [createModal, setCreateModal] = useState(false);
   const [orderId, setOrderId] = useState('');
   const [disputeType, setDisputeType] = useState('quality_issue');

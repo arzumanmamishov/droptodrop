@@ -473,6 +473,28 @@ func main() {
 				c.JSON(http.StatusOK, gin.H{"imports": imps, "total": total})
 			})
 
+			reseller.PUT("/imports/:id/replenish", func(c *gin.Context) {
+				shopID, _ := c.Get("shop_id")
+				var body struct {
+					AutoReplenish      bool `json:"auto_replenish"`
+					ReplenishThreshold int  `json:"replenish_threshold"`
+					ReplenishQuantity  int  `json:"replenish_quantity"`
+				}
+				if err := c.ShouldBindJSON(&body); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
+				_, err := db.Exec(c.Request.Context(), `
+					UPDATE reseller_imports SET auto_replenish = $1, replenish_threshold = $2, replenish_quantity = $3
+					WHERE id = $4 AND reseller_shop_id = $5
+				`, body.AutoReplenish, body.ReplenishThreshold, body.ReplenishQuantity, c.Param("id"), shopID)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
+				c.JSON(http.StatusOK, gin.H{"status": "ok"})
+			})
+
 			reseller.POST("/imports/:id/resync", func(c *gin.Context) {
 				shopID, _ := c.Get("shop_id")
 				if err := importsSvc.ResyncImport(c.Request.Context(), shopID.(string), c.Param("id")); err != nil {

@@ -23,6 +23,7 @@ import Analytics from './pages/Analytics';
 import Disputes from './pages/Disputes';
 import Notifications from './pages/Notifications';
 import Billing from './pages/Billing';
+import BulkImport from './pages/BulkImport';
 import Onboarding from './pages/Onboarding';
 
 export default function App() {
@@ -83,6 +84,7 @@ export default function App() {
               {shop.role === 'reseller' && (
                 <>
                   <Route path="/marketplace" element={<Marketplace />} />
+                  <Route path="/bulk-import" element={<BulkImport />} />
                   <Route path="/supplier/:id" element={<SupplierInfo />} />
                   <Route path="/imports" element={<Imports />} />
                 </>

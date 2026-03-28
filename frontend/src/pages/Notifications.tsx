@@ -23,10 +23,9 @@ interface NotifResponse {
 }
 
 export default function Notifications() {
-  const [page, setPage] = useState(0);
   const limit = 30;
   const { data, loading, refetch } = useApi<NotifResponse>(
-    `/notifications?limit=${limit}&offset=${page * limit}`,
+    `/notifications?limit=${limit}&offset=0`,
   );
   const [markingAll, setMarkingAll] = useState(false);
 
