@@ -75,8 +75,19 @@ export default function Orders({ role }: OrdersProps) {
 
   const totalPages = Math.ceil((data?.total || 0) / limit);
 
+  const handleExport = async () => {
+    try {
+      const token = window.shopify?.idToken ? await window.shopify.idToken() : (localStorage.getItem('droptodrop_session') || '');
+      const response = await fetch('/api/v1/export/orders', { headers: { Authorization: `Bearer ${token}` } });
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'orders.csv'; a.click();
+      URL.revokeObjectURL(url);
+    } catch { /* */ }
+  };
+
   return (
-    <Page title="Orders">
+    <Page title="Orders" secondaryActions={[{ content: 'Export CSV', onAction: handleExport }]}>
       <Layout>
         {error && (
           <Layout.Section>

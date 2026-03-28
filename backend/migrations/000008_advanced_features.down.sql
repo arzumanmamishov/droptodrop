@@ -1,0 +1,12 @@
+DROP TABLE IF EXISTS bundle_items;
+DROP TABLE IF EXISTS product_bundles;
+DROP TABLE IF EXISTS deals;
+DROP TABLE IF EXISTS sample_orders;
+DROP TABLE IF EXISTS shipping_rules;
+DROP TABLE IF EXISTS reviews;
+ALTER TABLE reseller_imports DROP COLUMN IF EXISTS auto_price_sync;
+ALTER TABLE reseller_imports DROP COLUMN IF EXISTS price_sync_mode;
+ALTER TABLE reseller_profiles DROP COLUMN IF EXISTS invoice_company_name;
+ALTER TABLE reseller_profiles DROP COLUMN IF EXISTS invoice_address;
+ALTER TABLE reseller_profiles DROP COLUMN IF EXISTS invoice_logo_url;
+ALTER TABLE reseller_profiles DROP COLUMN IF EXISTS invoice_footer;

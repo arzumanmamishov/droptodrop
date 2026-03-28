@@ -15,6 +15,8 @@ import {
   CashDollarIcon,
   ChatIcon,
   MegaphoneIcon,
+  StarIcon,
+  DiscountIcon,
 } from '@shopify/polaris-icons';
 import { Shop } from '../types';
 
@@ -39,6 +41,8 @@ export default function AppFrame({ shop, children }: AppFrameProps) {
     { url: '/disputes', label: 'Disputes', icon: AlertCircleIcon, selected: location.pathname === '/disputes' },
     { url: '/messages', label: 'Messages', icon: ChatIcon, selected: location.pathname === '/messages' },
     { url: '/announcements', label: 'Announcements', icon: MegaphoneIcon, selected: location.pathname === '/announcements' },
+    { url: '/reviews', label: 'Reviews', icon: StarIcon, selected: location.pathname === '/reviews' },
+    { url: '/deals', label: 'Deals', icon: DiscountIcon, selected: location.pathname === '/deals' },
     { url: '/notifications', label: 'Notifications', icon: NotificationIcon, selected: location.pathname === '/notifications' },
     { url: '/billing', label: 'Billing', icon: CashDollarIcon, selected: location.pathname === '/billing' },
     { url: '/audit', label: 'Audit Log', icon: ListBulletedIcon, selected: location.pathname === '/audit' },
@@ -54,6 +58,8 @@ export default function AppFrame({ shop, children }: AppFrameProps) {
     { url: '/disputes', label: 'Disputes', icon: AlertCircleIcon, selected: location.pathname === '/disputes' },
     { url: '/messages', label: 'Messages', icon: ChatIcon, selected: location.pathname === '/messages' },
     { url: '/announcements', label: 'Announcements', icon: MegaphoneIcon, selected: location.pathname === '/announcements' },
+    { url: '/reviews', label: 'Reviews', icon: StarIcon, selected: location.pathname === '/reviews' },
+    { url: '/deals', label: 'Deals', icon: DiscountIcon, selected: location.pathname === '/deals' },
     { url: '/notifications', label: 'Notifications', icon: NotificationIcon, selected: location.pathname === '/notifications' },
     { url: '/billing', label: 'Billing', icon: CashDollarIcon, selected: location.pathname === '/billing' },
     { url: '/audit', label: 'Audit Log', icon: ListBulletedIcon, selected: location.pathname === '/audit' },

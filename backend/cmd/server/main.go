@@ -32,6 +32,7 @@ import (
 	"github.com/droptodrop/droptodrop/internal/products"
 	"github.com/droptodrop/droptodrop/internal/queue"
 	"github.com/droptodrop/droptodrop/internal/shops"
+	"github.com/droptodrop/droptodrop/internal/advanced"
 	"github.com/droptodrop/droptodrop/internal/messaging"
 	"github.com/droptodrop/droptodrop/internal/trust"
 	"github.com/droptodrop/droptodrop/internal/webhooks"
@@ -83,6 +84,7 @@ func main() {
 	billingHandler := billing.NewHandler(db, logger)
 	trustSvc := trust.NewService(db, logger)
 	msgSvc := messaging.NewService(db, logger)
+	advSvc := advanced.NewService(db, logger)
 
 	// Setup Gin
 	if cfg.IsProduction() {
@@ -887,6 +889,159 @@ func main() {
 			shopID, _ := c.Get("shop_id")
 			msgSvc.DeleteAnnouncement(c.Request.Context(), c.Param("id"), shopID.(string))
 			c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		})
+
+		// ===== Reviews =====
+		api.GET("/reviews/:supplierID", func(c *gin.Context) {
+			reviews, summary, err := advSvc.GetSupplierReviews(c.Request.Context(), c.Param("supplierID"))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"reviews": reviews, "summary": summary})
+		})
+		api.POST("/reviews", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			var body struct {
+				SupplierShopID string  `json:"supplier_shop_id" binding:"required"`
+				OrderID        *string `json:"order_id"`
+				Rating         int     `json:"rating" binding:"required"`
+				Title          string  `json:"title"`
+				Comment        string  `json:"comment"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			review, err := advSvc.CreateReview(c.Request.Context(), body.SupplierShopID, shopID.(string), body.OrderID, body.Rating, body.Title, body.Comment)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusCreated, review)
+		})
+
+		// ===== Shipping Rules =====
+		api.GET("/shipping-rules", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			rules, err := advSvc.ListShippingRules(c.Request.Context(), shopID.(string))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"rules": rules})
+		})
+		api.POST("/shipping-rules", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			var rule advanced.ShippingRule
+			if err := c.ShouldBindJSON(&rule); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			result, err := advSvc.UpsertShippingRule(c.Request.Context(), shopID.(string), rule)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, result)
+		})
+
+		// ===== Sample Orders =====
+		api.GET("/samples", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			role, _ := c.Get("shop_role")
+			samples, err := advSvc.ListSampleOrders(c.Request.Context(), shopID.(string), role.(string))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"samples": samples})
+		})
+		api.POST("/samples", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			var body struct {
+				ListingID string `json:"listing_id" binding:"required"`
+				Quantity  int    `json:"quantity"`
+				Notes     string `json:"notes"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if body.Quantity <= 0 { body.Quantity = 1 }
+			sample, err := advSvc.CreateSampleOrder(c.Request.Context(), shopID.(string), body.ListingID, body.Quantity, body.Notes)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusCreated, sample)
+		})
+		api.PUT("/samples/:id", func(c *gin.Context) {
+			var body struct {
+				Status   string `json:"status"`
+				Tracking string `json:"tracking"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if err := advSvc.UpdateSampleOrder(c.Request.Context(), c.Param("id"), body.Status, body.Tracking); err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		})
+
+		// ===== Deals =====
+		api.GET("/deals", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			role, _ := c.Get("shop_role")
+			deals, err := advSvc.ListDeals(c.Request.Context(), shopID.(string), role.(string))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"deals": deals})
+		})
+		api.POST("/deals", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			var deal advanced.Deal
+			if err := c.ShouldBindJSON(&deal); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			result, err := advSvc.CreateDeal(c.Request.Context(), shopID.(string), deal)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusCreated, result)
+		})
+
+		// ===== Product Performance =====
+		api.GET("/product-performance", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			role, _ := c.Get("shop_role")
+			perf, err := advSvc.GetProductPerformance(c.Request.Context(), shopID.(string), role.(string))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"products": perf})
+		})
+
+		// ===== Export =====
+		api.GET("/export/orders", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			role, _ := c.Get("shop_role")
+			csv, err := advSvc.ExportOrders(c.Request.Context(), shopID.(string), role.(string))
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.Header("Content-Type", "text/csv")
+			c.Header("Content-Disposition", "attachment; filename=orders.csv")
+			c.Data(http.StatusOK, "text/csv", csv)
 		})
 
 		// Audit logs
