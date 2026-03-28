@@ -46,7 +46,7 @@ export default function Disputes() {
 
   const limit = 20;
   const { data, loading, refetch } = useApi<DisputesResponse>(
-    `/disputes?limit=${limit}&offset=${page * limit}`,
+    `/disputes?limit=${limit}&offset=0`,
   );
 
   const handleCreate = useCallback(async () => {

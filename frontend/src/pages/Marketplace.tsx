@@ -82,6 +82,13 @@ export default function Marketplace() {
     } catch { /* */ }
   }, [navigate]);
 
+  const requestSample = useCallback(async (listingId: string) => {
+    try {
+      await api.post('/samples', { listing_id: listingId, quantity: 1, notes: 'Sample request from marketplace' });
+      setImportSuccess(true);
+    } catch { /* */ }
+  }, []);
+
   const categoryTabs = PRODUCT_CATEGORIES.map((cat) => ({
     id: cat.value,
     content: cat.label,
@@ -221,9 +228,14 @@ export default function Marketplace() {
                             Supplier
                           </Button>
                         </InlineStack>
-                        <Button fullWidth variant="plain" onClick={() => startConversation(listing.supplier_shop_id)}>
-                          Message Supplier
-                        </Button>
+                        <InlineStack gap="200">
+                          <Button fullWidth variant="plain" onClick={() => startConversation(listing.supplier_shop_id)}>
+                            Message
+                          </Button>
+                          <Button fullWidth variant="plain" onClick={() => requestSample(listing.id)}>
+                            Sample
+                          </Button>
+                        </InlineStack>
                       </BlockStack>
                     </Box>
                   </Card>

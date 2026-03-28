@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Page,
@@ -80,6 +80,50 @@ function StatusTimeline({ currentStatus }: { currentStatus: string }) {
         </InlineStack>
       )}
     </InlineStack>
+  );
+}
+
+function OrderCommentsSection({ orderId }: { orderId: string }) {
+  const [comments, setComments] = useState<Array<{ id: string; shop_role: string; content: string; created_at: string }>>([]);
+  const [newComment, setNewComment] = useState('');
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    api.get<{ comments: typeof comments }>(`/orders/${orderId}/comments`)
+      .then(d => setComments(d.comments || []))
+      .catch(() => {});
+  }, [orderId]);
+
+  const handleSend = async () => {
+    if (!newComment.trim()) return;
+    setSending(true);
+    try {
+      await api.post(`/orders/${orderId}/comments`, { content: newComment });
+      setNewComment('');
+      const d = await api.get<{ comments: typeof comments }>(`/orders/${orderId}/comments`);
+      setComments(d.comments || []);
+    } catch { /* */ }
+    finally { setSending(false); }
+  };
+
+  return (
+    <BlockStack gap="300">
+      {comments.map(c => (
+        <BlockStack key={c.id} gap="050">
+          <InlineStack gap="200" blockAlign="center">
+            <Badge tone={c.shop_role === 'supplier' ? 'success' : 'info'}>{c.shop_role}</Badge>
+            <Text as="span" variant="bodySm" tone="subdued">{new Date(c.created_at).toLocaleString()}</Text>
+          </InlineStack>
+          <Text as="p" variant="bodyMd">{c.content}</Text>
+        </BlockStack>
+      ))}
+      <InlineStack gap="200" blockAlign="end">
+        <div style={{ flex: 1 }}>
+          <TextField label="" labelHidden value={newComment} onChange={setNewComment} placeholder="Add a comment..." autoComplete="off" />
+        </div>
+        <Button onClick={handleSend} loading={sending} disabled={!newComment.trim()}>Send</Button>
+      </InlineStack>
+    </BlockStack>
   );
 }
 
@@ -289,6 +333,23 @@ export default function OrderDetail({ role }: OrderDetailProps) {
             </Card>
           </Layout.Section>
         )}
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
+              <InlineStack align="space-between" blockAlign="center">
+                <Text as="h2" variant="headingMd">Comments</Text>
+              </InlineStack>
+              <Divider />
+              <OrderCommentsSection orderId={id!} />
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+
+        <Layout.Section>
+          <InlineStack gap="200">
+            <Button onClick={() => navigate(`/disputes`)} tone="critical">Report Issue</Button>
+          </InlineStack>
+        </Layout.Section>
       </Layout>
 
       {fulfillModal && (

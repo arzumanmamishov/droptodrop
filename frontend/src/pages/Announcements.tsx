@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import {
   Page, Layout, Card, BlockStack, Text, Badge, Button, Spinner,
   Banner, InlineStack, Divider, Modal, FormLayout, TextField, Checkbox,
-  EmptyState, Icon, Box,
+  EmptyState, Icon,
 } from '@shopify/polaris';
 import { MegaphoneIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';

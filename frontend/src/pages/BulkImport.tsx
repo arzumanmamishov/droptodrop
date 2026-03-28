@@ -1,11 +1,11 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Page, Layout, Card, BlockStack, Text, Badge, Button, Spinner,
-  Banner, InlineStack, InlineGrid, Divider, TextField, Select,
-  Thumbnail, Checkbox, ProgressBar, EmptyState, Icon,
+  Page, Layout, Card, BlockStack, Text, Badge, Spinner,
+  Banner, InlineStack, Divider, TextField, Select,
+  Thumbnail, Checkbox, ProgressBar, EmptyState,
 } from '@shopify/polaris';
-import { ImageIcon, ImportIcon } from '@shopify/polaris-icons';
+import { ImageIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
 import { api } from '../utils/api';
 import { SupplierListing } from '../types';

@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import {
-  Page, Layout, Card, BlockStack, Text, Badge, Button, Spinner,
+  Page, Layout, Card, BlockStack, Text, Badge, Spinner,
   Banner, InlineStack, Divider, Modal, FormLayout, TextField, Select,
   EmptyState, Icon, InlineGrid,
 } from '@shopify/polaris';

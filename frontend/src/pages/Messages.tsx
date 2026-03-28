@@ -1,9 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Page, Layout, Card, BlockStack, Text, Badge, Button, Spinner,
-  Banner, InlineStack, Divider, TextField, EmptyState, Icon,
+  InlineStack, Divider, TextField, EmptyState,
 } from '@shopify/polaris';
-import { ChatIcon, SendIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
 import { api } from '../utils/api';
 
@@ -145,9 +144,8 @@ export default function Messages() {
                 <Divider />
                 <div style={{ padding: '12px' }}>
                   <InlineStack gap="200" blockAlign="end">
-                    <div style={{ flex: 1 }}>
-                      <TextField label="" labelHidden value={newMessage} onChange={setNewMessage} placeholder="Type a message..." autoComplete="off"
-                        onKeyPress={(e: React.KeyboardEvent) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }} />
+                    <div onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }} style={{ flex: 1 }}>
+                      <TextField label="" labelHidden value={newMessage} onChange={setNewMessage} placeholder="Type a message..." autoComplete="off" />
                     </div>
                     <Button variant="primary" onClick={handleSend} loading={sending} disabled={!newMessage.trim()}>Send</Button>
                   </InlineStack>

@@ -1,10 +1,9 @@
 import { useState, useCallback } from 'react';
 import {
-  Page, Layout, Card, BlockStack, Text, Badge, Button, Spinner,
-  Banner, InlineStack, Divider, Modal, FormLayout, TextField, Select,
-  EmptyState, Icon, ProgressBar,
+  Page, Layout, Card, BlockStack, Text, Spinner,
+  Banner, InlineStack, Modal, FormLayout, TextField, Select,
+  EmptyState, ProgressBar,
 } from '@shopify/polaris';
-import { StarIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
 import { api } from '../utils/api';
 
