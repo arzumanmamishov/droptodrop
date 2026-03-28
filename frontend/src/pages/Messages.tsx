@@ -120,16 +120,12 @@ export default function Messages() {
                   ) : messages.length > 0 ? (
                     <BlockStack gap="300">
                       {messages.map((msg) => (
-                        <div key={msg.id} style={{ display: 'flex', justifyContent: msg.is_mine ? 'flex-end' : 'flex-start' }}>
-                          <div style={{
-                            background: msg.is_mine ? '#008060' : '#f6f6f7',
-                            color: msg.is_mine ? 'white' : 'inherit',
-                            borderRadius: '12px', padding: '8px 14px', maxWidth: '70%',
-                          }}>
-                            <Text as="p" variant="bodyMd">{msg.content}</Text>
-                            <Text as="p" variant="bodySm" tone={msg.is_mine ? undefined : 'subdued'}>
-                              {new Date(msg.created_at).toLocaleTimeString()}
-                            </Text>
+                        <div key={msg.id} style={{ display: 'flex', justifyContent: msg.is_mine ? 'flex-end' : 'flex-start', marginBottom: '4px' }}>
+                          <div className={msg.is_mine ? 'chat-bubble-mine' : 'chat-bubble-other'}>
+                            <div style={{ fontSize: '14px', lineHeight: '1.5' }}>{msg.content}</div>
+                            <div style={{ fontSize: '11px', opacity: 0.7, marginTop: '4px', textAlign: 'right' }}>
+                              {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </div>
                           </div>
                         </div>
                       ))}

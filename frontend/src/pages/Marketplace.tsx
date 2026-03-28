@@ -159,36 +159,16 @@ export default function Marketplace() {
               {data!.listings.map((listing) => {
                 const imgUrl = getProductImage(listing);
                 return (
-                  <Card key={listing.id} padding="0">
-                    <div style={{ position: 'relative' }}>
+                  <div key={listing.id} className="product-card" style={{ background: 'white', borderRadius: '12px', boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
+                    <div className="product-image-container">
                       {imgUrl ? (
-                        <img
-                          src={imgUrl}
-                          alt={listing.title}
-                          style={{
-                            width: '100%',
-                            height: '200px',
-                            objectFit: 'cover',
-                            borderTopLeftRadius: '12px',
-                            borderTopRightRadius: '12px',
-                            display: 'block',
-                          }}
-                        />
+                        <img src={imgUrl} alt={listing.title} style={{ width: '100%', height: '220px', objectFit: 'cover', display: 'block' }} />
                       ) : (
-                        <div style={{
-                          width: '100%',
-                          height: '200px',
-                          background: '#f6f6f7',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderTopLeftRadius: '12px',
-                          borderTopRightRadius: '12px',
-                        }}>
+                        <div style={{ width: '100%', height: '220px', background: 'linear-gradient(135deg, #f6f6f7 0%, #e8e8e8 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <Thumbnail source={ImageIcon} alt={listing.title} size="large" />
                         </div>
                       )}
-                      <div style={{ position: 'absolute', top: '8px', right: '8px' }}>
+                      <div className="product-image-overlay">
                         <Badge tone="info">{getCategoryLabel(listing.category)}</Badge>
                       </div>
                     </div>
@@ -238,7 +218,7 @@ export default function Marketplace() {
                         </InlineStack>
                       </BlockStack>
                     </Box>
-                  </Card>
+                  </div>
                 );
               })}
             </InlineGrid>

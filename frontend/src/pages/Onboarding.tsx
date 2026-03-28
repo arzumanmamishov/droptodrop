@@ -40,17 +40,17 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     <Page>
       <Layout>
         <Layout.Section>
-          <Box paddingBlockStart="800" paddingBlockEnd="400">
-            <BlockStack gap="200" align="center">
-              <Text as="h1" variant="heading2xl" alignment="center">
+          <div className="hero-gradient">
+            <BlockStack gap="300" align="center">
+              <div style={{ fontSize: '32px', fontWeight: 700, color: 'white' }}>
                 Welcome to DropToDrop
-              </Text>
-              <Text as="p" variant="bodyLg" tone="subdued" alignment="center">
+              </div>
+              <div style={{ fontSize: '16px', color: 'rgba(255,255,255,0.85)', maxWidth: '500px', margin: '0 auto' }}>
                 The dropshipping network that connects suppliers with resellers.
                 Choose your role to get started.
-              </Text>
+              </div>
             </BlockStack>
-          </Box>
+          </div>
         </Layout.Section>
 
         {error && (

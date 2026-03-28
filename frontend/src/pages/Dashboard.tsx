@@ -74,23 +74,33 @@ export default function Dashboard() {
     return <Badge tone={toneMap[status]}>{status}</Badge>;
   };
 
-  const StatCard = ({ icon, label, value, color }: { icon: typeof ProductIcon; label: string; value: string | number; color: string }) => (
-    <Card>
+  const gradients = [
+    'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)',
+    'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
+    'linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%)',
+    'linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%)',
+  ];
+
+  const StatCard = ({ icon, label, value, gradient }: { icon: typeof ProductIcon; label: string; value: string | number; gradient: string }) => (
+    <div style={{ background: gradient, borderRadius: '16px', padding: '24px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
       <BlockStack gap="300">
         <InlineStack gap="300" blockAlign="center">
-          <div style={{ background: color, borderRadius: '10px', padding: '10px', display: 'flex' }}>
+          <div style={{ background: 'rgba(255,255,255,0.7)', borderRadius: '12px', padding: '10px', display: 'flex', backdropFilter: 'blur(4px)' }}>
             <Icon source={icon} />
           </div>
           <Text as="p" variant="bodySm" tone="subdued">{label}</Text>
         </InlineStack>
-        <Text as="p" variant="headingXl">{value}</Text>
+        <Text as="p" variant="heading2xl">{value}</Text>
       </BlockStack>
-    </Card>
+    </div>
   );
 
   return (
     <Page title="Dashboard">
       <Layout>
+        <Layout.Section>
+          <div className="page-header-accent" />
+        </Layout.Section>
         {isSupplier && (data?.active_listings ?? 0) === 0 && (
           <Layout.Section>
             <Banner tone="info" action={{ content: 'Add Products', onAction: () => navigate('/supplier/listings') }}>
@@ -108,10 +118,10 @@ export default function Dashboard() {
 
         <Layout.Section>
           <InlineGrid columns={{ xs: 2, md: 4 }} gap="400">
-            <StatCard icon={isSupplier ? ProductIcon : ImportIcon} label={isSupplier ? 'Active Listings' : 'Imported Products'} value={isSupplier ? (data?.active_listings ?? 0) : (data?.imported_products ?? 0)} color="#e3f1df" />
-            <StatCard icon={OrderIcon} label="Total Orders" value={data?.order_count ?? 0} color="#e0f0ff" />
-            <StatCard icon={ClockIcon} label="Pending" value={pendingOrders} color="#fef3cd" />
-            <StatCard icon={CashDollarIcon} label="Revenue" value={`$${totalRevenue.toFixed(2)}`} color="#f0e6ff" />
+            <StatCard icon={isSupplier ? ProductIcon : ImportIcon} label={isSupplier ? 'Active Listings' : 'Imported Products'} value={isSupplier ? (data?.active_listings ?? 0) : (data?.imported_products ?? 0)} gradient={gradients[0]} />
+            <StatCard icon={OrderIcon} label="Total Orders" value={data?.order_count ?? 0} gradient={gradients[1]} />
+            <StatCard icon={ClockIcon} label="Pending" value={pendingOrders} gradient={gradients[2]} />
+            <StatCard icon={CashDollarIcon} label="Revenue" value={`$${totalRevenue.toFixed(2)}`} gradient={gradients[3]} />
           </InlineGrid>
         </Layout.Section>
 

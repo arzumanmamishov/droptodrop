@@ -65,7 +65,7 @@ export default function Deals({ role }: Props) {
           {activeDeals.length > 0 ? (
             <InlineGrid columns={{ xs: 1, md: 2 }} gap="400">
               {activeDeals.map((deal) => (
-                <Card key={deal.id}>
+                <Card key={deal.id} background="bg-surface-secondary">
                   <BlockStack gap="300">
                     <InlineStack gap="300" blockAlign="center">
                       <div style={{ background: '#e3f1df', borderRadius: '10px', padding: '10px', display: 'flex' }}>
