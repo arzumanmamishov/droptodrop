@@ -75,6 +75,13 @@ export default function Marketplace() {
     }
   }, [importModal, markupType, markupValue]);
 
+  const startConversation = useCallback(async (supplierShopId: string) => {
+    try {
+      await api.post('/conversations', { other_shop_id: supplierShopId, subject: 'Product inquiry' });
+      navigate('/messages');
+    } catch { /* */ }
+  }, [navigate]);
+
   const categoryTabs = PRODUCT_CATEGORIES.map((cat) => ({
     id: cat.value,
     content: cat.label,
@@ -214,6 +221,9 @@ export default function Marketplace() {
                             Supplier
                           </Button>
                         </InlineStack>
+                        <Button fullWidth variant="plain" onClick={() => startConversation(listing.supplier_shop_id)}>
+                          Message Supplier
+                        </Button>
                       </BlockStack>
                     </Box>
                   </Card>

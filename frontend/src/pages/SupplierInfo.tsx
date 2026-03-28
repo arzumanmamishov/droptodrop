@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
+import { useCallback } from 'react';
 import {
   Page,
   Layout,
@@ -15,6 +16,7 @@ import {
 } from '@shopify/polaris';
 import { StoreIcon, EmailIcon, PackageIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
+import { api } from '../utils/api';
 
 interface SupplierInfoData {
   company_name: string;
@@ -48,10 +50,18 @@ export default function SupplierInfo() {
     );
   }
 
+  const handleMessage = useCallback(async () => {
+    try {
+      await api.post('/conversations', { other_shop_id: id, subject: 'Inquiry' });
+      navigate('/messages');
+    } catch { /* */ }
+  }, [id, navigate]);
+
   return (
     <Page
       title={data.company_name || 'Supplier Profile'}
       backAction={{ content: 'Marketplace', onAction: () => navigate('/marketplace') }}
+      primaryAction={{ content: 'Message Supplier', onAction: handleMessage }}
     >
       <Layout>
         <Layout.Section variant="oneHalf">
