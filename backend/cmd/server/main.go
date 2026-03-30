@@ -362,6 +362,12 @@ func main() {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
+				// Notify reseller
+				var resellerID string
+				db.QueryRow(c.Request.Context(), `SELECT reseller_shop_id FROM routed_orders WHERE id = $1`, c.Param("id")).Scan(&resellerID)
+				if resellerID != "" {
+					inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{ShopID: resellerID, Title: "Order Accepted", Message: "Your order has been accepted by the supplier.", Type: "success", Link: strPtr("/orders/" + c.Param("id"))})
+				}
 				c.JSON(http.StatusOK, gin.H{"status": "ok"})
 			})
 
@@ -374,6 +380,12 @@ func main() {
 				if err := ordersSvc.RejectOrder(c.Request.Context(), c.Param("id"), shopID.(string), body.Reason); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
+				}
+				// Notify reseller
+				var resellerID string
+				db.QueryRow(c.Request.Context(), `SELECT reseller_shop_id FROM routed_orders WHERE id = $1`, c.Param("id")).Scan(&resellerID)
+				if resellerID != "" {
+					inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{ShopID: resellerID, Title: "Order Rejected", Message: "Your order has been rejected. Reason: " + body.Reason, Type: "error", Link: strPtr("/orders/" + c.Param("id"))})
 				}
 				c.JSON(http.StatusOK, gin.H{"status": "ok"})
 			})
@@ -390,6 +402,12 @@ func main() {
 				if err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
+				}
+				// Notify reseller about fulfillment
+				var resellerID string
+				db.QueryRow(c.Request.Context(), `SELECT reseller_shop_id FROM routed_orders WHERE id = $1`, c.Param("id")).Scan(&resellerID)
+				if resellerID != "" {
+					inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{ShopID: resellerID, Title: "Order Shipped", Message: "Your order has been fulfilled with tracking info.", Type: "success", Link: strPtr("/orders/" + c.Param("id"))})
 				}
 				c.JSON(http.StatusOK, event)
 			})
@@ -475,6 +493,12 @@ func main() {
 				if err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
+				}
+				// Notify supplier about new import
+				var supplierShopID string
+				db.QueryRow(c.Request.Context(), `SELECT supplier_shop_id FROM supplier_listings WHERE id = $1`, input.SupplierListingID).Scan(&supplierShopID)
+				if supplierShopID != "" {
+					inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{ShopID: supplierShopID, Title: "Product Imported", Message: "A reseller has imported one of your products.", Type: "info", Link: strPtr("/orders")})
 				}
 				c.JSON(http.StatusCreated, imp)
 			})
@@ -571,6 +595,14 @@ func main() {
 			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
+			}
+			// Notify the other party
+			var supplierID, resellerID string
+			db.QueryRow(c.Request.Context(), `SELECT supplier_shop_id, reseller_shop_id FROM routed_orders WHERE id = $1`, input.RoutedOrderID).Scan(&supplierID, &resellerID)
+			notifyID := supplierID
+			if role.(string) == "supplier" { notifyID = resellerID }
+			if notifyID != "" {
+				inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{ShopID: notifyID, Title: "New Dispute", Message: "A dispute has been opened on an order.", Type: "warning", Link: strPtr("/disputes")})
 			}
 			c.JSON(http.StatusCreated, d)
 		})
@@ -826,6 +858,14 @@ func main() {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
+			// Notify the other party in the conversation
+			var supplierID, resellerID string
+			db.QueryRow(c.Request.Context(), `SELECT supplier_shop_id, reseller_shop_id FROM conversations WHERE id = $1`, c.Param("id")).Scan(&supplierID, &resellerID)
+			recipientID := supplierID
+			if shopID.(string) == supplierID { recipientID = resellerID }
+			if recipientID != "" {
+				inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{ShopID: recipientID, Title: "New Message", Message: body.Content[:min(len(body.Content), 100)], Type: "info", Link: strPtr("/messages")})
+			}
 			c.JSON(http.StatusOK, msg)
 		})
 
@@ -987,6 +1027,12 @@ func main() {
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
+			}
+			// Notify supplier about sample request
+			var supplierID string
+			db.QueryRow(c.Request.Context(), `SELECT supplier_shop_id FROM supplier_listings WHERE id = $1`, body.ListingID).Scan(&supplierID)
+			if supplierID != "" {
+				inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{ShopID: supplierID, Title: "Sample Request", Message: "A reseller has requested a product sample.", Type: "info", Link: strPtr("/samples")})
 			}
 			c.JSON(http.StatusCreated, sample)
 		})
@@ -1155,6 +1201,8 @@ func main() {
 
 	logger.Info().Msg("server stopped")
 }
+
+func strPtr(s string) *string { return &s }
 
 func getIntQuery(c *gin.Context, key string, def int) int {
 	val := c.Query(key)
