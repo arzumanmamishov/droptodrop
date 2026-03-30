@@ -44,7 +44,8 @@
       "Bash(scalingo --app droptodrop --region osc-fr1 deployment-logs 78582b56-edda-4cd7-95e6-6a5344d1b27f)",
       "Bash(grep -r \"TODO\\\\|FIXME\\\\|XXX\\\\|HACK\" /c/Users/webde/OneDrive/Documents/droptodrop --include=*.go --include=*.tsx --include=*.ts)",
       "Bash(scalingo --app droptodrop --region osc-fr1 logs --lines 30)",
-      "Bash(scalingo --app droptodrop --region osc-fr1 deployment-logs ca6b7552-79e8-405f-beeb-231492a131b5)"
+      "Bash(scalingo --app droptodrop --region osc-fr1 deployment-logs ca6b7552-79e8-405f-beeb-231492a131b5)",
+      "Bash(scalingo --app droptodrop --region osc-fr1 deployment-logs 012f3574-df49-42a8-a10d-1fc9fe605eb5)"
     ]
   }
 }

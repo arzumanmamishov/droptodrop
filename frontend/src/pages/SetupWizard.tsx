@@ -1,10 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import {
   Page, Layout, Card, BlockStack, Text, Button, InlineStack,
-  ProgressBar, Icon, Divider, Badge, Banner,
+  Icon, Divider, Badge, Banner,
 } from '@shopify/polaris';
-import { CheckIcon, ProductIcon, StoreIcon, SettingsIcon } from '@shopify/polaris-icons';
-import { api } from '../utils/api';
+import { CheckIcon } from '@shopify/polaris-icons';
 
 interface Props {
   role: string;
