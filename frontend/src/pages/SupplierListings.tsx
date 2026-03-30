@@ -268,9 +268,9 @@ export default function SupplierListings() {
               {selectedIds.size > 0 && (
                 <InlineStack gap="200">
                   <Text as="span" variant="bodySm">{selectedIds.size} selected</Text>
-                  <Button size="slim" loading={bulkAction} onClick={handleBulkPublish}>Publish All</Button>
-                  <Button size="slim" loading={bulkAction} onClick={handleBulkPause}>Pause All</Button>
-                  <Button size="slim" tone="critical" loading={bulkAction} onClick={handleBulkDelete}>Delete All</Button>
+                  <Button size="slim" loading={bulkAction} onClick={handleBulkPublish}>Publish</Button>
+                  <Button size="slim" loading={bulkAction} onClick={handleBulkPause}>Pause</Button>
+                  <Button size="slim" tone="critical" loading={bulkAction} onClick={handleBulkDelete}>Delete</Button>
                 </InlineStack>
               )}
 
