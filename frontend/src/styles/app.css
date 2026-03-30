@@ -1,49 +1,213 @@
-/* DropToDrop Custom Styles */
+/* DropToDrop — Clean Professional Theme */
+/* Inspired by Fixoria-style design: green accents, clean cards, rounded UI */
 
-/* Smooth transitions */
+:root {
+  --dt-green: #2d6a4f;
+  --dt-green-light: #40916c;
+  --dt-green-bg: #d8f3dc;
+  --dt-green-border: #b7e4c7;
+  --dt-bg: #f8f9fa;
+  --dt-card-bg: #ffffff;
+  --dt-text: #212529;
+  --dt-text-muted: #6c757d;
+  --dt-border: #e9ecef;
+  --dt-radius: 12px;
+  --dt-radius-sm: 8px;
+}
+
+/* Override Polaris frame background */
+.Polaris-Frame__Content {
+  background: var(--dt-bg) !important;
+}
+
+/* Card styling */
 .Polaris-Card {
-  transition: box-shadow 0.2s ease, transform 0.15s ease;
+  border-radius: var(--dt-radius) !important;
+  border: 1px solid var(--dt-border) !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04) !important;
+  transition: box-shadow 0.2s ease;
 }
 .Polaris-Card:hover {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.06) !important;
 }
 
-/* Product card hover effect */
-.product-card {
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-  border-radius: 12px;
+/* Stat cards with green border accent */
+.stat-card {
+  background: white;
+  border: 1px solid var(--dt-green-border);
+  border-radius: var(--dt-radius);
+  padding: 20px 24px;
+  position: relative;
   overflow: hidden;
 }
+.stat-card::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 80px; height: 100%;
+  background: linear-gradient(135deg, transparent 50%, var(--dt-green-bg) 50%);
+  opacity: 0.5;
+}
+.stat-card-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--dt-text);
+  line-height: 1.2;
+}
+.stat-card-label {
+  font-size: 13px;
+  color: var(--dt-text-muted);
+  margin-top: 4px;
+}
+.stat-card-sublabel {
+  font-size: 11px;
+  color: var(--dt-text-muted);
+  margin-top: 8px;
+}
+
+/* Tab pills — green active state */
+.tab-pills {
+  display: flex;
+  gap: 8px;
+  padding: 4px;
+}
+.tab-pill {
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid var(--dt-border);
+  background: white;
+  color: var(--dt-text-muted);
+  transition: all 0.15s ease;
+}
+.tab-pill:hover {
+  background: var(--dt-green-bg);
+  border-color: var(--dt-green-border);
+}
+.tab-pill-active {
+  background: var(--dt-green) !important;
+  color: white !important;
+  border-color: var(--dt-green) !important;
+}
+
+/* Status badges */
+.status-active {
+  background: var(--dt-green-bg);
+  color: var(--dt-green);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-block;
+}
+.status-pending {
+  background: #fff3cd;
+  color: #856404;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-block;
+}
+.status-error {
+  background: #f8d7da;
+  color: #721c24;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-block;
+}
+
+/* Table styling */
+.Polaris-DataTable__Cell {
+  padding: 12px 16px !important;
+  font-size: 13px !important;
+}
+.Polaris-DataTable__Cell--header {
+  font-weight: 600 !important;
+  color: var(--dt-text-muted) !important;
+  font-size: 12px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+}
+.Polaris-DataTable__TableRow:hover {
+  background: #f8f9fa !important;
+}
+
+/* Search bar */
+.search-bar {
+  background: white;
+  border: 1px solid var(--dt-border);
+  border-radius: var(--dt-radius-sm);
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Export buttons */
+.export-btn {
+  padding: 8px 16px;
+  border-radius: var(--dt-radius-sm);
+  border: 1px solid var(--dt-border);
+  background: white;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+.export-btn:hover {
+  background: #f1f3f5;
+  border-color: #ced4da;
+}
+
+/* Primary button — green */
+.Polaris-Button--primary {
+  background: var(--dt-green) !important;
+  border-color: var(--dt-green) !important;
+}
+.Polaris-Button--primary:hover {
+  background: var(--dt-green-light) !important;
+  transform: none !important;
+  box-shadow: none !important;
+}
+
+/* Navigation active — green accent */
+.Polaris-Navigation__Item--selected {
+  background: var(--dt-green-bg) !important;
+}
+.Polaris-Navigation__Item--selected .Polaris-Navigation__Text {
+  color: var(--dt-green) !important;
+  font-weight: 600 !important;
+}
+
+/* Product card */
+.product-card {
+  border-radius: var(--dt-radius) !important;
+  border: 1px solid var(--dt-border);
+  overflow: hidden;
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
 .product-card:hover {
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
   transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+.product-image-container img {
+  transition: transform 0.3s ease;
+}
+.product-image-container:hover img {
+  transform: scale(1.03);
 }
 
-/* Gradient stat cards */
-.stat-card-green {
-  background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
-  border-radius: 12px;
-  padding: 20px;
-}
-.stat-card-blue {
-  background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-  border-radius: 12px;
-  padding: 20px;
-}
-.stat-card-yellow {
-  background: linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%);
-  border-radius: 12px;
-  padding: 20px;
-}
-.stat-card-purple {
-  background: linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%);
-  border-radius: 12px;
-  padding: 20px;
-}
-
-/* Chat bubble styles */
+/* Chat bubbles */
 .chat-bubble-mine {
-  background: linear-gradient(135deg, #008060 0%, #004c3f 100%);
+  background: var(--dt-green);
   color: white;
   border-radius: 16px 16px 4px 16px;
   padding: 10px 16px;
@@ -51,67 +215,17 @@
   word-wrap: break-word;
 }
 .chat-bubble-other {
-  background: #f1f1f1;
-  color: #202223;
+  background: #f1f3f5;
+  color: var(--dt-text);
   border-radius: 16px 16px 16px 4px;
   padding: 10px 16px;
   max-width: 70%;
   word-wrap: break-word;
 }
 
-/* Hero section gradient */
-.hero-gradient {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 16px;
-  padding: 48px 32px;
-  color: white;
-  text-align: center;
-}
-.hero-gradient h1, .hero-gradient p {
-  color: white !important;
-}
-
-/* Navigation active indicator */
-.Polaris-Navigation__Item--selected {
-  border-left: 3px solid #008060;
-}
-
-/* Badge improvements */
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  display: inline-block;
-}
-.status-dot-green { background: #008060; }
-.status-dot-yellow { background: #b98900; }
-.status-dot-red { background: #d72c0d; }
-.status-dot-blue { background: #2c6ecb; }
-
-/* Product image with overlay */
-.product-image-container {
-  position: relative;
-  overflow: hidden;
-  border-radius: 12px 12px 0 0;
-}
-.product-image-container img {
-  width: 100%;
-  height: 200px;
-  object-fit: cover;
-  transition: transform 0.3s ease;
-}
-.product-image-container:hover img {
-  transform: scale(1.05);
-}
-.product-image-overlay {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-}
-
-/* Pricing display */
+/* Price tag */
 .price-tag {
-  background: linear-gradient(135deg, #008060 0%, #004c3f 100%);
+  background: var(--dt-green);
   color: white;
   padding: 4px 12px;
   border-radius: 20px;
@@ -119,56 +233,52 @@
   font-size: 14px;
   display: inline-block;
 }
-.price-tag-retail {
-  background: #f6f6f7;
-  color: #6d7175;
-  padding: 4px 12px;
-  border-radius: 20px;
-  font-size: 13px;
-  text-decoration: line-through;
-  display: inline-block;
-}
 
-/* Deal card */
-.deal-card {
-  background: linear-gradient(135deg, #fef3cd 0%, #fff9e6 100%);
-  border: 2px solid #ffd700;
-  border-radius: 12px;
-}
-
-/* Review stars */
-.stars {
-  color: #ffd700;
-  font-size: 18px;
-  letter-spacing: 2px;
-}
-
-/* Notification unread indicator */
-.notification-unread {
-  background: linear-gradient(135deg, #e8f4fd 0%, #d1ecf9 100%);
-  border-left: 4px solid #2c6ecb;
-}
-
-/* Empty state illustration */
-.empty-state-container {
-  padding: 48px 24px;
-  text-align: center;
-}
-
-/* Page header gradient bar */
+/* Page header */
 .page-header-accent {
-  height: 4px;
-  background: linear-gradient(90deg, #008060, #2c6ecb, #7c3aed);
+  height: 3px;
+  background: var(--dt-green);
   border-radius: 2px;
   margin-bottom: 16px;
 }
 
-/* Smooth scrolling */
-html {
-  scroll-behavior: smooth;
+/* Platform stats banner */
+.platform-banner {
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  border-radius: var(--dt-radius);
+  padding: 24px;
+  color: white;
 }
 
-/* Loading skeleton animation */
+/* Hero gradient */
+.hero-gradient {
+  background: linear-gradient(135deg, var(--dt-green) 0%, #1b4332 100%);
+  border-radius: var(--dt-radius);
+  padding: 32px;
+  color: white;
+}
+
+/* Notification unread */
+.notification-unread {
+  background: var(--dt-green-bg);
+  border-left: 4px solid var(--dt-green);
+}
+
+/* Smooth scrolling */
+html { scroll-behavior: smooth; }
+
+/* Badge override — green tones */
+.Polaris-Badge--toneSuccess {
+  background: var(--dt-green-bg) !important;
+  color: var(--dt-green) !important;
+}
+
+/* Progress bar green */
+.Polaris-ProgressBar__Indicator {
+  background: var(--dt-green) !important;
+}
+
+/* Skeleton loading */
 @keyframes shimmer {
   0% { background-position: -200px 0; }
   100% { background-position: 200px 0; }
@@ -180,37 +290,7 @@ html {
   border-radius: 4px;
 }
 
-/* Marketplace grid responsive */
+/* Responsive */
 @media (max-width: 768px) {
-  .marketplace-grid {
-    grid-template-columns: 1fr !important;
-  }
-}
-
-/* Button hover effects */
-.Polaris-Button--primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 128, 96, 0.3);
-}
-
-/* Timeline connector line */
-.timeline-line {
-  width: 2px;
-  background: #e1e3e5;
-  position: absolute;
-  top: 32px;
-  bottom: 0;
-  left: 15px;
-}
-.timeline-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 2px solid #008060;
-  background: white;
-  position: relative;
-  z-index: 1;
-}
-.timeline-dot-filled {
-  background: #008060;
+  .stat-card-value { font-size: 24px; }
 }

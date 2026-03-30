@@ -17,13 +17,7 @@ import {
   Box,
   Divider,
 } from '@shopify/polaris';
-import {
-  ProductIcon,
-  OrderIcon,
-  CashDollarIcon,
-  ClockIcon,
-  ImportIcon,
-} from '@shopify/polaris-icons';
+import { OrderIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
 
 interface DashboardData {
@@ -87,24 +81,13 @@ export default function Dashboard() {
     return <Badge tone={toneMap[status]}>{status}</Badge>;
   };
 
-  const gradients = [
-    'linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%)',
-    'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
-    'linear-gradient(135deg, #fff8e1 0%, #ffecb3 100%)',
-    'linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%)',
-  ];
-
-  const StatCard = ({ icon, label, value, gradient }: { icon: typeof ProductIcon; label: string; value: string | number; gradient: string }) => (
-    <div style={{ background: gradient, borderRadius: '16px', padding: '24px', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
-      <BlockStack gap="300">
-        <InlineStack gap="300" blockAlign="center">
-          <div style={{ background: 'rgba(255,255,255,0.7)', borderRadius: '12px', padding: '10px', display: 'flex', backdropFilter: 'blur(4px)' }}>
-            <Icon source={icon} />
-          </div>
-          <Text as="p" variant="bodySm" tone="subdued">{label}</Text>
-        </InlineStack>
-        <Text as="p" variant="heading2xl">{value}</Text>
-      </BlockStack>
+  const StatCard = ({ label, value, sublabel }: { label: string; value: string | number; sublabel: string }) => (
+    <div className="stat-card">
+      <div style={{ position: 'relative', zIndex: 1 }}>
+        <div className="stat-card-label">{label}</div>
+        <div className="stat-card-value">{value}</div>
+        <div className="stat-card-sublabel">{sublabel}</div>
+      </div>
     </div>
   );
 
@@ -131,10 +114,10 @@ export default function Dashboard() {
 
         <Layout.Section>
           <InlineGrid columns={{ xs: 2, md: 4 }} gap="400">
-            <StatCard icon={isSupplier ? ProductIcon : ImportIcon} label={isSupplier ? 'Active Listings' : 'Imported Products'} value={isSupplier ? (data?.active_listings ?? 0) : (data?.imported_products ?? 0)} gradient={gradients[0]} />
-            <StatCard icon={OrderIcon} label="Total Orders" value={data?.order_count ?? 0} gradient={gradients[1]} />
-            <StatCard icon={ClockIcon} label="Pending" value={pendingOrders} gradient={gradients[2]} />
-            <StatCard icon={CashDollarIcon} label="Revenue" value={`$${totalRevenue.toFixed(2)}`} gradient={gradients[3]} />
+            <StatCard label={isSupplier ? 'Active Listings' : 'Imported Products'} value={isSupplier ? (data?.active_listings ?? 0) : (data?.imported_products ?? 0)} sublabel={`Total ${isSupplier ? 'listings' : 'imports'}`} />
+            <StatCard label="Total Orders" value={data?.order_count ?? 0} sublabel="All time orders" />
+            <StatCard label="Pending Orders" value={pendingOrders} sublabel="Awaiting action" />
+            <StatCard label="Revenue" value={`$${totalRevenue.toFixed(2)}`} sublabel="From recent orders" />
           </InlineGrid>
         </Layout.Section>
 
@@ -196,10 +179,7 @@ export default function Dashboard() {
         </Layout.Section>
         {platformStats && (
           <Layout.Section>
-            <div style={{
-              background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-              borderRadius: '16px', padding: '24px', color: 'white',
-            }}>
+            <div className="platform-banner">
               <BlockStack gap="200">
                 <Text as="p" variant="bodySm">
                   <span style={{ color: 'rgba(255,255,255,0.6)' }}>DropToDrop Network</span>

@@ -114,7 +114,7 @@ export default function Marketplace() {
 
         {/* Hero search bar */}
         <Layout.Section>
-          <div style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', borderRadius: '16px', padding: '32px 24px' }}>
+          <div className="hero-gradient" style={{ padding: '32px 24px' }}>
             <BlockStack gap="300">
               <Text as="p" variant="headingLg" alignment="center">
                 <span style={{ color: 'white' }}>Find products to sell in your store</span>

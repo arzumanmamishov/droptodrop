@@ -39,16 +39,14 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
     <Page>
       <Layout>
         <Layout.Section>
-          <div className="hero-gradient">
-            <BlockStack gap="300" align="center">
-              <div style={{ fontSize: '32px', fontWeight: 700, color: 'white' }}>
-                Welcome to DropToDrop
-              </div>
-              <div style={{ fontSize: '16px', color: 'rgba(255,255,255,0.85)', maxWidth: '500px', margin: '0 auto' }}>
-                The dropshipping network that connects suppliers with resellers.
-                Choose your role to get started.
-              </div>
-            </BlockStack>
+          <div className="hero-gradient" style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '32px', fontWeight: 700, color: 'white', marginBottom: '12px' }}>
+              Welcome to DropToDrop
+            </div>
+            <div style={{ fontSize: '16px', color: 'rgba(255,255,255,0.85)', maxWidth: '500px', margin: '0 auto' }}>
+              The dropshipping network that connects suppliers with resellers.
+              Choose your role to get started.
+            </div>
           </div>
         </Layout.Section>
 

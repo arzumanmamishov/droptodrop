@@ -42,7 +42,7 @@ export default function SetupWizard({ role, onComplete }: Props) {
       <Layout>
         <Layout.Section>
           <div style={{
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            background: 'linear-gradient(135deg, #2d6a4f 0%, #1b4332 100%)',
             borderRadius: '16px', padding: '32px', color: 'white',
           }}>
             <BlockStack gap="300">
