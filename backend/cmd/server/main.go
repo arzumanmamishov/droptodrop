@@ -108,6 +108,55 @@ func main() {
 	r.GET("/auth/install", authHandler.Install)
 	r.GET("/auth/callback", authHandler.Callback)
 
+	// Public API (no auth) — for supplier directory and platform stats
+	pub := r.Group("/public")
+	{
+		pub.GET("/stats", func(c *gin.Context) {
+			var totalProducts, totalOrders, totalSuppliers, totalResellers int
+			db.QueryRow(c.Request.Context(), `SELECT COUNT(*) FROM supplier_listings WHERE status = 'active'`).Scan(&totalProducts)
+			db.QueryRow(c.Request.Context(), `SELECT COUNT(*) FROM routed_orders`).Scan(&totalOrders)
+			db.QueryRow(c.Request.Context(), `SELECT COUNT(*) FROM shops WHERE role = 'supplier' AND status = 'active'`).Scan(&totalSuppliers)
+			db.QueryRow(c.Request.Context(), `SELECT COUNT(*) FROM shops WHERE role = 'reseller' AND status = 'active'`).Scan(&totalResellers)
+			c.JSON(http.StatusOK, gin.H{
+				"total_products":  totalProducts,
+				"total_orders":    totalOrders,
+				"total_suppliers": totalSuppliers,
+				"total_resellers": totalResellers,
+			})
+		})
+
+		pub.GET("/suppliers", func(c *gin.Context) {
+			rows, err := db.Query(c.Request.Context(), `
+				SELECT s.id, s.shopify_domain, COALESCE(sp.company_name, s.shopify_domain),
+					COALESCE(sp.default_processing_days, 3), COALESCE(sp.is_verified, FALSE),
+					(SELECT COUNT(*) FROM supplier_listings sl WHERE sl.supplier_shop_id = s.id AND sl.status = 'active')
+				FROM shops s
+				LEFT JOIN supplier_profiles sp ON sp.shop_id = s.id
+				WHERE s.role = 'supplier' AND s.status = 'active'
+				ORDER BY (SELECT COUNT(*) FROM supplier_listings sl WHERE sl.supplier_shop_id = s.id AND sl.status = 'active') DESC
+				LIMIT 50
+			`)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			defer rows.Close()
+			var suppliers []gin.H
+			for rows.Next() {
+				var id, domain, name string
+				var days int
+				var verified bool
+				var count int
+				rows.Scan(&id, &domain, &name, &days, &verified, &count)
+				suppliers = append(suppliers, gin.H{
+					"id": id, "domain": domain, "name": name,
+					"processing_days": days, "verified": verified, "listing_count": count,
+				})
+			}
+			c.JSON(http.StatusOK, gin.H{"suppliers": suppliers})
+		})
+	}
+
 	// Webhooks (HMAC verified internally)
 	wh := r.Group("/webhooks")
 	{

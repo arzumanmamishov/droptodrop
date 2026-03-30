@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Page,
@@ -42,7 +43,19 @@ interface DashboardData {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { data, loading, error } = useApi<DashboardData>('/dashboard');
+  const { data, loading, error, refetch } = useApi<DashboardData>('/dashboard');
+
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    const interval = setInterval(() => refetch(), 30000);
+    return () => clearInterval(interval);
+  }, [refetch]);
+
+  // Platform stats
+  const [platformStats, setPlatformStats] = useState<{ total_products: number; total_orders: number; total_suppliers: number; total_resellers: number } | null>(null);
+  useEffect(() => {
+    fetch('/public/stats').then(r => r.json()).then(setPlatformStats).catch(() => {});
+  }, []);
 
   if (loading) {
     return (
@@ -181,6 +194,38 @@ export default function Dashboard() {
             </BlockStack>
           </Card>
         </Layout.Section>
+        {platformStats && (
+          <Layout.Section>
+            <div style={{
+              background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+              borderRadius: '16px', padding: '24px', color: 'white',
+            }}>
+              <BlockStack gap="200">
+                <Text as="p" variant="bodySm">
+                  <span style={{ color: 'rgba(255,255,255,0.6)' }}>DropToDrop Network</span>
+                </Text>
+                <InlineStack gap="600" align="center">
+                  <BlockStack gap="050" align="center">
+                    <span style={{ fontSize: '24px', fontWeight: 700, color: 'white' }}>{platformStats.total_products}</span>
+                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)' }}>Products</span>
+                  </BlockStack>
+                  <BlockStack gap="050" align="center">
+                    <span style={{ fontSize: '24px', fontWeight: 700, color: 'white' }}>{platformStats.total_orders}</span>
+                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)' }}>Orders</span>
+                  </BlockStack>
+                  <BlockStack gap="050" align="center">
+                    <span style={{ fontSize: '24px', fontWeight: 700, color: 'white' }}>{platformStats.total_suppliers}</span>
+                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)' }}>Suppliers</span>
+                  </BlockStack>
+                  <BlockStack gap="050" align="center">
+                    <span style={{ fontSize: '24px', fontWeight: 700, color: 'white' }}>{platformStats.total_resellers}</span>
+                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)' }}>Resellers</span>
+                  </BlockStack>
+                </InlineStack>
+              </BlockStack>
+            </div>
+          </Layout.Section>
+        )}
       </Layout>
     </Page>
   );
