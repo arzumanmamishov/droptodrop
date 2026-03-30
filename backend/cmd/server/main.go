@@ -433,20 +433,34 @@ func main() {
 
 			reseller.GET("/suppliers/:id", func(c *gin.Context) {
 				supplierID := c.Param("id")
+				// Get shop info
+				var shopDomain string
+				db.QueryRow(c.Request.Context(), `SELECT COALESCE(shopify_domain,'') FROM shops WHERE id = $1`, supplierID).Scan(&shopDomain)
+
+				// Try to get profile, use defaults if not found
+				companyName := shopDomain
+				supportEmail := ""
+				returnPolicy := ""
+				processingDays := 3
+				blindFulfillment := false
+
 				profile, err := shopsSvc.GetSupplierProfile(c.Request.Context(), supplierID)
-				if err != nil {
-					c.JSON(http.StatusNotFound, gin.H{"error": "supplier not found"})
-					return
+				if err == nil {
+					if profile.CompanyName != "" { companyName = profile.CompanyName }
+					supportEmail = profile.SupportEmail
+					returnPolicy = profile.ReturnPolicyURL
+					processingDays = profile.DefaultProcessingDays
+					blindFulfillment = profile.BlindFulfillment
 				}
-				// Count active listings
+
 				_, listingCount, _ := productsSvc.ListSupplierListings(c.Request.Context(), supplierID, "active", 1, 0)
 				c.JSON(http.StatusOK, gin.H{
-					"company_name":           profile.CompanyName,
-					"support_email":          profile.SupportEmail,
-					"return_policy_url":      profile.ReturnPolicyURL,
-					"default_processing_days": profile.DefaultProcessingDays,
-					"blind_fulfillment":      profile.BlindFulfillment,
-					"listing_count":          listingCount,
+					"company_name":            companyName,
+					"support_email":           supportEmail,
+					"return_policy_url":       returnPolicy,
+					"default_processing_days": processingDays,
+					"blind_fulfillment":       blindFulfillment,
+					"listing_count":           listingCount,
 				})
 			})
 

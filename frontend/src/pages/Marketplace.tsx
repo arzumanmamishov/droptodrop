@@ -3,9 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import {
   Page, Layout, Card, TextField, Button, Spinner, Banner,
   BlockStack, Text, InlineStack, InlineGrid, Badge, Modal,
-  FormLayout, Select, Tabs, Thumbnail, Divider, EmptyState, Box, Icon,
+  FormLayout, Select, Tabs, Thumbnail, Divider, EmptyState, Icon,
 } from '@shopify/polaris';
-import { ImageIcon, StarIcon, DeliveryIcon } from '@shopify/polaris-icons';
+import { ImageIcon, DeliveryIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
 import { api } from '../utils/api';
 import { SupplierListing } from '../types';
@@ -61,11 +61,19 @@ export default function Marketplace() {
     } catch { /* */ }
   }, [navigate]);
 
+  const [sampleSuccess, setSampleSuccess] = useState(false);
+  const [sampleError, setSampleError] = useState<string | null>(null);
+
   const requestSample = useCallback(async (listingId: string) => {
+    setSampleError(null);
     try {
-      await api.post('/samples', { listing_id: listingId, quantity: 1, notes: 'Sample request' });
-      setImportSuccess(true);
-    } catch { /* */ }
+      await api.post('/samples', { listing_id: listingId, quantity: 1, notes: 'Sample request from marketplace' });
+      setSampleSuccess(true);
+      setTimeout(() => setSampleSuccess(false), 3000);
+    } catch (err) {
+      setSampleError(err instanceof Error ? err.message : 'Failed to request sample');
+      setTimeout(() => setSampleError(null), 3000);
+    }
   }, []);
 
   const categoryTabs = PRODUCT_CATEGORIES.map((cat) => ({ id: cat.value, content: cat.label }));
@@ -91,6 +99,16 @@ export default function Marketplace() {
         {importSuccess && (
           <Layout.Section>
             <Banner tone="success" onDismiss={() => setImportSuccess(false)}>Done! Check your Imports page.</Banner>
+          </Layout.Section>
+        )}
+        {sampleSuccess && (
+          <Layout.Section>
+            <Banner tone="success" onDismiss={() => setSampleSuccess(false)}>Sample requested! Check the Samples page.</Banner>
+          </Layout.Section>
+        )}
+        {sampleError && (
+          <Layout.Section>
+            <Banner tone="critical" onDismiss={() => setSampleError(null)}>{sampleError}</Banner>
           </Layout.Section>
         )}
 
@@ -208,17 +226,44 @@ export default function Marketplace() {
                         <Button variant="primary" fullWidth onClick={() => setImportModal(listing)}>
                           Import to My Store
                         </Button>
-                        <InlineStack gap="100">
-                          <Button fullWidth size="slim" onClick={() => navigate(`/supplier/${listing.supplier_shop_id}`)}>
-                            View Supplier
-                          </Button>
-                          <Button fullWidth size="slim" onClick={() => startConversation(listing.supplier_shop_id)}>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <div
+                            onClick={() => navigate(`/supplier/${listing.supplier_shop_id}`)}
+                            style={{
+                              flex: 1, textAlign: 'center', padding: '8px 4px', borderRadius: '8px',
+                              background: '#f6f6f7', cursor: 'pointer', fontSize: '12px', fontWeight: 500,
+                              transition: 'background 0.15s',
+                            }}
+                            onMouseOver={(e) => (e.currentTarget.style.background = '#e8e8e8')}
+                            onMouseOut={(e) => (e.currentTarget.style.background = '#f6f6f7')}
+                          >
+                            Supplier
+                          </div>
+                          <div
+                            onClick={() => startConversation(listing.supplier_shop_id)}
+                            style={{
+                              flex: 1, textAlign: 'center', padding: '8px 4px', borderRadius: '8px',
+                              background: '#e8f4fd', color: '#2c6ecb', cursor: 'pointer', fontSize: '12px', fontWeight: 500,
+                              transition: 'background 0.15s',
+                            }}
+                            onMouseOver={(e) => (e.currentTarget.style.background = '#d1e8f9')}
+                            onMouseOut={(e) => (e.currentTarget.style.background = '#e8f4fd')}
+                          >
                             Message
-                          </Button>
-                          <Button fullWidth size="slim" onClick={() => requestSample(listing.id)}>
+                          </div>
+                          <div
+                            onClick={() => requestSample(listing.id)}
+                            style={{
+                              flex: 1, textAlign: 'center', padding: '8px 4px', borderRadius: '8px',
+                              background: '#fef3cd', color: '#8a6d00', cursor: 'pointer', fontSize: '12px', fontWeight: 500,
+                              transition: 'background 0.15s',
+                            }}
+                            onMouseOver={(e) => (e.currentTarget.style.background = '#fde68a')}
+                            onMouseOut={(e) => (e.currentTarget.style.background = '#fef3cd')}
+                          >
                             Sample
-                          </Button>
-                        </InlineStack>
+                          </div>
+                        </div>
                       </BlockStack>
                     </div>
                   </div>
