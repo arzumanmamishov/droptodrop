@@ -236,17 +236,44 @@ func (h *Handler) ProductsDelete(c *gin.Context) {
 
 	productID, _ := payload["id"].(float64)
 	shopDomain := c.GetHeader("X-Shopify-Shop-Domain")
+	ctx := c.Request.Context()
 
-	// Archive the listing
-	_, err = h.db.Exec(c.Request.Context(), `
-		UPDATE supplier_listings SET status = 'archived'
-		WHERE shopify_product_id = $1 AND supplier_shop_id = (SELECT id FROM shops WHERE shopify_domain = $2)
-	`, int64(productID), shopDomain)
-	if err != nil {
-		h.logger.Error().Err(err).Msg("failed to archive listing")
-		h.markWebhookProcessed(c, eventID, "failed", err.Error())
+	// Get the listing ID before deleting
+	var listingID, supplierShopID string
+	h.db.QueryRow(ctx, `
+		SELECT sl.id, sl.supplier_shop_id FROM supplier_listings sl
+		JOIN shops s ON s.id = sl.supplier_shop_id
+		WHERE sl.shopify_product_id = $1 AND s.shopify_domain = $2
+	`, int64(productID), shopDomain).Scan(&listingID, &supplierShopID)
+
+	if listingID != "" {
+		// Mark all reseller imports of this listing as removed
+		h.db.Exec(ctx, `
+			UPDATE reseller_imports SET status = 'removed', last_sync_error = 'Supplier deleted this product'
+			WHERE supplier_listing_id = $1 AND status != 'removed'
+		`, listingID)
+
+		// Deactivate product links
+		h.db.Exec(ctx, `
+			UPDATE product_links SET is_active = FALSE
+			WHERE supplier_product_id = $1 AND supplier_shop_id = $2
+		`, int64(productID), supplierShopID)
+
+		// Delete the listing (cascades to variants)
+		_, err = h.db.Exec(ctx, `DELETE FROM supplier_listings WHERE id = $1`, listingID)
+		if err != nil {
+			h.logger.Error().Err(err).Msg("failed to delete listing")
+			h.markWebhookProcessed(c, eventID, "failed", err.Error())
+		} else {
+			h.logger.Info().Str("listing_id", listingID).Int64("product_id", int64(productID)).Msg("listing deleted via webhook")
+			h.markWebhookProcessed(c, eventID, "processed", "")
+
+			if h.audit != nil {
+				h.audit.Log(ctx, supplierShopID, "webhook", "", "listing_deleted_by_shopify", "supplier_listing", listingID, map[string]int64{"shopify_product_id": int64(productID)}, "success", "")
+			}
+		}
 	} else {
-		h.markWebhookProcessed(c, eventID, "processed", "")
+		h.markWebhookProcessed(c, eventID, "processed", "listing not found")
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
