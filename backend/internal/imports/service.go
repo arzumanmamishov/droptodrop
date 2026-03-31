@@ -11,7 +11,17 @@ import (
 
 	"github.com/droptodrop/droptodrop/internal/audit"
 	"github.com/droptodrop/droptodrop/internal/queue"
+	authpkg "github.com/droptodrop/droptodrop/internal/auth"
+	"github.com/droptodrop/droptodrop/pkg/shopify"
 )
+
+// encryptionKey is set during service init for Shopify token decryption.
+var encryptionKey string
+
+// SetEncryptionKey sets the key used to decrypt Shopify access tokens.
+func SetEncryptionKey(key string) {
+	encryptionKey = key
+}
 
 // Import represents a reseller's imported product.
 type Import struct {
@@ -171,8 +181,16 @@ func (s *Service) Create(ctx context.Context, resellerShopID string, input Impor
 	return &imp, nil
 }
 
-// DeleteImport removes an import and its variants.
+// DeleteImport removes an import, its variants, product links, and the product from Shopify.
 func (s *Service) DeleteImport(ctx context.Context, resellerShopID, importID string) error {
+	// Get the Shopify product ID before deleting
+	var shopifyProductID *int64
+	s.db.QueryRow(ctx, `SELECT shopify_product_id FROM reseller_imports WHERE id = $1 AND reseller_shop_id = $2`, importID, resellerShopID).Scan(&shopifyProductID)
+
+	// Deactivate product links
+	s.db.Exec(ctx, `UPDATE product_links SET is_active = FALSE WHERE import_id = $1`, importID)
+
+	// Delete the import (cascades to variants via FK)
 	result, err := s.db.Exec(ctx, `
 		DELETE FROM reseller_imports WHERE id = $1 AND reseller_shop_id = $2
 	`, importID, resellerShopID)
@@ -182,6 +200,12 @@ func (s *Service) DeleteImport(ctx context.Context, resellerShopID, importID str
 	if result.RowsAffected() == 0 {
 		return fmt.Errorf("import not found")
 	}
+
+	// Delete the product from reseller's Shopify store
+	if shopifyProductID != nil && *shopifyProductID > 0 {
+		go s.deleteShopifyProduct(resellerShopID, *shopifyProductID)
+	}
+
 	s.audit.Log(ctx, resellerShopID, "merchant", resellerShopID, "import_deleted", "reseller_import", importID, nil, "success", "")
 	return nil
 }
@@ -253,5 +277,49 @@ func calculateResellerPrice(wholesale float64, markupType string, markupValue fl
 		return wholesale * (1 + markupValue/100)
 	default:
 		return wholesale * 1.3
+	}
+}
+
+// deleteShopifyProduct deletes a product from the reseller's Shopify store.
+func (s *Service) deleteShopifyProduct(resellerShopID string, shopifyProductID int64) {
+	ctx := context.Background()
+
+	var shopDomain, encToken string
+	err := s.db.QueryRow(ctx, `
+		SELECT s.shopify_domain, ai.access_token
+		FROM shops s
+		JOIN app_installations ai ON ai.shop_id = s.id AND ai.is_active = TRUE
+		WHERE s.id = $1
+	`, resellerShopID).Scan(&shopDomain, &encToken)
+	if err != nil {
+		s.logger.Warn().Err(err).Msg("failed to get reseller credentials for product deletion")
+		return
+	}
+
+	token, err := authpkg.Decrypt(encToken, encryptionKey)
+	if err != nil {
+		s.logger.Warn().Err(err).Msg("failed to decrypt token for product deletion")
+		return
+	}
+
+	client := shopify.NewClient(shopDomain, token, s.logger)
+
+	deleteQuery := `mutation deleteProduct($input: ProductDeleteInput!) {
+		productDelete(input: $input) {
+			deletedProductId
+			userErrors { field message }
+		}
+	}`
+	deleteVars := map[string]interface{}{
+		"input": map[string]interface{}{
+			"id": fmt.Sprintf("gid://shopify/Product/%d", shopifyProductID),
+		},
+	}
+
+	var resp json.RawMessage
+	if err := client.GraphQL(ctx, deleteQuery, deleteVars, &resp); err != nil {
+		s.logger.Warn().Err(err).Int64("product_id", shopifyProductID).Msg("failed to delete product from Shopify")
+	} else {
+		s.logger.Info().Int64("product_id", shopifyProductID).Msg("product deleted from reseller's Shopify store")
 	}
 }

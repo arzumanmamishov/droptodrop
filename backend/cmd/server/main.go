@@ -71,6 +71,7 @@ func main() {
 	shopsSvc := shops.NewService(db, logger, auditSvc)
 	productsSvc := products.NewService(db, logger, auditSvc)
 	importsSvc := imports.NewService(db, redisClient, logger, auditSvc)
+	imports.SetEncryptionKey(cfg.Security.EncryptionKey)
 	ordersSvc := orders.NewService(db, redisClient, logger, auditSvc)
 	fulfillmentsSvc := fulfillments.NewService(db, redisClient, logger, auditSvc)
 	disputesSvc := disputes.NewService(db, logger)
