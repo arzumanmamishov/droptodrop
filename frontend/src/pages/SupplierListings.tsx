@@ -1,26 +1,11 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Page,
-  Layout,
-  Card,
-  DataTable,
-  Badge,
-  Button,
-  Spinner,
-  Banner,
-  Filters,
-  ChoiceList,
-  BlockStack,
-  Text,
-  InlineStack,
-  Thumbnail,
-  InlineGrid,
-  Icon,
-  EmptyState,
-  TextField,
+  Page, Layout, Card, Badge, Button, Spinner, Banner,
+  BlockStack, Text, InlineStack, Thumbnail, TextField,
+  EmptyState, Divider,
 } from '@shopify/polaris';
-import { ImageIcon, CheckIcon, ClockIcon, PauseCircleIcon } from '@shopify/polaris-icons';
+import { ImageIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
 import { api } from '../utils/api';
 import { SupplierListing } from '../types';
@@ -36,73 +21,53 @@ interface ListingsResponse {
 export default function SupplierListings() {
   const navigate = useNavigate();
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [page, setPage] = useState(0);
-  const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [search, setSearch] = useState('');
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [bulkAction, setBulkAction] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
-  const limit = 20;
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkLoading, setBulkLoading] = useState(false);
 
-  const statusQuery = statusFilter.length === 1 ? `&status=${statusFilter[0]}` : '';
   const { data, loading, error, refetch } = useApi<ListingsResponse>(
-    `/supplier/listings?limit=${limit}&offset=${page * limit}${statusQuery}`,
+    '/supplier/listings?limit=100&offset=0',
   );
 
-  const handleStatusChange = useCallback(
-    async (listingId: string, newStatus: string) => {
+  const handleStatusChange = useCallback(async (id: string, status: string) => {
+    try {
+      await api.put(`/supplier/listings/${id}/status`, { status });
+      refetch();
+    } catch { /* */ }
+  }, [refetch]);
+
+  const handleDelete = useCallback(async (id: string) => {
+    try {
+      await api.delete(`/supplier/listings/${id}`);
+      refetch();
+    } catch { /* */ }
+  }, [refetch]);
+
+  const handleBulkAction = useCallback(async (action: 'active' | 'paused' | 'delete') => {
+    setBulkLoading(true);
+    for (const id of selectedIds) {
       try {
-        await api.put(`/supplier/listings/${listingId}/status`, { status: newStatus });
-        refetch();
-      } catch {
-        // Error handling
-      }
-    },
-    [refetch],
-  );
-
-  const handleDelete = useCallback(
-    async (listingId: string) => {
-      try {
-        await api.delete(`/supplier/listings/${listingId}`);
-        refetch();
-      } catch {
-        // Error handling
-      }
-    },
-    [refetch],
-  );
-
-  const handleBulkDelete = useCallback(async () => {
-    setBulkAction(true);
-    for (const id of selectedIds) {
-      try { await api.delete(`/supplier/listings/${id}`); } catch { /* skip */ }
+        if (action === 'delete') {
+          await api.delete(`/supplier/listings/${id}`);
+        } else {
+          await api.put(`/supplier/listings/${id}/status`, { status: action });
+        }
+      } catch { /* */ }
     }
     setSelectedIds(new Set());
-    setBulkAction(false);
+    setBulkLoading(false);
     refetch();
   }, [selectedIds, refetch]);
 
-  const handleBulkPublish = useCallback(async () => {
-    setBulkAction(true);
-    for (const id of selectedIds) {
-      try { await api.put(`/supplier/listings/${id}/status`, { status: 'active' }); } catch { /* skip */ }
-    }
-    setSelectedIds(new Set());
-    setBulkAction(false);
-    refetch();
-  }, [selectedIds, refetch]);
-
-  const handleBulkPause = useCallback(async () => {
-    setBulkAction(true);
-    for (const id of selectedIds) {
-      try { await api.put(`/supplier/listings/${id}/status`, { status: 'paused' }); } catch { /* skip */ }
-    }
-    setSelectedIds(new Set());
-    setBulkAction(false);
-    refetch();
-  }, [selectedIds, refetch]);
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  };
 
   if (loading) {
     return (
@@ -115,7 +80,7 @@ export default function SupplierListings() {
   }
 
   const listings = data?.listings || [];
-  const filteredListings = search
+  const filtered = search
     ? listings.filter(l => l.title.toLowerCase().includes(search.toLowerCase()))
     : listings;
 
@@ -123,187 +88,131 @@ export default function SupplierListings() {
   const draftCount = listings.filter(l => l.status === 'draft').length;
   const pausedCount = listings.filter(l => l.status === 'paused').length;
 
-  const statusBadge = (status: string) => {
-    const toneMap: Record<string, 'success' | 'attention' | 'critical' | 'info'> = {
+  const getImage = (listing: SupplierListing): string | null => {
+    try {
+      const imgs = typeof listing.images === 'string' ? JSON.parse(listing.images || '[]') : (listing.images || []);
+      return imgs[0]?.url || imgs[0]?.URL || null;
+    } catch { return null; }
+  };
+
+  const statusTone = (s: string): 'success' | 'attention' | 'info' | 'critical' => {
+    const map: Record<string, 'success' | 'attention' | 'info' | 'critical'> = {
       active: 'success', draft: 'info', paused: 'attention', archived: 'critical',
     };
-    return <Badge tone={toneMap[status]}>{status}</Badge>;
+    return map[s] || 'info';
   };
-
-  const toggleSelect = (id: string) => {
-    setSelectedIds(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id); else next.add(id);
-      return next;
-    });
-  };
-
-  const toggleSelectAll = () => {
-    if (selectedIds.size === filteredListings.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredListings.map(l => l.id)));
-    }
-  };
-
-  const rows = filteredListings.map((listing) => {
-    const images = typeof listing.images === 'string' ? JSON.parse(listing.images || '[]') : (listing.images || []);
-    const imgUrl = images[0]?.url || images[0]?.URL;
-    return [
-      <input key={`cb-${listing.id}`} type="checkbox" checked={selectedIds.has(listing.id)} onChange={() => toggleSelect(listing.id)} />,
-      <Thumbnail key={`img-${listing.id}`} source={imgUrl || ImageIcon} alt={listing.title} size="small" />,
-      listing.title,
-      <Badge key={`cat-${listing.id}`} tone="info">{getCategoryLabel(listing.category)}</Badge>,
-      String(listing.variants?.length || 0),
-      statusBadge(listing.status),
-      `${listing.processing_days}d`,
-      new Date(listing.updated_at).toLocaleDateString(),
-      <InlineStack gap="200" key={listing.id}>
-        <Button size="slim" onClick={() => navigate(`/supplier/listings/${listing.id}`)}>Edit</Button>
-        {listing.status === 'draft' && (
-          <Button size="slim" onClick={() => handleStatusChange(listing.id, 'active')}>Publish</Button>
-        )}
-        {listing.status === 'active' && (
-          <Button size="slim" onClick={() => handleStatusChange(listing.id, 'paused')}>Pause</Button>
-        )}
-        {listing.status === 'paused' && (
-          <Button size="slim" onClick={() => handleStatusChange(listing.id, 'active')}>Resume</Button>
-        )}
-        <Button size="slim" tone="critical" onClick={() => setConfirmDelete(listing.id)}>Delete</Button>
-      </InlineStack>,
-    ];
-  });
-
-  const totalPages = Math.ceil((data?.total || 0) / limit);
 
   return (
     <Page
-      title="Supplier Listings"
-      subtitle={`${data?.total || 0} products`}
+      title="Listings"
+      subtitle={`${listings.length} products`}
       primaryAction={{ content: 'Add Products', onAction: () => setPickerOpen(true) }}
     >
       <Layout>
-        {error && (
-          <Layout.Section>
-            <Banner tone="critical">{error}</Banner>
-          </Layout.Section>
-        )}
+        {error && <Layout.Section><Banner tone="critical">{error}</Banner></Layout.Section>}
 
+        {/* Stats */}
         <Layout.Section>
-          <InlineGrid columns={{ xs: 1, md: 3 }} gap="400">
-            <Card>
-              <InlineStack gap="300" blockAlign="center">
-                <div style={{ background: '#e3f1df', borderRadius: '8px', padding: '8px', display: 'flex' }}>
-                  <Icon source={CheckIcon} />
-                </div>
-                <BlockStack gap="050">
-                  <Text as="p" variant="headingLg">{activeCount}</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">Active</Text>
-                </BlockStack>
-              </InlineStack>
-            </Card>
-            <Card>
-              <InlineStack gap="300" blockAlign="center">
-                <div style={{ background: '#e0f0ff', borderRadius: '8px', padding: '8px', display: 'flex' }}>
-                  <Icon source={ClockIcon} />
-                </div>
-                <BlockStack gap="050">
-                  <Text as="p" variant="headingLg">{draftCount}</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">Draft</Text>
-                </BlockStack>
-              </InlineStack>
-            </Card>
-            <Card>
-              <InlineStack gap="300" blockAlign="center">
-                <div style={{ background: '#fef3cd', borderRadius: '8px', padding: '8px', display: 'flex' }}>
-                  <Icon source={PauseCircleIcon} />
-                </div>
-                <BlockStack gap="050">
-                  <Text as="p" variant="headingLg">{pausedCount}</Text>
-                  <Text as="p" variant="bodySm" tone="subdued">Paused</Text>
-                </BlockStack>
-              </InlineStack>
-            </Card>
-          </InlineGrid>
+          <InlineStack gap="300">
+            <div className="stat-card" style={{ flex: 1 }}>
+              <div className="stat-card-value">{activeCount}</div>
+              <div className="stat-card-label">Active</div>
+            </div>
+            <div className="stat-card" style={{ flex: 1 }}>
+              <div className="stat-card-value">{draftCount}</div>
+              <div className="stat-card-label">Draft</div>
+            </div>
+            <div className="stat-card" style={{ flex: 1 }}>
+              <div className="stat-card-value">{pausedCount}</div>
+              <div className="stat-card-label">Paused</div>
+            </div>
+          </InlineStack>
         </Layout.Section>
 
+        {/* Search + Bulk Actions */}
         <Layout.Section>
           <Card>
-            <BlockStack gap="400">
-              <InlineStack gap="400" align="space-between" blockAlign="end">
-                <div style={{ flex: 1 }}>
-                  <TextField
-                    label=""
-                    labelHidden
-                    value={search}
-                    onChange={setSearch}
-                    placeholder="Search listings..."
-                    autoComplete="off"
-                    clearButton
-                    onClearButtonClick={() => setSearch('')}
-                  />
-                </div>
-                <Filters
-                  queryValue=""
-                  filters={[{
-                    key: 'status',
-                    label: 'Status',
-                    filter: (
-                      <ChoiceList
-                        title="Status" titleHidden
-                        choices={[
-                          { label: 'Active', value: 'active' },
-                          { label: 'Draft', value: 'draft' },
-                          { label: 'Paused', value: 'paused' },
-                        ]}
-                        selected={statusFilter}
-                        onChange={(v) => { setStatusFilter(v); setPage(0); }}
-                      />
-                    ),
-                    shortcut: true,
-                  }]}
-                  onQueryChange={() => {}}
-                  onQueryClear={() => {}}
-                  onClearAll={() => setStatusFilter([])}
-                />
-              </InlineStack>
-
+            <BlockStack gap="300">
+              <TextField
+                label="" labelHidden value={search} onChange={setSearch}
+                placeholder="Search listings..." autoComplete="off"
+                clearButton onClearButtonClick={() => setSearch('')}
+              />
               {selectedIds.size > 0 && (
-                <InlineStack gap="200">
-                  <Text as="span" variant="bodySm">{selectedIds.size} selected</Text>
-                  <Button size="slim" loading={bulkAction} onClick={handleBulkPublish}>Publish</Button>
-                  <Button size="slim" loading={bulkAction} onClick={handleBulkPause}>Pause</Button>
-                  <Button size="slim" tone="critical" loading={bulkAction} onClick={() => setConfirmBulkDelete(true)}>Delete</Button>
-                </InlineStack>
-              )}
-
-              {rows.length > 0 ? (
-                <>
-                  <InlineStack gap="200">
-                    <input type="checkbox" checked={selectedIds.size === filteredListings.length && filteredListings.length > 0} onChange={toggleSelectAll} />
-                    <Text as="span" variant="bodySm" tone="subdued">Select all</Text>
-                  </InlineStack>
-                  <DataTable
-                    columnContentTypes={['text', 'text', 'text', 'text', 'numeric', 'text', 'text', 'text', 'text']}
-                    headings={['', '', 'Product', 'Category', 'Variants', 'Status', 'Processing', 'Updated', 'Actions']}
-                    rows={rows}
-                  />
-                </>
-              ) : (
-                <EmptyState heading="No listings yet" image="">
-                  <p>Add products from your Shopify store to list them for resellers.</p>
-                </EmptyState>
-              )}
-
-              {totalPages > 1 && (
-                <InlineStack align="center" gap="200">
-                  <Button disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Previous</Button>
-                  <Text as="span" variant="bodySm">Page {page + 1} of {totalPages}</Text>
-                  <Button disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>Next</Button>
+                <InlineStack gap="200" blockAlign="center">
+                  <Text as="span" variant="bodySm" fontWeight="semibold">{selectedIds.size} selected</Text>
+                  <Button size="slim" loading={bulkLoading} onClick={() => handleBulkAction('active')}>Publish</Button>
+                  <Button size="slim" loading={bulkLoading} onClick={() => handleBulkAction('paused')}>Pause</Button>
+                  <Button size="slim" tone="critical" loading={bulkLoading} onClick={() => setConfirmBulkDelete(true)}>Delete</Button>
                 </InlineStack>
               )}
             </BlockStack>
           </Card>
+        </Layout.Section>
+
+        {/* Product List */}
+        <Layout.Section>
+          {filtered.length > 0 ? (
+            <Card>
+              <BlockStack gap="0">
+                {filtered.map((listing, i) => {
+                  const imgUrl = getImage(listing);
+                  const isSelected = selectedIds.has(listing.id);
+                  return (
+                    <div key={listing.id}>
+                      <div style={{
+                        padding: '14px 16px',
+                        background: isSelected ? '#f0fdf4' : 'transparent',
+                      }}>
+                        <InlineStack align="space-between" blockAlign="center" wrap={false}>
+                          {/* Left: checkbox + image + info */}
+                          <InlineStack gap="300" blockAlign="center" wrap={false}>
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleSelect(listing.id)}
+                              style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                            />
+                            <Thumbnail source={imgUrl || ImageIcon} alt={listing.title} size="small" />
+                            <BlockStack gap="050">
+                              <Text as="span" variant="bodyMd" fontWeight="semibold">{listing.title}</Text>
+                              <InlineStack gap="200">
+                                <Badge tone={statusTone(listing.status)}>{listing.status}</Badge>
+                                <Text as="span" variant="bodySm" tone="subdued">{getCategoryLabel(listing.category)}</Text>
+                                <Text as="span" variant="bodySm" tone="subdued">{listing.processing_days}d</Text>
+                              </InlineStack>
+                            </BlockStack>
+                          </InlineStack>
+
+                          {/* Right: actions */}
+                          <InlineStack gap="200" wrap={false}>
+                            <Button size="slim" onClick={() => navigate(`/supplier/listings/${listing.id}`)}>Edit</Button>
+                            {listing.status === 'draft' && (
+                              <Button size="slim" variant="primary" onClick={() => handleStatusChange(listing.id, 'active')}>Publish</Button>
+                            )}
+                            {listing.status === 'active' && (
+                              <Button size="slim" onClick={() => handleStatusChange(listing.id, 'paused')}>Pause</Button>
+                            )}
+                            {listing.status === 'paused' && (
+                              <Button size="slim" onClick={() => handleStatusChange(listing.id, 'active')}>Resume</Button>
+                            )}
+                            <Button size="slim" tone="critical" onClick={() => setConfirmDelete(listing.id)}>Delete</Button>
+                          </InlineStack>
+                        </InlineStack>
+                      </div>
+                      {i < filtered.length - 1 && <Divider />}
+                    </div>
+                  );
+                })}
+              </BlockStack>
+            </Card>
+          ) : (
+            <Card>
+              <EmptyState heading="No listings yet" image="">
+                <p>Add products from your Shopify store to list them for resellers.</p>
+              </EmptyState>
+            </Card>
+          )}
         </Layout.Section>
       </Layout>
 
@@ -316,16 +225,16 @@ export default function SupplierListings() {
       <ConfirmDialog
         open={confirmDelete !== null}
         title="Delete Listing"
-        message="Are you sure you want to delete this listing? This action cannot be undone. Any resellers who imported this product will be notified."
+        message="Are you sure you want to delete this listing? This cannot be undone."
         onConfirm={() => { if (confirmDelete) { handleDelete(confirmDelete); setConfirmDelete(null); } }}
         onCancel={() => setConfirmDelete(null)}
       />
 
       <ConfirmDialog
         open={confirmBulkDelete}
-        title="Delete Selected Listings"
-        message={`Are you sure you want to delete ${selectedIds.size} listing(s)? This action cannot be undone.`}
-        onConfirm={() => { handleBulkDelete(); setConfirmBulkDelete(false); }}
+        title="Delete Selected"
+        message={`Delete ${selectedIds.size} listing(s)? This cannot be undone.`}
+        onConfirm={() => { handleBulkAction('delete'); setConfirmBulkDelete(false); }}
         onCancel={() => setConfirmBulkDelete(false)}
       />
     </Page>
