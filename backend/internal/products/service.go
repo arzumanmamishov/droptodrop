@@ -205,7 +205,7 @@ func (s *Service) ListSupplierListings(ctx context.Context, shopID string, statu
 	return listings, total, nil
 }
 
-// UpdateListingStatus changes the status of a listing.
+// UpdateListingStatus changes the status of a listing and cascades to reseller imports.
 func (s *Service) UpdateListingStatus(ctx context.Context, shopID, listingID, status string) error {
 	result, err := s.db.Exec(ctx, `
 		UPDATE supplier_listings SET status = $1 WHERE id = $2 AND supplier_shop_id = $3
@@ -215,6 +215,30 @@ func (s *Service) UpdateListingStatus(ctx context.Context, shopID, listingID, st
 	}
 	if result.RowsAffected() == 0 {
 		return fmt.Errorf("listing not found")
+	}
+
+	// Cascade status change to reseller imports
+	if status == "paused" || status == "archived" {
+		s.db.Exec(ctx, `
+			UPDATE reseller_imports SET status = 'paused', last_sync_error = $1
+			WHERE supplier_listing_id = $2 AND status = 'active'
+		`, "Supplier "+status+" this product", listingID)
+
+		s.db.Exec(ctx, `
+			UPDATE product_links SET is_active = FALSE
+			WHERE supplier_shop_id = $1 AND import_id IN (SELECT id FROM reseller_imports WHERE supplier_listing_id = $2)
+		`, shopID, listingID)
+	} else if status == "active" {
+		// Re-activate imports when listing is published again
+		s.db.Exec(ctx, `
+			UPDATE reseller_imports SET status = 'active', last_sync_error = NULL
+			WHERE supplier_listing_id = $1 AND status = 'paused'
+		`, listingID)
+
+		s.db.Exec(ctx, `
+			UPDATE product_links SET is_active = TRUE
+			WHERE supplier_shop_id = $1 AND import_id IN (SELECT id FROM reseller_imports WHERE supplier_listing_id = $2)
+		`, shopID, listingID)
 	}
 
 	s.audit.Log(ctx, shopID, "merchant", shopID, "listing_status_changed", "supplier_listing", listingID, map[string]string{"status": status}, "success", "")
