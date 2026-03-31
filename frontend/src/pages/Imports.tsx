@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ConfirmDialog from '../components/ConfirmDialog';
 import {
   Page,
   Layout,
@@ -45,6 +46,8 @@ export default function Imports() {
     } catch { /* */ }
     finally { setSyncing(null); }
   }, [refetch]);
+
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const handleDelete = useCallback(async (importId: string) => {
     try {
@@ -97,7 +100,7 @@ export default function Imports() {
       <Button size="slim" loading={syncing === imp.id} onClick={() => handleResync(imp.id)}>
         Re-sync
       </Button>
-      <Button size="slim" tone="critical" onClick={() => handleDelete(imp.id)}>
+      <Button size="slim" tone="critical" onClick={() => setConfirmDelete(imp.id)}>
         Delete
       </Button>
     </InlineStack>,
@@ -178,6 +181,14 @@ export default function Imports() {
           </Card>
         </Layout.Section>
       </Layout>
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title="Delete Import"
+        message="Are you sure you want to remove this imported product? The product will remain in your Shopify store but will no longer sync with the supplier."
+        onConfirm={() => { if (confirmDelete) { handleDelete(confirmDelete); setConfirmDelete(null); } }}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </Page>
   );
 }

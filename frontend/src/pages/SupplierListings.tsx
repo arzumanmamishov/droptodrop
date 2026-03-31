@@ -26,6 +26,7 @@ import { api } from '../utils/api';
 import { SupplierListing } from '../types';
 import { getCategoryLabel } from '../constants/categories';
 import ProductPicker from '../components/ProductPicker';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 interface ListingsResponse {
   listings: SupplierListing[];
@@ -40,6 +41,8 @@ export default function SupplierListings() {
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkAction, setBulkAction] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const limit = 20;
 
   const statusQuery = statusFilter.length === 1 ? `&status=${statusFilter[0]}` : '';
@@ -166,7 +169,7 @@ export default function SupplierListings() {
         {listing.status === 'paused' && (
           <Button size="slim" onClick={() => handleStatusChange(listing.id, 'active')}>Resume</Button>
         )}
-        <Button size="slim" tone="critical" onClick={() => handleDelete(listing.id)}>Delete</Button>
+        <Button size="slim" tone="critical" onClick={() => setConfirmDelete(listing.id)}>Delete</Button>
       </InlineStack>,
     ];
   });
@@ -270,7 +273,7 @@ export default function SupplierListings() {
                   <Text as="span" variant="bodySm">{selectedIds.size} selected</Text>
                   <Button size="slim" loading={bulkAction} onClick={handleBulkPublish}>Publish</Button>
                   <Button size="slim" loading={bulkAction} onClick={handleBulkPause}>Pause</Button>
-                  <Button size="slim" tone="critical" loading={bulkAction} onClick={handleBulkDelete}>Delete</Button>
+                  <Button size="slim" tone="critical" loading={bulkAction} onClick={() => setConfirmBulkDelete(true)}>Delete</Button>
                 </InlineStack>
               )}
 
@@ -308,6 +311,22 @@ export default function SupplierListings() {
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
         onImport={() => { setPickerOpen(false); refetch(); }}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title="Delete Listing"
+        message="Are you sure you want to delete this listing? This action cannot be undone. Any resellers who imported this product will be notified."
+        onConfirm={() => { if (confirmDelete) { handleDelete(confirmDelete); setConfirmDelete(null); } }}
+        onCancel={() => setConfirmDelete(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title="Delete Selected Listings"
+        message={`Are you sure you want to delete ${selectedIds.size} listing(s)? This action cannot be undone.`}
+        onConfirm={() => { handleBulkDelete(); setConfirmBulkDelete(false); }}
+        onCancel={() => setConfirmBulkDelete(false)}
       />
     </Page>
   );

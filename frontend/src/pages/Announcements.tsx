@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import ConfirmDialog from '../components/ConfirmDialog';
 import {
   Page, Layout, Card, BlockStack, Text, Badge, Button, Spinner,
   Banner, InlineStack, Divider, Modal, FormLayout, TextField, Checkbox,
@@ -52,6 +53,8 @@ export default function Announcements({ role }: Props) {
       setCreating(false);
     }
   }, [title, content, isPinned, refetch]);
+
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const handleDelete = useCallback(async (id: string) => {
     try {
@@ -111,7 +114,7 @@ export default function Announcements({ role }: Props) {
                         <Button size="slim" onClick={() => handleMarkRead(ann.id)}>Mark as Read</Button>
                       )}
                       {isSupplier && (
-                        <Button size="slim" tone="critical" onClick={() => handleDelete(ann.id)}>Delete</Button>
+                        <Button size="slim" tone="critical" onClick={() => setConfirmDelete(ann.id)}>Delete</Button>
                       )}
                     </InlineStack>
                   </BlockStack>
@@ -144,6 +147,14 @@ export default function Announcements({ role }: Props) {
           </Modal.Section>
         </Modal>
       )}
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        title="Delete Announcement"
+        message="Are you sure you want to delete this announcement? All resellers will no longer see it."
+        onConfirm={() => { if (confirmDelete) { handleDelete(confirmDelete); setConfirmDelete(null); } }}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </Page>
   );
 }
