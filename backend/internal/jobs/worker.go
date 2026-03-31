@@ -628,19 +628,102 @@ func (w *Worker) handleSyncProduct(ctx context.Context, payload json.RawMessage)
 	}
 	defer rows.Close()
 
+	type variantSync struct {
+		ImportVarID  string
+		ShopifyVarID *int64
+		Wholesale    float64
+		Inventory    int
+	}
+	var variantsToSync []variantSync
 	for rows.Next() {
-		var importVarID string
-		var shopifyVarID *int64
-		var wholesale float64
-		var inventory int
-		if err := rows.Scan(&importVarID, &shopifyVarID, &wholesale, &inventory); err != nil {
+		var v variantSync
+		if err := rows.Scan(&v.ImportVarID, &v.ShopifyVarID, &v.Wholesale, &v.Inventory); err != nil {
 			return fmt.Errorf("scan variant: %w", err)
 		}
+		variantsToSync = append(variantsToSync, v)
+	}
+	rows.Close()
 
-		newPrice := calculateResellerPrice(wholesale, markupType, markupValue)
-		_, _ = w.db.Exec(ctx, `
-			UPDATE reseller_import_variants SET reseller_price = $2 WHERE id = $1
-		`, importVarID, newPrice)
+	// Get Shopify client
+	client, _, err := w.getShopifyClient(ctx, params.ResellerShopID)
+	if err != nil {
+		return fmt.Errorf("get shopify client: %w", err)
+	}
+
+	// Update each variant's price and inventory in Shopify
+	for _, v := range variantsToSync {
+		newPrice := calculateResellerPrice(v.Wholesale, markupType, markupValue)
+		_, _ = w.db.Exec(ctx, `UPDATE reseller_import_variants SET reseller_price = $2 WHERE id = $1`, v.ImportVarID, newPrice)
+
+		if v.ShopifyVarID != nil && *v.ShopifyVarID > 0 {
+			variantGID := fmt.Sprintf("gid://shopify/ProductVariant/%d", *v.ShopifyVarID)
+
+			// Update price
+			priceQuery := `mutation variantUpdate($input: ProductVariantInput!) {
+				productVariantUpdate(input: $input) {
+					productVariant { id price }
+					userErrors { field message }
+				}
+			}`
+			var priceResp json.RawMessage
+			client.GraphQL(ctx, priceQuery, map[string]interface{}{
+				"input": map[string]interface{}{
+					"id":    variantGID,
+					"price": fmt.Sprintf("%.2f", newPrice),
+				},
+			}, &priceResp)
+
+			// Enable tracking and set inventory
+			invQuery := `query getInv($id: ID!) { productVariant(id: $id) { inventoryItem { id tracked } } }`
+			var invResp struct {
+				Data struct {
+					ProductVariant struct {
+						InventoryItem struct {
+							ID      string `json:"id"`
+							Tracked bool   `json:"tracked"`
+						} `json:"inventoryItem"`
+					} `json:"productVariant"`
+				} `json:"data"`
+			}
+			if err := client.GraphQL(ctx, invQuery, map[string]interface{}{"id": variantGID}, &invResp); err == nil {
+				invItemID := invResp.Data.ProductVariant.InventoryItem.ID
+				if invItemID != "" {
+					// Enable tracking
+					if !invResp.Data.ProductVariant.InventoryItem.Tracked {
+						var trackResp json.RawMessage
+						client.GraphQL(ctx, `mutation($id: ID!, $input: InventoryItemInput!) { inventoryItemUpdate(id: $id, input: $input) { inventoryItem { id } userErrors { field message } } }`,
+							map[string]interface{}{"id": invItemID, "input": map[string]interface{}{"tracked": true}}, &trackResp)
+					}
+
+					// Get location and set quantity
+					var locResp struct {
+						Data struct {
+							Locations struct {
+								Edges []struct{ Node struct{ ID string `json:"id"` } `json:"node"` } `json:"edges"`
+							} `json:"locations"`
+						} `json:"data"`
+					}
+					if err := client.GraphQL(ctx, `{ locations(first:1) { edges { node { id } } } }`, nil, &locResp); err == nil && len(locResp.Data.Locations.Edges) > 0 {
+						locationID := locResp.Data.Locations.Edges[0].Node.ID
+
+						// Get stock percent
+						var stockPct int
+						w.db.QueryRow(ctx, `SELECT COALESCE(marketplace_stock_percent,100) FROM supplier_listings WHERE id = $1`, supplierListingID).Scan(&stockPct)
+						qty := (v.Inventory * stockPct) / 100
+						if qty < 1 { qty = 1 }
+
+						var setResp json.RawMessage
+						client.GraphQL(ctx, `mutation($input: InventorySetQuantitiesInput!) { inventorySetQuantities(input: $input) { inventoryAdjustmentGroup { reason } userErrors { field message } } }`,
+							map[string]interface{}{"input": map[string]interface{}{
+								"name": "available", "reason": "correction",
+								"quantities": []map[string]interface{}{{"inventoryItemId": invItemID, "locationId": locationID, "quantity": qty}},
+							}}, &setResp)
+
+						w.logger.Info().Int("qty", qty).Float64("price", newPrice).Msg("variant synced to Shopify")
+					}
+				}
+			}
+		}
 	}
 
 	// Update sync timestamp
