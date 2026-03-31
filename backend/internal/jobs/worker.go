@@ -380,7 +380,29 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 		if err := client.GraphQL(ctx, invQuery, map[string]interface{}{"variantId": variantGID}, &invResp); err != nil {
 			w.logger.Warn().Err(err).Msg("failed to get inventory item")
 		} else if invResp.Data.ProductVariant.InventoryItem.ID != "" {
-			// Get the shop's primary location
+			inventoryItemID := invResp.Data.ProductVariant.InventoryItem.ID
+
+			// Step 1: Enable inventory tracking if not already tracked
+			if !invResp.Data.ProductVariant.InventoryItem.Tracked {
+				trackQuery := `mutation enableTracking($id: ID!, $input: InventoryItemInput!) {
+					inventoryItemUpdate(id: $id, input: $input) {
+						inventoryItem { id tracked }
+						userErrors { field message }
+					}
+				}`
+				trackVars := map[string]interface{}{
+					"id":    inventoryItemID,
+					"input": map[string]interface{}{"tracked": true},
+				}
+				var trackResp json.RawMessage
+				if err := client.GraphQL(ctx, trackQuery, trackVars, &trackResp); err != nil {
+					w.logger.Warn().Err(err).Msg("failed to enable inventory tracking")
+				} else {
+					w.logger.Info().Msg("inventory tracking enabled")
+				}
+			}
+
+			// Step 2: Get the shop's primary location
 			locQuery := `{ locations(first: 1) { edges { node { id } } } }`
 			var locResp struct {
 				Data struct {
@@ -397,7 +419,6 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 				w.logger.Warn().Err(err).Msg("failed to get location")
 			} else if len(locResp.Data.Locations.Edges) > 0 {
 				locationID := locResp.Data.Locations.Edges[0].Node.ID
-				inventoryItemID := invResp.Data.ProductVariant.InventoryItem.ID
 
 				// Get supplier's inventory quantity for this variant
 				supplierQty := 100 // default
@@ -441,9 +462,9 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 				}
 				var setInvResp json.RawMessage
 				if err := client.GraphQL(ctx, setInvQuery, setInvVars, &setInvResp); err != nil {
-					w.logger.Warn().Err(err).Msg("failed to set inventory")
+					w.logger.Warn().Err(err).RawJSON("response", setInvResp).Msg("failed to set inventory")
 				} else {
-					w.logger.Info().Int("quantity", availableQty).Int("stock_pct", stockPct).Msg("inventory set for imported product")
+					w.logger.Info().Int("quantity", availableQty).Int("stock_pct", stockPct).RawJSON("response", setInvResp).Msg("inventory set for imported product")
 				}
 			}
 		}
