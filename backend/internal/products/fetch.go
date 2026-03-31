@@ -83,6 +83,7 @@ func FetchShopProducts(ctx context.Context, client *shopify.Client, logger zerol
 								title
 								sku
 								price
+								inventoryQuantity
 							}
 						}
 					}
@@ -119,10 +120,11 @@ func FetchShopProducts(ctx context.Context, client *shopify.Client, logger zerol
 						Variants struct {
 							Edges []struct {
 								Node struct {
-									ID               string  `json:"id"`
-									Title            string  `json:"title"`
-									SKU              string  `json:"sku"`
-									Price            string  `json:"price"`
+									ID                string `json:"id"`
+									Title             string `json:"title"`
+									SKU               string `json:"sku"`
+									Price             string `json:"price"`
+									InventoryQuantity int    `json:"inventoryQuantity"`
 								} `json:"node"`
 							} `json:"edges"`
 						} `json:"variants"`
@@ -168,11 +170,12 @@ func FetchShopProducts(ctx context.Context, client *shopify.Client, logger zerol
 			vn := vEdge.Node
 			variantID, _ := shopify.ParseGID(vn.ID)
 			variants = append(variants, ShopVariant{
-				ID:    variantID,
-				GID:   vn.ID,
-				Title: vn.Title,
-				SKU:   vn.SKU,
-				Price: vn.Price,
+				ID:                variantID,
+				GID:               vn.ID,
+				Title:             vn.Title,
+				SKU:               vn.SKU,
+				Price:             vn.Price,
+				InventoryQuantity: vn.InventoryQuantity,
 			})
 		}
 
