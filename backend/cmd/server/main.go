@@ -108,6 +108,16 @@ func main() {
 	r.GET("/auth/install", authHandler.Install)
 	r.GET("/auth/callback", authHandler.Callback)
 
+	// Legal pages (public, no auth)
+	r.GET("/privacy", func(c *gin.Context) {
+		c.Header("Content-Type", "text/html; charset=utf-8")
+		c.String(http.StatusOK, privacyPolicyHTML)
+	})
+	r.GET("/terms", func(c *gin.Context) {
+		c.Header("Content-Type", "text/html; charset=utf-8")
+		c.String(http.StatusOK, termsOfServiceHTML)
+	})
+
 	// Public API (no auth) — for supplier directory and platform stats
 	pub := r.Group("/public")
 	{
