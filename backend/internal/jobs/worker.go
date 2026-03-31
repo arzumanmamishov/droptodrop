@@ -355,14 +355,18 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 			variantInput["compareAtPrice"] = fmt.Sprintf("%.2f", wholesaleForCompare)
 		}
 
-		updateQuery := `mutation variantUpdate($input: ProductVariantInput!) {
-			productVariantUpdate(input: $input) {
-				productVariant { id price compareAtPrice }
+		updateQuery := `mutation updateVariants($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+			productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+				productVariants { id price }
 				userErrors { field message }
 			}
 		}`
+		updateVars := map[string]interface{}{
+			"productId": product.ID,
+			"variants": []map[string]interface{}{variantInput},
+		}
 		var updateResp json.RawMessage
-		if err := client.GraphQL(ctx, updateQuery, map[string]interface{}{"input": variantInput}, &updateResp); err != nil {
+		if err := client.GraphQL(ctx, updateQuery, updateVars, &updateResp); err != nil {
 			w.logger.Warn().Err(err).Msg("failed to update variant price")
 		} else {
 			w.logger.Info().Float64("price", resellerPrice).RawJSON("response", updateResp).Msg("variant price set")
@@ -484,8 +488,9 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 				}`
 				setInvVars := map[string]interface{}{
 					"input": map[string]interface{}{
-						"name":   "available",
-						"reason": "correction",
+						"name":                  "available",
+						"reason":                "correction",
+						"ignoreCompareQuantity": true,
 						"quantities": []map[string]interface{}{
 							{
 								"inventoryItemId": inventoryItemID,
@@ -659,17 +664,18 @@ func (w *Worker) handleSyncProduct(ctx context.Context, payload json.RawMessage)
 			variantGID := fmt.Sprintf("gid://shopify/ProductVariant/%d", *v.ShopifyVarID)
 
 			// Update price
-			priceQuery := `mutation variantUpdate($input: ProductVariantInput!) {
-				productVariantUpdate(input: $input) {
-					productVariant { id price }
+			priceQuery := `mutation updateVariants($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+				productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+					productVariants { id price }
 					userErrors { field message }
 				}
 			}`
+			productGID := fmt.Sprintf("gid://shopify/Product/%d", *resellerProductID)
 			var priceResp json.RawMessage
 			client.GraphQL(ctx, priceQuery, map[string]interface{}{
-				"input": map[string]interface{}{
-					"id":    variantGID,
-					"price": fmt.Sprintf("%.2f", newPrice),
+				"productId": productGID,
+				"variants": []map[string]interface{}{
+					{"id": variantGID, "price": fmt.Sprintf("%.2f", newPrice)},
 				},
 			}, &priceResp)
 
@@ -715,7 +721,7 @@ func (w *Worker) handleSyncProduct(ctx context.Context, payload json.RawMessage)
 						var setResp json.RawMessage
 						client.GraphQL(ctx, `mutation($input: InventorySetQuantitiesInput!) { inventorySetQuantities(input: $input) { inventoryAdjustmentGroup { reason } userErrors { field message } } }`,
 							map[string]interface{}{"input": map[string]interface{}{
-								"name": "available", "reason": "correction",
+								"name": "available", "reason": "correction", "ignoreCompareQuantity": true,
 								"quantities": []map[string]interface{}{{"inventoryItemId": invItemID, "locationId": locationID, "quantity": qty}},
 							}}, &setResp)
 
