@@ -194,13 +194,35 @@ func main() {
 		// Shop
 		api.GET("/shop", func(c *gin.Context) {
 			shopID, _ := c.Get("shop_id")
-			logger.Info().Str("shop_id", shopID.(string)).Msg("fetching shop")
+			shopDomain, _ := c.Get("shop_domain")
 			shop, err := shopsSvc.GetByID(c.Request.Context(), shopID.(string))
 			if err != nil {
-				logger.Error().Err(err).Str("shop_id", shopID.(string)).Msg("shop not found")
 				c.JSON(http.StatusNotFound, gin.H{"error": "shop not found"})
 				return
 			}
+			// Re-register webhooks on every shop load (idempotent)
+			go func() {
+				var encToken string
+				db.QueryRow(context.Background(), `SELECT access_token FROM app_installations WHERE shop_id = $1 AND is_active = TRUE`, shopID.(string)).Scan(&encToken)
+				if encToken != "" {
+					token, err := authpkg.Decrypt(encToken, cfg.Security.EncryptionKey)
+					if err == nil {
+						domain := ""
+						if d, ok := shopDomain.(string); ok { domain = d }
+						if domain == "" { domain = shop.ShopifyDomain }
+						client := shopify.NewClient(domain, token, logger)
+						bgCtx := context.Background()
+						for _, topic := range []string{"PRODUCTS_DELETE", "PRODUCTS_UPDATE", "APP_UNINSTALLED"} {
+							paths := map[string]string{
+								"PRODUCTS_DELETE": "/webhooks/products/delete",
+								"PRODUCTS_UPDATE": "/webhooks/products/update",
+								"APP_UNINSTALLED": "/webhooks/app/uninstalled",
+							}
+							client.RegisterWebhook(bgCtx, topic, cfg.Shopify.AppURL+paths[topic])
+						}
+					}
+				}
+			}()
 			c.JSON(http.StatusOK, shop)
 		})
 
