@@ -308,29 +308,64 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 		}
 	}
 
-	// Update the default variant's price if we have variant data
+	// Update the default variant's price with reseller markup
 	if len(product.Variants.Edges) > 0 && len(variants) > 0 {
 		defaultVariantGID := product.Variants.Edges[0].Node.ID
+		resellerPrice := variants[0].ResellerPrice
+
+		// If reseller price is 0, calculate it from wholesale + markup
+		if resellerPrice <= 0 {
+			var wholesalePrice, markupValue float64
+			var markupType string
+			w.db.QueryRow(ctx, `
+				SELECT slv.wholesale_price, ri.markup_type, ri.markup_value
+				FROM reseller_import_variants riv
+				JOIN supplier_listing_variants slv ON slv.id = riv.supplier_variant_id
+				JOIN reseller_imports ri ON ri.id = riv.import_id
+				WHERE riv.import_id = $1 LIMIT 1
+			`, params.ImportID).Scan(&wholesalePrice, &markupType, &markupValue)
+
+			if markupType == "percentage" {
+				resellerPrice = wholesalePrice * (1 + markupValue/100)
+			} else {
+				resellerPrice = wholesalePrice + markupValue
+			}
+			if resellerPrice <= 0 {
+				resellerPrice = wholesalePrice * 1.3 // 30% default markup
+			}
+		}
+
+		// Get wholesale price for compare_at_price (shows "was" price crossed out)
+		var wholesaleForCompare float64
+		w.db.QueryRow(ctx, `
+			SELECT slv.suggested_retail_price FROM supplier_listing_variants slv
+			JOIN reseller_import_variants riv ON riv.supplier_variant_id = slv.id
+			WHERE riv.import_id = $1 LIMIT 1
+		`, params.ImportID).Scan(&wholesaleForCompare)
+
+		variantInput := map[string]interface{}{
+			"id":    defaultVariantGID,
+			"price": fmt.Sprintf("%.2f", resellerPrice),
+		}
+		if variants[0].SKU != "" {
+			variantInput["sku"] = variants[0].SKU
+		}
+		// Set compare_at_price if suggested retail is higher than reseller price
+		if wholesaleForCompare > resellerPrice {
+			variantInput["compareAtPrice"] = fmt.Sprintf("%.2f", wholesaleForCompare)
+		}
+
 		updateQuery := `mutation variantUpdate($input: ProductVariantInput!) {
 			productVariantUpdate(input: $input) {
-				productVariant { id price }
+				productVariant { id price compareAtPrice }
 				userErrors { field message }
 			}
 		}`
-		updateVars := map[string]interface{}{
-			"input": map[string]interface{}{
-				"id":    defaultVariantGID,
-				"price": fmt.Sprintf("%.2f", variants[0].ResellerPrice),
-				"sku":   variants[0].SKU,
-			},
-		}
 		var updateResp json.RawMessage
-		if err := client.GraphQL(ctx, updateQuery, updateVars, &updateResp); err != nil {
-			w.logger.Warn().Err(err).Msg("failed to update default variant price")
+		if err := client.GraphQL(ctx, updateQuery, map[string]interface{}{"input": variantInput}, &updateResp); err != nil {
+			w.logger.Warn().Err(err).Msg("failed to update variant price")
 		} else {
-			w.logger.Info().RawJSON("variant_update_response", updateResp).
-				Float64("price", variants[0].ResellerPrice).
-				Msg("variant price updated")
+			w.logger.Info().Float64("price", resellerPrice).RawJSON("response", updateResp).Msg("variant price set")
 		}
 	}
 
