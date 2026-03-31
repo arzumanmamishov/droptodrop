@@ -61,8 +61,10 @@ export default function App() {
   if (loading) {
     return (
       <AppProvider i18n={enTranslations}>
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-          <p>Loading...</p>
+        <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', gap: '16px' }}>
+          <div style={{ width: '40px', height: '40px', border: '4px solid #e9ecef', borderTop: '4px solid #2d6a4f', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+          <p style={{ color: '#6d7175', fontSize: '14px' }}>Loading DropToDrop...</p>
+          <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
         </div>
       </AppProvider>
     );
@@ -115,8 +117,17 @@ export default function App() {
             </Routes>
           </AppFrame>
         ) : (
-          <div style={{ padding: '2rem', textAlign: 'center' }}>
-            <p>Please install the app from your Shopify admin.</p>
+          <div style={{ padding: '3rem', textAlign: 'center', maxWidth: '500px', margin: '0 auto' }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔒</div>
+            <h2 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '8px', color: '#202223' }}>App Not Connected</h2>
+            <p style={{ color: '#6d7175', marginBottom: '20px', lineHeight: 1.6 }}>
+              To use DropToDrop, please open this app from your Shopify admin panel.
+              Go to your Shopify store → Apps → DropToDrop.
+            </p>
+            <a href="https://admin.shopify.com" style={{
+              display: 'inline-block', padding: '10px 24px', background: '#2d6a4f',
+              color: 'white', borderRadius: '8px', textDecoration: 'none', fontWeight: 500,
+            }}>Go to Shopify Admin</a>
           </div>
         )}
       </BrowserRouter>

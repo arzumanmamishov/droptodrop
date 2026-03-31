@@ -46,7 +46,9 @@
       "Bash(scalingo --app droptodrop --region osc-fr1 logs --lines 30)",
       "Bash(scalingo --app droptodrop --region osc-fr1 deployment-logs ca6b7552-79e8-405f-beeb-231492a131b5)",
       "Bash(scalingo --app droptodrop --region osc-fr1 deployment-logs 012f3574-df49-42a8-a10d-1fc9fe605eb5)",
-      "Bash(DATABASE_URL=\"postgres://droptodrop_5959:GTJyQJba6VGe8SgeHgjryarrpzsX8_3yXFRnn35DI0mgRnd61s_mrtThgYCjUo_S@127.0.0.1:10001/droptodrop_5959?sslmode=disable\" go run ./cmd/migrate run-sql - <<'SQL':*)"
+      "Bash(DATABASE_URL=\"postgres://droptodrop_5959:GTJyQJba6VGe8SgeHgjryarrpzsX8_3yXFRnn35DI0mgRnd61s_mrtThgYCjUo_S@127.0.0.1:10001/droptodrop_5959?sslmode=disable\" go run ./cmd/migrate run-sql - <<'SQL':*)",
+      "Bash(grep -i \"CREATE TABLE\\\\|customer_shipping\\\\|customer_email\\\\|customer_phone\" C:UserswebdeOneDriveDocumentsdroptodropbackendmigrations/*.sql)",
+      "Bash(grep -r \"shopify-api-key\\\\|api.*key\\\\|setAttribute\" C:UserswebdeOneDriveDocumentsdroptodrop --include=*.tsx --include=*.ts --include=*.html)"
     ]
   }
 }
