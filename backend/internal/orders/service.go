@@ -168,21 +168,71 @@ func (s *Service) RouteOrder(ctx context.Context, resellerShopID string, orderPa
 			totalWholesale += item.WholesalePrice * float64(item.Quantity)
 		}
 
+		// ==========================================
+		// STOCK VALIDATION (post-purchase queue)
+		// ==========================================
+		// Check supplier stock INSIDE transaction with row lock
+		// to prevent concurrent overselling
+		stockSufficient := true
+		stockFailureReason := ""
+
+		for _, item := range items {
+			var availableQty int
+			var stockPct int
+
+			// Lock the variant row to prevent concurrent reads
+			err := tx.QueryRow(ctx, `
+				SELECT COALESCE(slv.inventory_quantity, 0), COALESCE(sl.marketplace_stock_percent, 100)
+				FROM supplier_listing_variants slv
+				JOIN supplier_listings sl ON sl.id = slv.listing_id
+				WHERE slv.shopify_variant_id = $1 AND sl.supplier_shop_id = $2
+				FOR UPDATE
+			`, item.SupplierVariantID, supplierShopID).Scan(&availableQty, &stockPct)
+
+			if err != nil {
+				// Can't verify stock — proceed with routing (fail-open)
+				s.logger.Warn().Err(err).Int64("variant", item.SupplierVariantID).Msg("stock check failed, proceeding anyway")
+				continue
+			}
+
+			// Calculate effective available with marketplace allocation
+			effectiveAvailable := (availableQty * stockPct) / 100
+
+			if item.Quantity > effectiveAvailable {
+				stockSufficient = false
+				stockFailureReason = fmt.Sprintf("Insufficient stock for '%s': requested %d, available %d (of %d at %d%%)",
+					item.Title, item.Quantity, effectiveAvailable, availableQty, stockPct)
+				s.logger.Warn().
+					Str("supplier", supplierShopID).
+					Str("title", item.Title).
+					Int("requested", item.Quantity).
+					Int("available", effectiveAvailable).
+					Msg("stock validation failed")
+				break
+			}
+		}
+
+		// Determine order status based on stock validation
+		orderStatus := "pending"
+		if !stockSufficient {
+			orderStatus = "cancelled"
+		}
+
 		var routedOrderID string
 		err := tx.QueryRow(ctx, `
 			INSERT INTO routed_orders (reseller_shop_id, supplier_shop_id, reseller_order_id, reseller_order_number,
 				status, customer_shipping_name, customer_shipping_address, customer_email, customer_phone,
-				total_wholesale_amount, currency, idempotency_key)
-			VALUES ($1, $2, $3, $4, 'pending', $5, $6, $7, $8, $9, $10, $11)
+				total_wholesale_amount, currency, idempotency_key, stock_validated, stock_failure_reason)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
 			ON CONFLICT (idempotency_key) DO NOTHING
 			RETURNING id
 		`, resellerShopID, supplierShopID, orderIDInt, orderNumber,
-			customerName, shippingAddr, customerEmail, customerPhone,
+			orderStatus, customerName, shippingAddr, customerEmail, customerPhone,
 			totalWholesale, currency,
 			idemKey+":"+supplierShopID,
+			stockSufficient, stockFailureReason,
 		).Scan(&routedOrderID)
 		if err != nil {
-			// Likely idempotency conflict - this is expected behavior
 			s.logger.Info().Str("idempotency_key", idemKey).Msg("order already routed (idempotent)")
 			continue
 		}
@@ -199,17 +249,46 @@ func (s *Service) RouteOrder(ctx context.Context, resellerShopID string, orderPa
 			}
 		}
 
-		// Queue notification to supplier
-		_, err = s.queue.Enqueue(ctx, "notifications", "supplier_new_order", map[string]string{
-			"routed_order_id": routedOrderID,
-			"supplier_shop_id": supplierShopID,
-		}, 3)
-		if err != nil {
-			s.logger.Error().Err(err).Msg("failed to enqueue supplier notification")
-		}
+		if stockSufficient {
+			// STOCK AVAILABLE — reserve stock by decrementing inventory
+			for _, item := range items {
+				tx.Exec(ctx, `
+					UPDATE supplier_listing_variants
+					SET inventory_quantity = GREATEST(0, inventory_quantity - $1)
+					WHERE shopify_variant_id = $2
+				`, item.Quantity, item.SupplierVariantID)
+			}
 
-		s.audit.Log(ctx, resellerShopID, "system", "", "order_routed", "routed_order", routedOrderID,
-			map[string]interface{}{"order_id": orderIDInt, "supplier": supplierShopID, "items": len(items)}, "success", "")
+			// Queue notification to supplier (only for valid orders)
+			_, err = s.queue.Enqueue(ctx, "notifications", "supplier_new_order", map[string]string{
+				"routed_order_id": routedOrderID,
+				"supplier_shop_id": supplierShopID,
+			}, 3)
+			if err != nil {
+				s.logger.Error().Err(err).Msg("failed to enqueue supplier notification")
+			}
+
+			s.audit.Log(ctx, resellerShopID, "system", "", "order_routed", "routed_order", routedOrderID,
+				map[string]interface{}{"order_id": orderIDInt, "supplier": supplierShopID, "items": len(items), "stock_validated": true}, "success", "")
+		} else {
+			// STOCK INSUFFICIENT — order created as cancelled, notify reseller
+			s.audit.Log(ctx, resellerShopID, "system", "", "order_stock_failed", "routed_order", routedOrderID,
+				map[string]interface{}{"order_id": orderIDInt, "reason": stockFailureReason}, "failure", stockFailureReason)
+
+			s.logger.Warn().
+				Str("order_id", routedOrderID).
+				Str("reason", stockFailureReason).
+				Msg("order cancelled due to insufficient stock")
+
+			// Notify reseller about stock failure via notification queue
+			s.queue.Enqueue(ctx, "notifications", "supplier_new_order", map[string]string{
+				"routed_order_id": routedOrderID,
+				"supplier_shop_id": supplierShopID,
+				"stock_failed":    "true",
+				"reseller_shop_id": resellerShopID,
+				"failure_reason":   stockFailureReason,
+			}, 1)
+		}
 	}
 
 	return tx.Commit(ctx)

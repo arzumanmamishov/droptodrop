@@ -1084,12 +1084,31 @@ func (w *Worker) handleSupplierNotification(ctx context.Context, payload json.Ra
 	var params struct {
 		RoutedOrderID  string `json:"routed_order_id"`
 		SupplierShopID string `json:"supplier_shop_id"`
+		StockFailed    string `json:"stock_failed"`
+		ResellerShopID string `json:"reseller_shop_id"`
+		FailureReason  string `json:"failure_reason"`
 	}
 	if err := json.Unmarshal(payload, &params); err != nil {
 		return fmt.Errorf("parse payload: %w", err)
 	}
 
-	// Update notified timestamp
+	// Handle stock failure notification (notify reseller, not supplier)
+	if params.StockFailed == "true" {
+		// Create in-app notification for reseller
+		w.db.Exec(ctx, `
+			INSERT INTO notifications (shop_id, title, message, type, link)
+			VALUES ($1, 'Order Cancelled - Out of Stock', $2, 'error', '/orders')
+		`, params.ResellerShopID, "Your order was cancelled because the supplier is out of stock. "+params.FailureReason)
+
+		w.logger.Warn().
+			Str("order_id", params.RoutedOrderID).
+			Str("reseller", params.ResellerShopID).
+			Str("reason", params.FailureReason).
+			Msg("reseller notified of stock failure")
+		return nil
+	}
+
+	// Normal flow: notify supplier of new order
 	_, err := w.db.Exec(ctx, `
 		UPDATE routed_orders SET supplier_notified_at = NOW() WHERE id = $1
 	`, params.RoutedOrderID)
@@ -1097,18 +1116,15 @@ func (w *Worker) handleSupplierNotification(ctx context.Context, payload json.Ra
 		return fmt.Errorf("update notified_at: %w", err)
 	}
 
-	// In production, send notification via email, Slack, or in-app push.
-	// Load supplier's notification preferences:
-	var notificationEmail string
-	_ = w.db.QueryRow(ctx, `
-		SELECT COALESCE(notification_email, '')
-		FROM app_settings WHERE shop_id = $1
-	`, params.SupplierShopID).Scan(&notificationEmail)
+	// Create in-app notification for supplier
+	w.db.Exec(ctx, `
+		INSERT INTO notifications (shop_id, title, message, type, link)
+		VALUES ($1, 'New Order Received', 'You have a new order to review and fulfill.', 'info', $2)
+	`, params.SupplierShopID, "/orders/"+params.RoutedOrderID)
 
 	w.logger.Info().
 		Str("order_id", params.RoutedOrderID).
 		Str("supplier", params.SupplierShopID).
-		Str("email", notificationEmail).
 		Msg("supplier notified of new order")
 
 	return nil
