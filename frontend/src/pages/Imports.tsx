@@ -119,6 +119,14 @@ export default function Imports() {
           <Layout.Section><Banner tone="critical">{error}</Banner></Layout.Section>
         )}
 
+        {imports.length > 0 && (
+          <Layout.Section>
+            <Banner tone="info" title="Important: Publish imported products to your Online Store">
+              <p>After importing, go to <strong>Shopify Admin → Products</strong> → click the product → scroll to <strong>"Publishing"</strong> → check <strong>"Online Store"</strong>. Otherwise the product will not be visible on your website.</p>
+            </Banner>
+          </Layout.Section>
+        )}
+
         <Layout.Section>
           <InlineGrid columns={{ xs: 1, md: 3 }} gap="400">
             <Card>

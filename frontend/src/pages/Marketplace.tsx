@@ -98,7 +98,9 @@ export default function Marketplace() {
         {error && <Layout.Section><Banner tone="critical">{error}</Banner></Layout.Section>}
         {importSuccess && (
           <Layout.Section>
-            <Banner tone="success" onDismiss={() => setImportSuccess(false)}>Done! Check your Imports page.</Banner>
+            <Banner tone="success" onDismiss={() => setImportSuccess(false)}>
+              Product imported! Go to <strong>Shopify Admin → Products</strong> → click the product → <strong>Publishing</strong> → enable <strong>"Online Store"</strong> to make it visible on your website.
+            </Banner>
           </Layout.Section>
         )}
         {sampleSuccess && (
