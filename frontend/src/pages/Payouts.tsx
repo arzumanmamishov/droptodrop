@@ -50,9 +50,9 @@ export default function Payouts({ role }: Props) {
       const { order, action } = confirmAction;
       await api.post(`/payouts/${action}/${order.id}`);
       const messages: Record<string, string> = {
-        'send-payment': `Payment sent. Waiting for supplier confirmation.`,
-        'confirm-received': `Payment confirmed.`,
-        'dispute-payment': `Payment disputed. Reseller notified.`,
+        'send-payment': 'Payment sent. Waiting for supplier confirmation.',
+        'confirm-received': 'Payment confirmed.',
+        'dispute-payment': 'Payment disputed. Reseller notified.',
       };
       setSuccess(messages[action] || 'Done');
       setConfirmAction(null);
@@ -68,158 +68,216 @@ export default function Payouts({ role }: Props) {
   const payouts = data?.payouts || [];
   const totalPages = Math.ceil((data?.total || 0) / limit);
 
-  const payStatusBadge = (status: string) => {
-    const map: Record<string, { tone: 'success' | 'attention' | 'critical' | 'info'; label: string }> = {
-      pending: { tone: 'attention', label: 'Awaiting Payment' },
-      payment_sent: { tone: 'info', label: 'Sent — Awaiting Confirmation' },
-      paid: { tone: 'success', label: 'Confirmed Paid' },
-      disputed: { tone: 'critical', label: 'Disputed' },
-      unpaid: { tone: 'attention', label: 'Awaiting Payment' },
-    };
-    const s = map[status] || map['unpaid'];
-    return <Badge tone={s.tone}>{s.label}</Badge>;
+  const getPayAmount = (p: PayoutOrder) => p.supplier_payout > 0 ? p.supplier_payout : p.wholesale;
+
+  const statusConfig: Record<string, { color: string; bg: string; label: string }> = {
+    pending:      { color: '#92400e', bg: '#fef3c7', label: 'Awaiting Payment' },
+    unpaid:       { color: '#92400e', bg: '#fef3c7', label: 'Awaiting Payment' },
+    payment_sent: { color: '#1e40af', bg: '#dbeafe', label: 'Sent' },
+    paid:         { color: '#166534', bg: '#dcfce7', label: 'Paid' },
+    disputed:     { color: '#991b1b', bg: '#fee2e2', label: 'Disputed' },
   };
 
   const getConfirmMessage = () => {
     if (!confirmAction) return '';
     const { order, action } = confirmAction;
-    const payAmount = order.supplier_payout > 0 ? order.supplier_payout : order.wholesale;
-    if (action === 'send-payment') return `Confirm that you have sent $${payAmount.toFixed(2)} to the supplier for order ${order.order_number || order.id.slice(0, 8)}?${order.platform_fee > 0 ? ` (Platform fee of $${order.platform_fee.toFixed(2)} is collected separately via your billing plan.)` : ''} The supplier will be asked to confirm receipt.`;
-    if (action === 'confirm-received') return `Confirm you received $${payAmount.toFixed(2)} for order ${order.order_number || order.id.slice(0, 8)}?`;
-    if (action === 'dispute-payment') return `Report that you have NOT received payment for order ${order.order_number || order.id.slice(0, 8)}? The reseller will be notified.`;
+    const amt = getPayAmount(order).toFixed(2);
+    const orderLabel = order.order_number || order.id.slice(0, 8);
+    if (action === 'send-payment') return `Confirm you sent $${amt} to the supplier for order ${orderLabel}?${order.platform_fee > 0 ? ` (Platform fee of $${order.platform_fee.toFixed(2)} is collected separately.)` : ''}`;
+    if (action === 'confirm-received') return `Confirm you received $${amt} for order ${orderLabel}?`;
+    if (action === 'dispute-payment') return `Report that you have NOT received payment for order ${orderLabel}?`;
     return '';
   };
 
   return (
-    <Page title="Payouts" subtitle={isSupplier ? 'Money owed to you' : 'Money you owe'}>
+    <Page title="Payouts" subtitle={isSupplier ? 'Money owed to you' : 'Money you owe suppliers'}>
       <Layout>
         {success && <Layout.Section><Banner tone="success" onDismiss={() => setSuccess(null)}>{success}</Banner></Layout.Section>}
 
+        {/* Summary cards */}
         <Layout.Section>
-          <InlineStack gap="300">
-            <div className="stat-card" style={{ flex: 1 }}>
-              <div className="stat-card-value">${(data?.grand_total || 0).toFixed(2)}</div>
+          <div style={{ display: 'grid', gridTemplateColumns: !isSupplier && (data?.grand_fees || 0) > 0 ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)', gap: '12px' }}>
+            <div className="stat-card">
               <div className="stat-card-label">{isSupplier ? 'Total Earned' : 'Total Owed'}</div>
+              <div className="stat-card-value">${(data?.grand_total || 0).toFixed(2)}</div>
             </div>
-            <div className="stat-card" style={{ flex: 1 }}>
-              <div className="stat-card-value" style={{ color: '#2d6a4f' }}>${(data?.grand_paid || 0).toFixed(2)}</div>
+            <div className="stat-card">
               <div className="stat-card-label">Confirmed Paid</div>
+              <div className="stat-card-value" style={{ color: '#2d6a4f' }}>${(data?.grand_paid || 0).toFixed(2)}</div>
             </div>
-            <div className="stat-card" style={{ flex: 1 }}>
+            <div className="stat-card">
+              <div className="stat-card-label">Outstanding</div>
               <div className="stat-card-value" style={{ color: (data?.grand_balance || 0) > 0 ? '#b91c1c' : '#2d6a4f' }}>
                 ${(data?.grand_balance || 0).toFixed(2)}
               </div>
-              <div className="stat-card-label">Outstanding</div>
             </div>
             {!isSupplier && (data?.grand_fees || 0) > 0 && (
-              <div className="stat-card" style={{ flex: 1 }}>
-                <div className="stat-card-value" style={{ color: '#6b7280' }}>
-                  ${(data?.grand_fees || 0).toFixed(2)}
-                </div>
+              <div className="stat-card">
                 <div className="stat-card-label">Platform Fees</div>
+                <div className="stat-card-value" style={{ color: '#6b7280' }}>${(data?.grand_fees || 0).toFixed(2)}</div>
               </div>
             )}
-          </InlineStack>
+          </div>
         </Layout.Section>
 
+        {/* Payout list */}
         <Layout.Section>
           {payouts.length > 0 ? (
-            <Card>
-              <BlockStack gap="0">
-                {payouts.map((p, i) => (
-                  <div key={p.id}>
-                    <div style={{ padding: '14px 16px' }}>
+            <BlockStack gap="300">
+              {payouts.map((p) => {
+                const amt = getPayAmount(p);
+                const cfg = statusConfig[p.pay_status] || statusConfig['unpaid'];
+                const needsResellerAction = !isSupplier && (p.pay_status === 'pending' || p.pay_status === 'unpaid' || p.pay_status === 'disputed');
+                const needsSupplierAction = isSupplier && p.pay_status === 'payment_sent';
+
+                return (
+                  <Card key={p.id}>
+                    <div style={{ padding: '4px 0' }}>
+                      {/* Header row */}
                       <InlineStack align="space-between" blockAlign="center" wrap={false}>
-                        <BlockStack gap="100">
-                          <InlineStack gap="200" blockAlign="center">
+                        <InlineStack gap="300" blockAlign="center">
+                          <div>
                             <Text as="span" variant="bodyMd" fontWeight="semibold">
-                              {p.order_number || p.id.slice(0, 8)}
+                              Order {p.order_number || `#${p.id.slice(0, 8)}`}
                             </Text>
-                            {payStatusBadge(p.pay_status)}
-                          </InlineStack>
-                          <Text as="p" variant="bodySm" tone="subdued">
-                            {p.products || 'Products'} — {p.domain}
-                          </Text>
-                          <Text as="p" variant="bodySm" tone="subdued">
-                            {new Date(p.created_at).toLocaleDateString()}
-                          </Text>
-                        </BlockStack>
-
-                        <InlineStack gap="300" blockAlign="center" wrap={false}>
-                          <BlockStack gap="050" align="end">
-                            <Text as="span" variant="headingSm" fontWeight="bold">
-                              ${(p.supplier_payout > 0 ? p.supplier_payout : p.wholesale).toFixed(2)}
-                            </Text>
-                            <Text as="span" variant="bodySm" tone="subdued">
-                              {isSupplier ? 'you receive' : 'to supplier'}
-                            </Text>
-                            {p.platform_fee > 0 && (
+                            <div style={{ marginTop: '2px' }}>
                               <Text as="span" variant="bodySm" tone="subdued">
-                                fee: ${p.platform_fee.toFixed(2)}
+                                {new Date(p.created_at).toLocaleDateString()} &middot; {p.domain}
                               </Text>
-                            )}
-                          </BlockStack>
+                            </div>
+                          </div>
+                        </InlineStack>
+                        <span style={{
+                          padding: '4px 12px',
+                          borderRadius: '20px',
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          color: cfg.color,
+                          background: cfg.bg,
+                        }}>
+                          {cfg.label}
+                        </span>
+                      </InlineStack>
 
-                          {/* RESELLER: Pay button */}
-                          {!isSupplier && (p.pay_status === 'pending' || p.pay_status === 'unpaid') && (
-                            <BlockStack gap="200" align="end">
+                      {/* Products */}
+                      {p.products && (
+                        <div style={{ margin: '10px 0' }}>
+                          <Text as="p" variant="bodySm" tone="subdued">{p.products}</Text>
+                        </div>
+                      )}
+
+                      <Divider />
+
+                      {/* Amount breakdown + actions */}
+                      <div style={{ marginTop: '12px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: '12px' }}>
+                        {/* Left: amounts */}
+                        <div style={{ display: 'flex', gap: '24px', alignItems: 'baseline' }}>
+                          <div>
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              {isSupplier ? 'You receive' : 'Pay supplier'}
+                            </Text>
+                            <div style={{ fontSize: '22px', fontWeight: 700, color: '#111' }}>
+                              ${amt.toFixed(2)}
+                            </div>
+                          </div>
+                          {p.platform_fee > 0 && (
+                            <div>
+                              <Text as="span" variant="bodySm" tone="subdued">Platform fee</Text>
+                              <div style={{ fontSize: '14px', fontWeight: 600, color: '#6b7280' }}>
+                                ${p.platform_fee.toFixed(2)}
+                              </div>
+                            </div>
+                          )}
+                          {p.platform_fee > 0 && (
+                            <div>
+                              <Text as="span" variant="bodySm" tone="subdued">Wholesale</Text>
+                              <div style={{ fontSize: '14px', fontWeight: 500, color: '#9ca3af' }}>
+                                ${p.wholesale.toFixed(2)}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Right: action buttons */}
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          {/* RESELLER actions */}
+                          {needsResellerAction && (
+                            <>
                               {p.supplier_paypal ? (
-                                <Button size="slim" variant="primary" url={`https://paypal.me/${p.supplier_paypal}/${(p.supplier_payout > 0 ? p.supplier_payout : p.wholesale).toFixed(2)}${p.currency || 'USD'}`} external>
-                                  Pay ${(p.supplier_payout > 0 ? p.supplier_payout : p.wholesale).toFixed(2)} via PayPal
-                                </Button>
+                                <a
+                                  href={`https://paypal.me/${p.supplier_paypal}/${amt.toFixed(2)}${p.currency || 'USD'}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    padding: '8px 16px',
+                                    borderRadius: '8px',
+                                    background: '#0070ba',
+                                    color: 'white',
+                                    fontWeight: 600,
+                                    fontSize: '14px',
+                                    textDecoration: 'none',
+                                    transition: 'background 0.15s',
+                                  }}
+                                >
+                                  <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944 2.23A.774.774 0 0 1 5.708 1.6h6.627c2.2 0 3.958.654 5.077 1.89.467.516.804 1.104.998 1.744.203.67.263 1.438.178 2.284l-.013.105v.283l.22.125a3.58 3.58 0 0 1 .884.665c.49.56.801 1.266.912 2.084.114.849.037 1.842-.227 2.88a7.937 7.937 0 0 1-.965 2.268 5.28 5.28 0 0 1-1.541 1.574c-.61.405-1.33.71-2.138.9-.787.186-1.671.28-2.628.28h-.623a1.87 1.87 0 0 0-1.847 1.575l-.047.257-.79 5.004-.034.183a.17.17 0 0 1-.167.148H7.076z"/></svg>
+                                  Pay ${amt.toFixed(2)}
+                                </a>
                               ) : (
-                                <Text as="span" variant="bodySm" tone="caution">Supplier has no PayPal</Text>
+                                <Badge tone="warning">No PayPal set</Badge>
                               )}
                               <Button size="slim" variant="secondary" onClick={() => setConfirmAction({ order: p, action: 'send-payment' })}>
-                                Mark as Paid
+                                {p.pay_status === 'disputed' ? 'Retry — Mark Paid' : 'Mark as Paid'}
                               </Button>
-                            </BlockStack>
+                            </>
                           )}
+
+                          {/* Reseller: waiting */}
                           {!isSupplier && p.pay_status === 'payment_sent' && (
-                            <Text as="span" variant="bodySm" tone="subdued">Waiting confirmation</Text>
-                          )}
-                          {!isSupplier && p.pay_status === 'disputed' && (
-                            <BlockStack gap="200" align="end">
-                              {p.supplier_paypal ? (
-                                <Button size="slim" variant="primary" url={`https://paypal.me/${p.supplier_paypal}/${(p.supplier_payout > 0 ? p.supplier_payout : p.wholesale).toFixed(2)}${p.currency || 'USD'}`} external>
-                                  Pay ${(p.supplier_payout > 0 ? p.supplier_payout : p.wholesale).toFixed(2)} via PayPal
-                                </Button>
-                              ) : (
-                                <Text as="span" variant="bodySm" tone="caution">Supplier has no PayPal</Text>
-                              )}
-                              <Button size="slim" variant="secondary" onClick={() => setConfirmAction({ order: p, action: 'send-payment' })}>
-                                Mark as Paid
-                              </Button>
-                            </BlockStack>
+                            <Badge tone="info">Waiting for supplier to confirm</Badge>
                           )}
 
-                          {/* SUPPLIER: Confirm/Dispute */}
-                          {isSupplier && p.pay_status === 'payment_sent' && (
-                            <InlineStack gap="200">
-                              <Button size="slim" variant="primary" onClick={() => setConfirmAction({ order: p, action: 'confirm-received' })}>
-                                Confirm
+                          {/* SUPPLIER actions */}
+                          {needsSupplierAction && (
+                            <>
+                              <Button variant="primary" onClick={() => setConfirmAction({ order: p, action: 'confirm-received' })}>
+                                Confirm Received
                               </Button>
-                              <Button size="slim" tone="critical" onClick={() => setConfirmAction({ order: p, action: 'dispute-payment' })}>
+                              <Button tone="critical" onClick={() => setConfirmAction({ order: p, action: 'dispute-payment' })}>
                                 Not Received
                               </Button>
-                            </InlineStack>
-                          )}
-                          {isSupplier && (p.pay_status === 'pending' || p.pay_status === 'unpaid') && (
-                            <Text as="span" variant="bodySm" tone="subdued">Awaiting reseller</Text>
+                            </>
                           )}
 
-                          {/* Both: Paid confirmation */}
-                          {p.pay_status === 'paid' && (
-                            <Text as="span" variant="bodySm" tone="success">&#10003;</Text>
+                          {/* Supplier: waiting */}
+                          {isSupplier && (p.pay_status === 'pending' || p.pay_status === 'unpaid') && (
+                            <Badge tone="attention">Awaiting reseller payment</Badge>
                           )}
-                        </InlineStack>
-                      </InlineStack>
+
+                          {/* Both: paid */}
+                          {p.pay_status === 'paid' && (
+                            <span style={{
+                              display: 'inline-flex', alignItems: 'center', gap: '4px',
+                              color: '#166534', fontWeight: 600, fontSize: '14px',
+                            }}>
+                              <svg width="18" height="18" viewBox="0 0 24 24" fill="#166534"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                              Payment Complete
+                            </span>
+                          )}
+
+                          {/* Both: disputed */}
+                          {isSupplier && p.pay_status === 'disputed' && (
+                            <Badge tone="critical">You disputed this payment</Badge>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    {i < payouts.length - 1 && <Divider />}
-                  </div>
-                ))}
-              </BlockStack>
-            </Card>
+                  </Card>
+                );
+              })}
+            </BlockStack>
           ) : (
             <Card>
               <EmptyState heading="No payouts yet" image="">
@@ -242,9 +300,9 @@ export default function Payouts({ role }: Props) {
 
       <ConfirmDialog
         open={confirmAction !== null}
-        title={confirmAction?.action === 'send-payment' ? 'Send Payment' : confirmAction?.action === 'confirm-received' ? 'Confirm Payment Received' : 'Dispute Payment'}
+        title={confirmAction?.action === 'send-payment' ? 'Confirm Payment Sent' : confirmAction?.action === 'confirm-received' ? 'Confirm Payment Received' : 'Dispute Payment'}
         message={getConfirmMessage()}
-        confirmLabel={confirmAction?.action === 'send-payment' ? 'I Have Paid' : confirmAction?.action === 'confirm-received' ? 'Yes, Received' : 'Not Received'}
+        confirmLabel={confirmAction?.action === 'send-payment' ? 'Yes, I Paid' : confirmAction?.action === 'confirm-received' ? 'Yes, Received' : 'Not Received'}
         destructive={confirmAction?.action === 'dispute-payment'}
         loading={acting}
         onConfirm={handleAction}

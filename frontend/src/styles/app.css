@@ -290,6 +290,21 @@ html { scroll-behavior: smooth; }
   border-radius: 4px;
 }
 
+/* Nav badge */
+.Polaris-Navigation__Badge .Polaris-Badge {
+  background: #ef4444 !important;
+  color: white !important;
+  border: none !important;
+  font-weight: 700 !important;
+  min-width: 20px;
+  text-align: center;
+}
+
+/* PayPal button hover */
+a[href*="paypal.me"]:hover {
+  background: #005ea6 !important;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .stat-card-value { font-size: 24px; }

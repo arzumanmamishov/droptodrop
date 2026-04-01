@@ -907,6 +907,61 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"unread_count": count})
 		})
 
+		// Nav badge counts
+		api.GET("/nav-counts", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			role, _ := c.Get("shop_role")
+			sid := shopID.(string)
+			r := role.(string)
+			ctx := c.Request.Context()
+
+			counts := gin.H{}
+
+			// Orders: pending/accepted (need attention)
+			var orderCol string
+			if r == "supplier" {
+				orderCol = "supplier_shop_id"
+			} else {
+				orderCol = "reseller_shop_id"
+			}
+			var orderCount int
+			db.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM routed_orders WHERE %s = $1 AND status IN ('pending','accepted')`, orderCol), sid).Scan(&orderCount)
+			counts["orders"] = orderCount
+
+			// Unread messages
+			var msgCount int
+			db.QueryRow(ctx, `
+				SELECT COUNT(*) FROM messages m
+				JOIN conversations cv ON cv.id = m.conversation_id
+				WHERE (cv.shop_a_id = $1 OR cv.shop_b_id = $1)
+				AND m.sender_shop_id != $1 AND m.is_read = FALSE
+			`, sid).Scan(&msgCount)
+			counts["messages"] = msgCount
+
+			// Unread notifications
+			var notifCount int
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM inapp_notifications WHERE shop_id = $1 AND is_read = FALSE`, sid).Scan(&notifCount)
+			counts["notifications"] = notifCount
+
+			// Payouts needing action
+			var payoutCount int
+			if r == "supplier" {
+				// Supplier: payments awaiting confirmation
+				db.QueryRow(ctx, `SELECT COUNT(*) FROM payout_records WHERE supplier_shop_id = $1 AND status = 'payment_sent'`, sid).Scan(&payoutCount)
+			} else {
+				// Reseller: unpaid/disputed orders
+				db.QueryRow(ctx, `SELECT COUNT(*) FROM payout_records WHERE reseller_shop_id = $1 AND status IN ('pending','disputed')`, sid).Scan(&payoutCount)
+			}
+			counts["payouts"] = payoutCount
+
+			// Open disputes
+			var disputeCount int
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM disputes WHERE (complainant_shop_id = $1 OR respondent_shop_id = $1) AND status = 'open'`, sid).Scan(&disputeCount)
+			counts["disputes"] = disputeCount
+
+			c.JSON(http.StatusOK, counts)
+		})
+
 		// Settings
 		api.GET("/settings", func(c *gin.Context) {
 			shopID, _ := c.Get("shop_id")
