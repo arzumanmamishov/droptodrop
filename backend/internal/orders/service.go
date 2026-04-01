@@ -268,6 +268,14 @@ func (s *Service) RouteOrder(ctx context.Context, resellerShopID string, orderPa
 				s.logger.Error().Err(err).Msg("failed to enqueue supplier notification")
 			}
 
+			// Auto-charge reseller for wholesale amount
+			s.queue.Enqueue(ctx, "orders", "charge_order", map[string]string{
+				"routed_order_id":  routedOrderID,
+				"reseller_shop_id": resellerShopID,
+				"supplier_shop_id": supplierShopID,
+				"wholesale_amount": fmt.Sprintf("%.2f", totalWholesale),
+			}, 3)
+
 			s.audit.Log(ctx, resellerShopID, "system", "", "order_routed", "routed_order", routedOrderID,
 				map[string]interface{}{"order_id": orderIDInt, "supplier": supplierShopID, "items": len(items), "stock_validated": true}, "success", "")
 		} else {

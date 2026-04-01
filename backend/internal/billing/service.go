@@ -234,6 +234,42 @@ func (s *Service) TrackUsage(ctx context.Context, shopID, orderID string, orderA
 	return nil
 }
 
+// ChargeForOrder creates a usage charge on the reseller and records payout for supplier.
+func (s *Service) ChargeForOrder(ctx context.Context, resellerShopID, supplierShopID, routedOrderID string, wholesaleAmount float64) error {
+	// Get fee percent from plan
+	feePercent := 2.0
+	s.db.QueryRow(ctx, `
+		SELECT bp.app_fee_percent FROM shop_subscriptions ss
+		JOIN billing_plans bp ON bp.id = ss.plan_id
+		WHERE ss.shop_id = $1 AND ss.status = 'active'
+	`, resellerShopID).Scan(&feePercent)
+
+	platformFee := wholesaleAmount * feePercent / 100
+	supplierPayout := wholesaleAmount - platformFee
+
+	// Record the payout
+	_, err := s.db.Exec(ctx, `
+		INSERT INTO payout_records (routed_order_id, supplier_shop_id, reseller_shop_id, wholesale_amount, platform_fee, supplier_payout, status)
+		VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+		ON CONFLICT DO NOTHING
+	`, routedOrderID, supplierShopID, resellerShopID, wholesaleAmount, platformFee, supplierPayout)
+	if err != nil {
+		return fmt.Errorf("record payout: %w", err)
+	}
+
+	// Track usage
+	s.TrackUsage(ctx, resellerShopID, routedOrderID, wholesaleAmount)
+
+	s.logger.Info().
+		Str("order_id", routedOrderID).
+		Float64("wholesale", wholesaleAmount).
+		Float64("fee", platformFee).
+		Float64("supplier_payout", supplierPayout).
+		Msg("order charge recorded")
+
+	return nil
+}
+
 // CancelSubscription cancels a shop's subscription.
 func (s *Service) CancelSubscription(ctx context.Context, shopID string) error {
 	_, err := s.db.Exec(ctx, `

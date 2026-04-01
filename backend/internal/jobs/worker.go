@@ -48,6 +48,7 @@ func NewWorker(db *pgxpool.Pool, q *queue.Client, cfg *config.Config, logger zer
 	w.handlers["sync_to_reseller"] = w.handleFulfillmentSync
 	w.handlers["sync_inventory"] = w.handleInventorySync
 	w.handlers["supplier_new_order"] = w.handleSupplierNotification
+	w.handlers["charge_order"] = w.handleChargeOrder
 
 	return w
 }
@@ -1241,4 +1242,72 @@ func calculateResellerPrice(wholesale float64, markupType string, markupValue fl
 	default:
 		return wholesale * 1.3
 	}
+}
+
+// handleChargeOrder records the auto-charge for a routed order.
+func (w *Worker) handleChargeOrder(ctx context.Context, payload json.RawMessage) error {
+	var params struct {
+		RoutedOrderID  string `json:"routed_order_id"`
+		ResellerShopID string `json:"reseller_shop_id"`
+		SupplierShopID string `json:"supplier_shop_id"`
+		WholesaleAmount string `json:"wholesale_amount"`
+	}
+	if err := json.Unmarshal(payload, &params); err != nil {
+		return fmt.Errorf("parse payload: %w", err)
+	}
+
+	var wholesaleAmount float64
+	fmt.Sscanf(params.WholesaleAmount, "%f", &wholesaleAmount)
+
+	// Get platform fee from plan
+	feePercent := 2.0
+	w.db.QueryRow(ctx, `
+		SELECT bp.app_fee_percent FROM shop_subscriptions ss
+		JOIN billing_plans bp ON bp.id = ss.plan_id
+		WHERE ss.shop_id = $1 AND ss.status = 'active'
+	`, params.ResellerShopID).Scan(&feePercent)
+
+	platformFee := wholesaleAmount * feePercent / 100
+	supplierPayout := wholesaleAmount - platformFee
+
+	// Record payout
+	_, err := w.db.Exec(ctx, `
+		INSERT INTO payout_records (routed_order_id, supplier_shop_id, reseller_shop_id, wholesale_amount, platform_fee, supplier_payout, status)
+		VALUES ($1, $2, $3, $4, $5, $6, 'pending')
+		ON CONFLICT DO NOTHING
+	`, params.RoutedOrderID, params.SupplierShopID, params.ResellerShopID, wholesaleAmount, platformFee, supplierPayout)
+	if err != nil {
+		return fmt.Errorf("record payout: %w", err)
+	}
+
+	// Update usage tracking
+	month := time.Now().Format("2006-01")
+	w.db.Exec(ctx, `
+		INSERT INTO usage_records (shop_id, routed_order_id, order_amount, fee_amount, fee_percent)
+		VALUES ($1, $2, $3, $4, $5)
+	`, params.ResellerShopID, params.RoutedOrderID, wholesaleAmount, platformFee, feePercent)
+
+	w.db.Exec(ctx, `
+		INSERT INTO usage_summaries (shop_id, month, order_count, total_fees)
+		VALUES ($1, $2, 1, $3)
+		ON CONFLICT (shop_id, month) DO UPDATE SET
+			order_count = usage_summaries.order_count + 1,
+			total_fees = usage_summaries.total_fees + $3,
+			updated_at = NOW()
+	`, params.ResellerShopID, month, platformFee)
+
+	// Notify supplier about pending payout
+	w.db.Exec(ctx, `
+		INSERT INTO notifications (shop_id, title, message, type, link)
+		VALUES ($1, 'Payment Pending', $2, 'info', '/payouts')
+	`, params.SupplierShopID, fmt.Sprintf("$%.2f pending for order. Platform fee: $%.2f. Your payout: $%.2f", wholesaleAmount, platformFee, supplierPayout))
+
+	w.logger.Info().
+		Str("order_id", params.RoutedOrderID).
+		Float64("wholesale", wholesaleAmount).
+		Float64("fee", platformFee).
+		Float64("payout", supplierPayout).
+		Msg("order charge recorded")
+
+	return nil
 }
