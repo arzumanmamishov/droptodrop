@@ -272,11 +272,11 @@ export default function Marketplace() {
                             onClick={() => setDetailModal(listing)}
                             style={{
                               flex: 1, textAlign: 'center', padding: '8px 4px', borderRadius: '8px',
-                              background: '#e8f5e9', color: '#2d6a4f', cursor: 'pointer', fontSize: '12px', fontWeight: 500,
+                              background: '#dbeafe', color: '#1e40af', cursor: 'pointer', fontSize: '12px', fontWeight: 500,
                               transition: 'background 0.15s',
                             }}
-                            onMouseOver={(e) => (e.currentTarget.style.background = '#c8e6c9')}
-                            onMouseOut={(e) => (e.currentTarget.style.background = '#e8f5e9')}
+                            onMouseOver={(e) => (e.currentTarget.style.background = '#bfdbfe')}
+                            onMouseOut={(e) => (e.currentTarget.style.background = '#dbeafe')}
                           >
                             Details
                           </div>

@@ -1,18 +1,24 @@
-/* DropToDrop — Clean Professional Theme */
-/* Inspired by Fixoria-style design: green accents, clean cards, rounded UI */
+/* DropToDrop — Clean Professional Blue Theme */
 
 :root {
-  --dt-green: #2d6a4f;
-  --dt-green-light: #40916c;
-  --dt-green-bg: #d8f3dc;
-  --dt-green-border: #b7e4c7;
-  --dt-bg: #f8f9fa;
+  --dt-primary: #1e40af;
+  --dt-primary-light: #3b82f6;
+  --dt-primary-bg: #dbeafe;
+  --dt-primary-border: #93c5fd;
+  --dt-primary-dark: #1e3a8a;
+  --dt-bg: #f0f4f8;
   --dt-card-bg: #ffffff;
-  --dt-text: #212529;
-  --dt-text-muted: #6c757d;
-  --dt-border: #e9ecef;
+  --dt-text: #1e293b;
+  --dt-text-muted: #64748b;
+  --dt-border: #e2e8f0;
   --dt-radius: 12px;
   --dt-radius-sm: 8px;
+  --dt-success: #16a34a;
+  --dt-success-bg: #dcfce7;
+  --dt-warning: #d97706;
+  --dt-warning-bg: #fef3c7;
+  --dt-danger: #dc2626;
+  --dt-danger-bg: #fee2e2;
 }
 
 /* Override Polaris frame background */
@@ -28,13 +34,13 @@
   transition: box-shadow 0.2s ease;
 }
 .Polaris-Card:hover {
-  box-shadow: 0 4px 12px rgba(0,0,0,0.06) !important;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.07) !important;
 }
 
-/* Stat cards with green border accent */
+/* Stat cards with blue accent */
 .stat-card {
   background: white;
-  border: 1px solid var(--dt-green-border);
+  border: 1px solid var(--dt-primary-border);
   border-radius: var(--dt-radius);
   padding: 20px 24px;
   position: relative;
@@ -45,7 +51,7 @@
   position: absolute;
   top: 0; right: 0;
   width: 80px; height: 100%;
-  background: linear-gradient(135deg, transparent 50%, var(--dt-green-bg) 50%);
+  background: linear-gradient(135deg, transparent 50%, var(--dt-primary-bg) 50%);
   opacity: 0.5;
 }
 .stat-card-value {
@@ -65,7 +71,7 @@
   margin-top: 8px;
 }
 
-/* Tab pills — green active state */
+/* Tab pills — blue active state */
 .tab-pills {
   display: flex;
   gap: 8px;
@@ -83,19 +89,19 @@
   transition: all 0.15s ease;
 }
 .tab-pill:hover {
-  background: var(--dt-green-bg);
-  border-color: var(--dt-green-border);
+  background: var(--dt-primary-bg);
+  border-color: var(--dt-primary-border);
 }
 .tab-pill-active {
-  background: var(--dt-green) !important;
+  background: var(--dt-primary) !important;
   color: white !important;
-  border-color: var(--dt-green) !important;
+  border-color: var(--dt-primary) !important;
 }
 
 /* Status badges */
 .status-active {
-  background: var(--dt-green-bg);
-  color: var(--dt-green);
+  background: var(--dt-success-bg);
+  color: var(--dt-success);
   padding: 4px 12px;
   border-radius: 20px;
   font-size: 12px;
@@ -103,8 +109,8 @@
   display: inline-block;
 }
 .status-pending {
-  background: #fff3cd;
-  color: #856404;
+  background: var(--dt-warning-bg);
+  color: var(--dt-warning);
   padding: 4px 12px;
   border-radius: 20px;
   font-size: 12px;
@@ -112,8 +118,8 @@
   display: inline-block;
 }
 .status-error {
-  background: #f8d7da;
-  color: #721c24;
+  background: var(--dt-danger-bg);
+  color: var(--dt-danger);
   padding: 4px 12px;
   border-radius: 20px;
   font-size: 12px;
@@ -134,7 +140,7 @@
   letter-spacing: 0.5px !important;
 }
 .Polaris-DataTable__TableRow:hover {
-  background: #f8f9fa !important;
+  background: #f1f5f9 !important;
 }
 
 /* Search bar */
@@ -163,28 +169,31 @@
   transition: all 0.15s ease;
 }
 .export-btn:hover {
-  background: #f1f3f5;
-  border-color: #ced4da;
+  background: #f1f5f9;
+  border-color: #cbd5e1;
 }
 
-/* Primary button — green */
+/* Primary button — blue */
 .Polaris-Button--primary {
-  background: var(--dt-green) !important;
-  border-color: var(--dt-green) !important;
+  background: var(--dt-primary) !important;
+  border-color: var(--dt-primary) !important;
 }
 .Polaris-Button--primary:hover {
-  background: var(--dt-green-light) !important;
+  background: var(--dt-primary-light) !important;
   transform: none !important;
   box-shadow: none !important;
 }
 
-/* Navigation active — green accent */
+/* Navigation active — blue accent */
 .Polaris-Navigation__Item--selected {
-  background: var(--dt-green-bg) !important;
+  background: var(--dt-primary-bg) !important;
 }
 .Polaris-Navigation__Item--selected .Polaris-Navigation__Text {
-  color: var(--dt-green) !important;
+  color: var(--dt-primary) !important;
   font-weight: 600 !important;
+}
+.Polaris-Navigation__Item--selected .Polaris-Icon {
+  color: var(--dt-primary) !important;
 }
 
 /* Product card */
@@ -195,7 +204,7 @@
   transition: box-shadow 0.2s ease, transform 0.15s ease;
 }
 .product-card:hover {
-  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+  box-shadow: 0 8px 24px rgba(30,64,175,0.1);
   transform: translateY(-2px);
 }
 .product-image-container img {
@@ -207,7 +216,7 @@
 
 /* Chat bubbles */
 .chat-bubble-mine {
-  background: var(--dt-green);
+  background: var(--dt-primary);
   color: white;
   border-radius: 16px 16px 4px 16px;
   padding: 10px 16px;
@@ -215,7 +224,7 @@
   word-wrap: break-word;
 }
 .chat-bubble-other {
-  background: #f1f3f5;
+  background: #f1f5f9;
   color: var(--dt-text);
   border-radius: 16px 16px 16px 4px;
   padding: 10px 16px;
@@ -225,7 +234,7 @@
 
 /* Price tag */
 .price-tag {
-  background: var(--dt-green);
+  background: var(--dt-primary);
   color: white;
   padding: 4px 12px;
   border-radius: 20px;
@@ -237,14 +246,14 @@
 /* Page header */
 .page-header-accent {
   height: 3px;
-  background: var(--dt-green);
+  background: linear-gradient(90deg, var(--dt-primary), var(--dt-primary-light));
   border-radius: 2px;
   margin-bottom: 16px;
 }
 
 /* Platform stats banner */
 .platform-banner {
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%);
   border-radius: var(--dt-radius);
   padding: 24px;
   color: white;
@@ -252,7 +261,7 @@
 
 /* Hero gradient */
 .hero-gradient {
-  background: linear-gradient(135deg, var(--dt-green) 0%, #1b4332 100%);
+  background: linear-gradient(135deg, var(--dt-primary) 0%, var(--dt-primary-dark) 100%);
   border-radius: var(--dt-radius);
   padding: 32px;
   color: white;
@@ -260,22 +269,22 @@
 
 /* Notification unread */
 .notification-unread {
-  background: var(--dt-green-bg);
-  border-left: 4px solid var(--dt-green);
+  background: var(--dt-primary-bg);
+  border-left: 4px solid var(--dt-primary);
 }
 
 /* Smooth scrolling */
 html { scroll-behavior: smooth; }
 
-/* Badge override — green tones */
+/* Badge override — blue tones */
 .Polaris-Badge--toneSuccess {
-  background: var(--dt-green-bg) !important;
-  color: var(--dt-green) !important;
+  background: var(--dt-success-bg) !important;
+  color: var(--dt-success) !important;
 }
 
-/* Progress bar green */
+/* Progress bar blue */
 .Polaris-ProgressBar__Indicator {
-  background: var(--dt-green) !important;
+  background: var(--dt-primary) !important;
 }
 
 /* Skeleton loading */
@@ -284,7 +293,7 @@ html { scroll-behavior: smooth; }
   100% { background-position: 200px 0; }
 }
 .skeleton {
-  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background: linear-gradient(90deg, #e2e8f0 25%, #cbd5e1 50%, #e2e8f0 75%);
   background-size: 400px 100%;
   animation: shimmer 1.5s infinite;
   border-radius: 4px;
@@ -303,6 +312,26 @@ html { scroll-behavior: smooth; }
 /* PayPal button hover */
 a[href*="paypal.me"]:hover {
   background: #005ea6 !important;
+}
+
+/* Links — blue */
+a {
+  color: var(--dt-primary);
+}
+a:hover {
+  color: var(--dt-primary-light);
+}
+
+/* Polaris focus ring — blue */
+.Polaris-TextField__Input:focus ~ .Polaris-TextField__Backdrop {
+  border-color: var(--dt-primary-light) !important;
+  box-shadow: 0 0 0 1px var(--dt-primary-light) !important;
+}
+
+/* Checkbox/Radio — blue */
+.Polaris-Checkbox__Input:checked + .Polaris-Checkbox__Backdrop {
+  background: var(--dt-primary) !important;
+  border-color: var(--dt-primary) !important;
 }
 
 /* Responsive */

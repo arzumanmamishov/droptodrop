@@ -103,11 +103,11 @@ export default function Payouts({ role }: Props) {
             </div>
             <div className="stat-card">
               <div className="stat-card-label">Confirmed Paid</div>
-              <div className="stat-card-value" style={{ color: '#2d6a4f' }}>${(data?.grand_paid || 0).toFixed(2)}</div>
+              <div className="stat-card-value" style={{ color: '#1e40af' }}>${(data?.grand_paid || 0).toFixed(2)}</div>
             </div>
             <div className="stat-card">
               <div className="stat-card-label">Outstanding</div>
-              <div className="stat-card-value" style={{ color: (data?.grand_balance || 0) > 0 ? '#b91c1c' : '#2d6a4f' }}>
+              <div className="stat-card-value" style={{ color: (data?.grand_balance || 0) > 0 ? '#b91c1c' : '#1e40af' }}>
                 ${(data?.grand_balance || 0).toFixed(2)}
               </div>
             </div>
