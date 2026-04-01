@@ -1463,6 +1463,7 @@ func main() {
 			shopID, _ := c.Get("shop_id")
 			role, _ := c.Get("shop_role")
 			orderID := c.Param("orderId")
+			sid := shopID.(string)
 
 			if role.(string) != "reseller" {
 				c.JSON(http.StatusForbidden, gin.H{"error": "only resellers can send payments"})
@@ -1471,26 +1472,40 @@ func main() {
 
 			var supplierID, resellerID string
 			var wholesale float64
-			db.QueryRow(c.Request.Context(), `SELECT supplier_shop_id, reseller_shop_id, total_wholesale_amount FROM routed_orders WHERE id = $1`, orderID).Scan(&supplierID, &resellerID, &wholesale)
+			err := db.QueryRow(c.Request.Context(), `SELECT supplier_shop_id, reseller_shop_id, total_wholesale_amount FROM routed_orders WHERE id = $1 AND reseller_shop_id = $2`, orderID, sid).Scan(&supplierID, &resellerID, &wholesale)
+			if err != nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+				return
+			}
+
+			// Calculate fee from billing plan
+			feePercent := 2.0
+			db.QueryRow(c.Request.Context(), `
+				SELECT bp.app_fee_percent FROM shop_subscriptions ss
+				JOIN billing_plans bp ON bp.id = ss.plan_id
+				WHERE ss.shop_id = $1 AND ss.status = 'active'
+			`, sid).Scan(&feePercent)
+			platformFee := wholesale * feePercent / 100
+			supplierPayout := wholesale - platformFee
 
 			// Update to payment_sent or create record
 			result, _ := db.Exec(c.Request.Context(), `UPDATE payout_records SET status = 'payment_sent', updated_at = NOW() WHERE routed_order_id = $1 AND status = 'pending'`, orderID)
 			if result.RowsAffected() == 0 {
 				db.Exec(c.Request.Context(), `
 					INSERT INTO payout_records (routed_order_id, supplier_shop_id, reseller_shop_id, wholesale_amount, platform_fee, supplier_payout, status)
-					VALUES ($1, $2, $3, $4, 0, $4, 'payment_sent')
-				`, orderID, supplierID, resellerID, wholesale)
+					VALUES ($1, $2, $3, $4, $5, $6, 'payment_sent')
+				`, orderID, supplierID, resellerID, wholesale, platformFee, supplierPayout)
 			}
 
 			// Notify supplier
 			inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{
 				ShopID: supplierID, Title: "Payment Sent",
-				Message: fmt.Sprintf("Reseller sent $%.2f for order. Please confirm receipt.", wholesale),
+				Message: fmt.Sprintf("Reseller sent $%.2f for order. Please confirm receipt.", supplierPayout),
 				Type: "info", Link: strPtr("/payouts"),
 			})
 
-			auditSvc.Log(c.Request.Context(), shopID.(string), "merchant", shopID.(string), "payment_sent",
-				"payout", orderID, map[string]interface{}{"amount": wholesale}, "success", "")
+			auditSvc.Log(c.Request.Context(), sid, "merchant", sid, "payment_sent",
+				"payout", orderID, map[string]interface{}{"wholesale": wholesale, "fee": platformFee, "supplier_payout": supplierPayout}, "success", "")
 			c.JSON(http.StatusOK, gin.H{"status": "ok"})
 		})
 
@@ -1499,13 +1514,14 @@ func main() {
 			shopID, _ := c.Get("shop_id")
 			role, _ := c.Get("shop_role")
 			orderID := c.Param("orderId")
+			sid := shopID.(string)
 
 			if role.(string) != "supplier" {
 				c.JSON(http.StatusForbidden, gin.H{"error": "only suppliers can confirm payments"})
 				return
 			}
 
-			_, err := db.Exec(c.Request.Context(), `UPDATE payout_records SET status = 'paid', updated_at = NOW() WHERE routed_order_id = $1 AND status = 'payment_sent'`, orderID)
+			_, err := db.Exec(c.Request.Context(), `UPDATE payout_records SET status = 'paid', updated_at = NOW() WHERE routed_order_id = $1 AND supplier_shop_id = $2 AND status = 'payment_sent'`, orderID, sid)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -1532,10 +1548,11 @@ func main() {
 			shopID, _ := c.Get("shop_id")
 			orderID := c.Param("orderId")
 
-			db.Exec(c.Request.Context(), `UPDATE payout_records SET status = 'disputed', updated_at = NOW() WHERE routed_order_id = $1`, orderID)
+			sid := shopID.(string)
+			db.Exec(c.Request.Context(), `UPDATE payout_records SET status = 'disputed', updated_at = NOW() WHERE routed_order_id = $1 AND supplier_shop_id = $2`, orderID, sid)
 
 			var resellerID string
-			db.QueryRow(c.Request.Context(), `SELECT reseller_shop_id FROM routed_orders WHERE id = $1`, orderID).Scan(&resellerID)
+			db.QueryRow(c.Request.Context(), `SELECT reseller_shop_id FROM routed_orders WHERE id = $1 AND supplier_shop_id = $2`, orderID, sid).Scan(&resellerID)
 			if resellerID != "" {
 				inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{
 					ShopID: resellerID, Title: "Payment Disputed",
