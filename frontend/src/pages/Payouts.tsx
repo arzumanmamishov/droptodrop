@@ -162,31 +162,35 @@ export default function Payouts({ role }: Props) {
 
                           {/* RESELLER: Pay button */}
                           {!isSupplier && (p.pay_status === 'pending' || p.pay_status === 'unpaid') && (
-                            <InlineStack gap="200">
-                              {p.supplier_paypal && (
-                                <Button size="slim" variant="primary" url={`https://paypal.me/${p.supplier_paypal}/${(p.supplier_payout > 0 ? p.supplier_payout : p.wholesale).toFixed(2)}${p.currency ? p.currency : ''}`} external>
-                                  Pay via PayPal
+                            <BlockStack gap="200" align="end">
+                              {p.supplier_paypal ? (
+                                <Button size="slim" variant="primary" url={`https://paypal.me/${p.supplier_paypal}/${(p.supplier_payout > 0 ? p.supplier_payout : p.wholesale).toFixed(2)}${p.currency || 'USD'}`} external>
+                                  Pay ${(p.supplier_payout > 0 ? p.supplier_payout : p.wholesale).toFixed(2)} via PayPal
                                 </Button>
+                              ) : (
+                                <Text as="span" variant="bodySm" tone="caution">Supplier has no PayPal</Text>
                               )}
-                              <Button size="slim" variant={p.supplier_paypal ? 'secondary' : 'primary'} onClick={() => setConfirmAction({ order: p, action: 'send-payment' })}>
-                                {p.supplier_paypal ? 'Mark as Paid' : 'Pay'}
+                              <Button size="slim" variant="secondary" onClick={() => setConfirmAction({ order: p, action: 'send-payment' })}>
+                                Mark as Paid
                               </Button>
-                            </InlineStack>
+                            </BlockStack>
                           )}
                           {!isSupplier && p.pay_status === 'payment_sent' && (
                             <Text as="span" variant="bodySm" tone="subdued">Waiting confirmation</Text>
                           )}
                           {!isSupplier && p.pay_status === 'disputed' && (
-                            <InlineStack gap="200">
-                              {p.supplier_paypal && (
-                                <Button size="slim" variant="primary" url={`https://paypal.me/${p.supplier_paypal}/${(p.supplier_payout > 0 ? p.supplier_payout : p.wholesale).toFixed(2)}${p.currency ? p.currency : ''}`} external>
-                                  Pay via PayPal
+                            <BlockStack gap="200" align="end">
+                              {p.supplier_paypal ? (
+                                <Button size="slim" variant="primary" url={`https://paypal.me/${p.supplier_paypal}/${(p.supplier_payout > 0 ? p.supplier_payout : p.wholesale).toFixed(2)}${p.currency || 'USD'}`} external>
+                                  Pay ${(p.supplier_payout > 0 ? p.supplier_payout : p.wholesale).toFixed(2)} via PayPal
                                 </Button>
+                              ) : (
+                                <Text as="span" variant="bodySm" tone="caution">Supplier has no PayPal</Text>
                               )}
-                              <Button size="slim" variant={p.supplier_paypal ? 'secondary' : 'primary'} onClick={() => setConfirmAction({ order: p, action: 'send-payment' })}>
-                                Retry Pay
+                              <Button size="slim" variant="secondary" onClick={() => setConfirmAction({ order: p, action: 'send-payment' })}>
+                                Mark as Paid
                               </Button>
-                            </InlineStack>
+                            </BlockStack>
                           )}
 
                           {/* SUPPLIER: Confirm/Dispute */}
