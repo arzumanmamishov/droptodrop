@@ -219,7 +219,7 @@ func (h *Handler) registerWebhooks(shop, accessToken string) {
 
 	for topic, path := range webhooks {
 		callbackURL := h.cfg.AppURL + path
-		if err := client.RegisterWebhook(ctx, topic, callbackURL); err != nil {
+		if err := client.DeleteAndRegisterWebhook(ctx, topic, callbackURL); err != nil {
 			h.logger.Error().Err(err).Str("topic", topic).Msg("failed to register webhook")
 		} else {
 			h.logger.Info().Str("topic", topic).Msg("webhook registered")

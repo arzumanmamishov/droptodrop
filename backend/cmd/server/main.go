@@ -220,7 +220,7 @@ func main() {
 								"PRODUCTS_UPDATE": "/webhooks/products/update",
 								"APP_UNINSTALLED": "/webhooks/app/uninstalled",
 							}
-							client.RegisterWebhook(bgCtx, topic, cfg.Shopify.AppURL+paths[topic])
+							client.DeleteAndRegisterWebhook(bgCtx, topic, cfg.Shopify.AppURL+paths[topic])
 						}
 					}
 				}

@@ -127,6 +127,35 @@ func (c *Client) REST(ctx context.Context, method, endpoint string, body interfa
 	return nil
 }
 
+// DeleteAndRegisterWebhook deletes existing webhook for the topic then creates a new one.
+func (c *Client) DeleteAndRegisterWebhook(ctx context.Context, topic, callbackURL string) error {
+	// First find existing webhook for this topic
+	listQuery := `{ webhookSubscriptions(first: 10, topics: [` + topic + `]) { edges { node { id callbackUrl } } } }`
+	var listResp struct {
+		Data struct {
+			WebhookSubscriptions struct {
+				Edges []struct {
+					Node struct {
+						ID          string `json:"id"`
+						CallbackURL string `json:"callbackUrl"`
+					} `json:"node"`
+				} `json:"edges"`
+			} `json:"webhookSubscriptions"`
+		} `json:"data"`
+	}
+	if err := c.GraphQL(ctx, listQuery, nil, &listResp); err == nil {
+		for _, edge := range listResp.Data.WebhookSubscriptions.Edges {
+			// Delete existing webhook
+			deleteQuery := `mutation deleteWebhook($id: ID!) { webhookSubscriptionDelete(id: $id) { deletedWebhookSubscriptionId userErrors { field message } } }`
+			var delResp json.RawMessage
+			c.GraphQL(ctx, deleteQuery, map[string]interface{}{"id": edge.Node.ID}, &delResp)
+			c.logger.Info().Str("topic", topic).Str("old_url", edge.Node.CallbackURL).Msg("deleted old webhook")
+		}
+	}
+	// Now register fresh
+	return c.RegisterWebhook(ctx, topic, callbackURL)
+}
+
 // RegisterWebhook registers a webhook subscription via GraphQL.
 func (c *Client) RegisterWebhook(ctx context.Context, topic, callbackURL string) error {
 	query := `mutation webhookSubscriptionCreate($topic: WebhookSubscriptionTopic!, $webhookSubscription: WebhookSubscriptionInput!) {
