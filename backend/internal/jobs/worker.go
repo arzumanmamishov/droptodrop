@@ -393,6 +393,65 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 		w.logger.Info().Msg("product set to ACTIVE")
 	}
 
+	// Publish product to Online Store sales channel
+	pubQuery := `mutation publishProduct($id: ID!, $input: [PublicationInput!]!) {
+		publishablePublish(id: $id, input: $input) {
+			publishable { availablePublicationsCount { count } }
+			userErrors { field message }
+		}
+	}`
+	// Get the Online Store publication
+	var pubResp struct {
+		Data struct {
+			AppInstallation struct {
+				Publications struct {
+					Edges []struct {
+						Node struct {
+							ID   string `json:"id"`
+							Name string `json:"name"`
+						} `json:"node"`
+					} `json:"edges"`
+				} `json:"publications"`
+			} `json:"appInstallation"`
+		} `json:"data"`
+	}
+	// Try to find Online Store publication
+	client.GraphQL(ctx, `{ publications(first: 10) { edges { node { id name } } } }`, nil, &pubResp)
+
+	// Look for Online Store or Point of Sale publication
+	for _, edge := range pubResp.Data.AppInstallation.Publications.Edges {
+		if edge.Node.ID != "" {
+			var pubResult json.RawMessage
+			client.GraphQL(ctx, pubQuery, map[string]interface{}{
+				"id":    product.ID,
+				"input": []map[string]interface{}{{"publicationId": edge.Node.ID}},
+			}, &pubResult)
+		}
+	}
+
+	// Alternative: use productPublish which is simpler
+	var pubsResp struct {
+		Data struct {
+			Publications struct {
+				Edges []struct {
+					Node struct {
+						ID string `json:"id"`
+					} `json:"node"`
+				} `json:"edges"`
+			} `json:"publications"`
+		} `json:"data"`
+	}
+	if err := client.GraphQL(ctx, `{ publications(first: 10) { edges { node { id } } } }`, nil, &pubsResp); err == nil {
+		for _, edge := range pubsResp.Data.Publications.Edges {
+			var r json.RawMessage
+			client.GraphQL(ctx, pubQuery, map[string]interface{}{
+				"id":    product.ID,
+				"input": []map[string]interface{}{{"publicationId": edge.Node.ID}},
+			}, &r)
+		}
+		w.logger.Info().Int("channels", len(pubsResp.Data.Publications.Edges)).Msg("product published to sales channels")
+	}
+
 	// Set inventory for the default variant so the product is available for purchase
 	if len(product.Variants.Edges) > 0 {
 		variantGID := product.Variants.Edges[0].Node.ID
@@ -442,7 +501,7 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 			}
 
 			// Step 2: Get the shop's primary location
-			locQuery := `{ locations(first: 1) { edges { node { id } } } }`
+			locQuery := `{ locations(first: 10) { edges { node { id name } } } }`
 			var locResp struct {
 				Data struct {
 					Locations struct {
@@ -457,19 +516,19 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 			if err := client.GraphQL(ctx, locQuery, nil, &locResp); err != nil {
 				w.logger.Warn().Err(err).Msg("failed to get location")
 			} else if len(locResp.Data.Locations.Edges) > 0 {
-				locationID := locResp.Data.Locations.Edges[0].Node.ID
-
-				// Activate inventory at location (required before setting quantities)
+				// Activate inventory at ALL locations
 				activateQuery := `mutation activateInventory($inventoryItemId: ID!, $locationId: ID!) {
 					inventoryActivate(inventoryItemId: $inventoryItemId, available: 0, locationId: $locationId) {
 						inventoryLevel { id }
 					}
 				}`
-				var activateResp json.RawMessage
-				client.GraphQL(ctx, activateQuery, map[string]interface{}{
-					"inventoryItemId": inventoryItemID,
-					"locationId":      locationID,
-				}, &activateResp)
+				for _, locEdge := range locResp.Data.Locations.Edges {
+					var activateResp json.RawMessage
+					client.GraphQL(ctx, activateQuery, map[string]interface{}{
+						"inventoryItemId": inventoryItemID,
+						"locationId":      locEdge.Node.ID,
+					}, &activateResp)
+				}
 
 				// Get supplier's inventory quantity for this variant
 				supplierQty := 100 // default
@@ -498,18 +557,21 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 						userErrors { field message }
 					}
 				}`
+				// Build quantities for ALL locations
+				var quantities []map[string]interface{}
+				for _, locEdge := range locResp.Data.Locations.Edges {
+					quantities = append(quantities, map[string]interface{}{
+						"inventoryItemId": inventoryItemID,
+						"locationId":      locEdge.Node.ID,
+						"quantity":        availableQty,
+					})
+				}
 				setInvVars := map[string]interface{}{
 					"input": map[string]interface{}{
 						"name":                  "available",
 						"reason":                "correction",
 						"ignoreCompareQuantity": true,
-						"quantities": []map[string]interface{}{
-							{
-								"inventoryItemId": inventoryItemID,
-								"locationId":      locationID,
-								"quantity":        availableQty,
-							},
-						},
+						"quantities":            quantities,
 					},
 				}
 				var setInvResp json.RawMessage

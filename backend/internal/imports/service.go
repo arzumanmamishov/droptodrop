@@ -88,6 +88,14 @@ func (s *Service) Create(ctx context.Context, resellerShopID string, input Impor
 		return nil, fmt.Errorf("listing is not active")
 	}
 
+	// Check if already imported (prevent duplicate imports)
+	var existingCount int
+	s.db.QueryRow(ctx, `SELECT COUNT(*) FROM reseller_imports WHERE reseller_shop_id = $1 AND supplier_listing_id = $2 AND status != 'removed'`,
+		resellerShopID, input.SupplierListingID).Scan(&existingCount)
+	if existingCount > 0 {
+		return nil, fmt.Errorf("you have already imported this product")
+	}
+
 	markupType := input.MarkupType
 	if markupType == "" {
 		markupType = "percentage"
