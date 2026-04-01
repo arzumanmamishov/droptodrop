@@ -1437,27 +1437,94 @@ func main() {
 			})
 		})
 
-		api.POST("/payouts/mark-paid/:orderId", func(c *gin.Context) {
+		// Reseller sends payment
+		api.POST("/payouts/send-payment/:orderId", func(c *gin.Context) {
 			shopID, _ := c.Get("shop_id")
+			role, _ := c.Get("shop_role")
 			orderID := c.Param("orderId")
 
-			// Get order details
+			if role.(string) != "reseller" {
+				c.JSON(http.StatusForbidden, gin.H{"error": "only resellers can send payments"})
+				return
+			}
+
 			var supplierID, resellerID string
 			var wholesale float64
 			db.QueryRow(c.Request.Context(), `SELECT supplier_shop_id, reseller_shop_id, total_wholesale_amount FROM routed_orders WHERE id = $1`, orderID).Scan(&supplierID, &resellerID, &wholesale)
 
-			// Update existing payout record to paid, or create one
-			result, _ := db.Exec(c.Request.Context(), `UPDATE payout_records SET status = 'paid', updated_at = NOW() WHERE routed_order_id = $1`, orderID)
+			// Update to payment_sent or create record
+			result, _ := db.Exec(c.Request.Context(), `UPDATE payout_records SET status = 'payment_sent', updated_at = NOW() WHERE routed_order_id = $1 AND status = 'pending'`, orderID)
 			if result.RowsAffected() == 0 {
 				db.Exec(c.Request.Context(), `
 					INSERT INTO payout_records (routed_order_id, supplier_shop_id, reseller_shop_id, wholesale_amount, platform_fee, supplier_payout, status)
-					VALUES ($1, $2, $3, $4, 0, $4, 'paid')
+					VALUES ($1, $2, $3, $4, 0, $4, 'payment_sent')
 				`, orderID, supplierID, resellerID, wholesale)
 			}
 
-			auditSvc.Log(c.Request.Context(), shopID.(string), "merchant", shopID.(string), "payout_marked_paid",
-				"payout", orderID, map[string]interface{}{"amount": wholesale}, "success", "")
+			// Notify supplier
+			inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{
+				ShopID: supplierID, Title: "Payment Sent",
+				Message: fmt.Sprintf("Reseller sent $%.2f for order. Please confirm receipt.", wholesale),
+				Type: "info", Link: strPtr("/payouts"),
+			})
 
+			auditSvc.Log(c.Request.Context(), shopID.(string), "merchant", shopID.(string), "payment_sent",
+				"payout", orderID, map[string]interface{}{"amount": wholesale}, "success", "")
+			c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		})
+
+		// Supplier confirms payment received
+		api.POST("/payouts/confirm-received/:orderId", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			role, _ := c.Get("shop_role")
+			orderID := c.Param("orderId")
+
+			if role.(string) != "supplier" {
+				c.JSON(http.StatusForbidden, gin.H{"error": "only suppliers can confirm payments"})
+				return
+			}
+
+			_, err := db.Exec(c.Request.Context(), `UPDATE payout_records SET status = 'paid', updated_at = NOW() WHERE routed_order_id = $1 AND status = 'payment_sent'`, orderID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+
+			// Notify reseller
+			var resellerID string
+			db.QueryRow(c.Request.Context(), `SELECT reseller_shop_id FROM routed_orders WHERE id = $1`, orderID).Scan(&resellerID)
+			if resellerID != "" {
+				inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{
+					ShopID: resellerID, Title: "Payment Confirmed",
+					Message: "Supplier confirmed receipt of your payment.",
+					Type: "success", Link: strPtr("/payouts"),
+				})
+			}
+
+			auditSvc.Log(c.Request.Context(), shopID.(string), "merchant", shopID.(string), "payment_confirmed",
+				"payout", orderID, nil, "success", "")
+			c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		})
+
+		// Supplier disputes payment (not received)
+		api.POST("/payouts/dispute-payment/:orderId", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			orderID := c.Param("orderId")
+
+			db.Exec(c.Request.Context(), `UPDATE payout_records SET status = 'disputed', updated_at = NOW() WHERE routed_order_id = $1`, orderID)
+
+			var resellerID string
+			db.QueryRow(c.Request.Context(), `SELECT reseller_shop_id FROM routed_orders WHERE id = $1`, orderID).Scan(&resellerID)
+			if resellerID != "" {
+				inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{
+					ShopID: resellerID, Title: "Payment Disputed",
+					Message: "Supplier says they haven't received your payment. Please check.",
+					Type: "warning", Link: strPtr("/payouts"),
+				})
+			}
+
+			auditSvc.Log(c.Request.Context(), shopID.(string), "merchant", shopID.(string), "payment_disputed",
+				"payout", orderID, nil, "failure", "")
 			c.JSON(http.StatusOK, gin.H{"status": "ok"})
 		})
 	}

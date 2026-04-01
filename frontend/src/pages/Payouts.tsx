@@ -29,31 +29,35 @@ interface PayoutsResponse {
   grand_balance: number;
 }
 
-interface Props {
-  role: string;
-}
+interface Props { role: string; }
 
 export default function Payouts({ role }: Props) {
   const [page, setPage] = useState(0);
   const limit = 20;
   const { data, loading, refetch } = useApi<PayoutsResponse>(`/payouts?limit=${limit}&offset=${page * limit}`);
-  const [confirmPay, setConfirmPay] = useState<PayoutOrder | null>(null);
-  const [paying, setPaying] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{ order: PayoutOrder; action: string } | null>(null);
+  const [acting, setActing] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
 
   const isSupplier = role === 'supplier';
 
-  const handleMarkPaid = useCallback(async () => {
-    if (!confirmPay) return;
-    setPaying(true);
+  const handleAction = useCallback(async () => {
+    if (!confirmAction) return;
+    setActing(true);
     try {
-      await api.post(`/payouts/mark-paid/${confirmPay.id}`);
-      setSuccess(`Marked order ${confirmPay.order_number || confirmPay.id.slice(0, 8)} as paid`);
-      setConfirmPay(null);
+      const { order, action } = confirmAction;
+      await api.post(`/payouts/${action}/${order.id}`);
+      const messages: Record<string, string> = {
+        'send-payment': `Payment sent. Waiting for supplier confirmation.`,
+        'confirm-received': `Payment confirmed.`,
+        'dispute-payment': `Payment disputed. Reseller notified.`,
+      };
+      setSuccess(messages[action] || 'Done');
+      setConfirmAction(null);
       refetch();
     } catch { /* */ }
-    finally { setPaying(false); }
-  }, [confirmPay, refetch]);
+    finally { setActing(false); }
+  }, [confirmAction, refetch]);
 
   if (loading) {
     return <Page title="Payouts"><div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><Spinner size="large" /></div></Page>;
@@ -62,8 +66,29 @@ export default function Payouts({ role }: Props) {
   const payouts = data?.payouts || [];
   const totalPages = Math.ceil((data?.total || 0) / limit);
 
+  const payStatusBadge = (status: string) => {
+    const map: Record<string, { tone: 'success' | 'attention' | 'critical' | 'info'; label: string }> = {
+      pending: { tone: 'attention', label: 'Awaiting Payment' },
+      payment_sent: { tone: 'info', label: 'Sent — Awaiting Confirmation' },
+      paid: { tone: 'success', label: 'Confirmed Paid' },
+      disputed: { tone: 'critical', label: 'Disputed' },
+      unpaid: { tone: 'attention', label: 'Awaiting Payment' },
+    };
+    const s = map[status] || map['unpaid'];
+    return <Badge tone={s.tone}>{s.label}</Badge>;
+  };
+
+  const getConfirmMessage = () => {
+    if (!confirmAction) return '';
+    const { order, action } = confirmAction;
+    if (action === 'send-payment') return `Confirm that you have sent $${order.wholesale.toFixed(2)} to the supplier for order ${order.order_number || order.id.slice(0, 8)}? The supplier will be asked to confirm receipt.`;
+    if (action === 'confirm-received') return `Confirm you received $${order.wholesale.toFixed(2)} for order ${order.order_number || order.id.slice(0, 8)}?`;
+    if (action === 'dispute-payment') return `Report that you have NOT received payment for order ${order.order_number || order.id.slice(0, 8)}? The reseller will be notified.`;
+    return '';
+  };
+
   return (
-    <Page title="Payouts" subtitle={isSupplier ? 'Money owed to you by resellers' : 'Money you owe to suppliers'}>
+    <Page title="Payouts" subtitle={isSupplier ? 'Money owed to you' : 'Money you owe'}>
       <Layout>
         {success && <Layout.Section><Banner tone="success" onDismiss={() => setSuccess(null)}>{success}</Banner></Layout.Section>}
 
@@ -74,8 +99,8 @@ export default function Payouts({ role }: Props) {
               <div className="stat-card-label">{isSupplier ? 'Total Earned' : 'Total Owed'}</div>
             </div>
             <div className="stat-card" style={{ flex: 1 }}>
-              <div className="stat-card-value">${(data?.grand_paid || 0).toFixed(2)}</div>
-              <div className="stat-card-label">Paid</div>
+              <div className="stat-card-value" style={{ color: '#2d6a4f' }}>${(data?.grand_paid || 0).toFixed(2)}</div>
+              <div className="stat-card-label">Confirmed Paid</div>
             </div>
             <div className="stat-card" style={{ flex: 1 }}>
               <div className="stat-card-value" style={{ color: (data?.grand_balance || 0) > 0 ? '#b91c1c' : '#2d6a4f' }}>
@@ -94,51 +119,60 @@ export default function Payouts({ role }: Props) {
                   <div key={p.id}>
                     <div style={{ padding: '14px 16px' }}>
                       <InlineStack align="space-between" blockAlign="center" wrap={false}>
-                        <BlockStack gap="100" >
+                        <BlockStack gap="100">
                           <InlineStack gap="200" blockAlign="center">
                             <Text as="span" variant="bodyMd" fontWeight="semibold">
                               {p.order_number || p.id.slice(0, 8)}
                             </Text>
-                            <Badge tone={p.status === 'fulfilled' ? 'success' : p.status === 'pending' ? 'attention' : 'info'}>
-                              {p.status}
-                            </Badge>
-                            {p.pay_status === 'paid' ? (
-                              <Badge tone="success">Paid</Badge>
-                            ) : p.pay_status === 'pending' ? (
-                              <Badge tone="attention">Payment Pending</Badge>
-                            ) : (
-                              <Badge>Unpaid</Badge>
-                            )}
+                            {payStatusBadge(p.pay_status)}
                           </InlineStack>
                           <Text as="p" variant="bodySm" tone="subdued">
-                            {p.products || 'No products'} — {p.domain}
+                            {p.products || 'Products'} — {p.domain}
                           </Text>
                           <Text as="p" variant="bodySm" tone="subdued">
                             {new Date(p.created_at).toLocaleDateString()}
                           </Text>
                         </BlockStack>
 
-                        <InlineStack gap="400" blockAlign="center" wrap={false}>
+                        <InlineStack gap="300" blockAlign="center" wrap={false}>
                           <BlockStack gap="050" align="end">
-                            <Text as="span" variant="headingSm">${p.wholesale.toFixed(2)}</Text>
-                            <Text as="span" variant="bodySm" tone="subdued">wholesale</Text>
+                            <Text as="span" variant="headingSm" fontWeight="bold">${p.wholesale.toFixed(2)}</Text>
+                            <Text as="span" variant="bodySm" tone="subdued">amount</Text>
                           </BlockStack>
-                          {p.platform_fee > 0 && (
-                            <BlockStack gap="050" align="end">
-                              <Text as="span" variant="bodySm">-${p.platform_fee.toFixed(2)}</Text>
-                              <Text as="span" variant="bodySm" tone="subdued">fee</Text>
-                            </BlockStack>
-                          )}
-                          {p.supplier_payout > 0 && (
-                            <BlockStack gap="050" align="end">
-                              <Text as="span" variant="headingSm" fontWeight="bold">${p.supplier_payout.toFixed(2)}</Text>
-                              <Text as="span" variant="bodySm" tone="subdued">payout</Text>
-                            </BlockStack>
-                          )}
-                          {p.pay_status !== 'paid' && (
-                            <Button size="slim" variant="primary" onClick={() => setConfirmPay(p)}>
-                              Mark Paid
+
+                          {/* RESELLER: Pay button */}
+                          {!isSupplier && (p.pay_status === 'pending' || p.pay_status === 'unpaid') && (
+                            <Button size="slim" variant="primary" onClick={() => setConfirmAction({ order: p, action: 'send-payment' })}>
+                              Pay
                             </Button>
+                          )}
+                          {!isSupplier && p.pay_status === 'payment_sent' && (
+                            <Text as="span" variant="bodySm" tone="subdued">Waiting confirmation</Text>
+                          )}
+                          {!isSupplier && p.pay_status === 'disputed' && (
+                            <Button size="slim" variant="primary" onClick={() => setConfirmAction({ order: p, action: 'send-payment' })}>
+                              Retry Pay
+                            </Button>
+                          )}
+
+                          {/* SUPPLIER: Confirm/Dispute */}
+                          {isSupplier && p.pay_status === 'payment_sent' && (
+                            <InlineStack gap="200">
+                              <Button size="slim" variant="primary" onClick={() => setConfirmAction({ order: p, action: 'confirm-received' })}>
+                                Confirm
+                              </Button>
+                              <Button size="slim" tone="critical" onClick={() => setConfirmAction({ order: p, action: 'dispute-payment' })}>
+                                Not Received
+                              </Button>
+                            </InlineStack>
+                          )}
+                          {isSupplier && (p.pay_status === 'pending' || p.pay_status === 'unpaid') && (
+                            <Text as="span" variant="bodySm" tone="subdued">Awaiting reseller</Text>
+                          )}
+
+                          {/* Both: Paid confirmation */}
+                          {p.pay_status === 'paid' && (
+                            <Text as="span" variant="bodySm" tone="success">&#10003;</Text>
                           )}
                         </InlineStack>
                       </InlineStack>
@@ -151,7 +185,7 @@ export default function Payouts({ role }: Props) {
           ) : (
             <Card>
               <EmptyState heading="No payouts yet" image="">
-                <p>{isSupplier ? 'When resellers order your products, payments will be tracked here.' : 'When you order from suppliers, payments will be tracked here.'}</p>
+                <p>{isSupplier ? 'Payments will appear here when resellers order your products.' : 'Payments will appear here when you order from suppliers.'}</p>
               </EmptyState>
             </Card>
           )}
@@ -169,14 +203,14 @@ export default function Payouts({ role }: Props) {
       </Layout>
 
       <ConfirmDialog
-        open={confirmPay !== null}
-        title="Confirm Payment"
-        message={confirmPay ? `Mark payment for order ${confirmPay.order_number || confirmPay.id.slice(0, 8)} ($${confirmPay.wholesale.toFixed(2)}) as paid?` : ''}
-        confirmLabel="Confirm Paid"
-        destructive={false}
-        loading={paying}
-        onConfirm={handleMarkPaid}
-        onCancel={() => setConfirmPay(null)}
+        open={confirmAction !== null}
+        title={confirmAction?.action === 'send-payment' ? 'Send Payment' : confirmAction?.action === 'confirm-received' ? 'Confirm Payment Received' : 'Dispute Payment'}
+        message={getConfirmMessage()}
+        confirmLabel={confirmAction?.action === 'send-payment' ? 'I Have Paid' : confirmAction?.action === 'confirm-received' ? 'Yes, Received' : 'Not Received'}
+        destructive={confirmAction?.action === 'dispute-payment'}
+        loading={acting}
+        onConfirm={handleAction}
+        onCancel={() => setConfirmAction(null)}
       />
     </Page>
   );
