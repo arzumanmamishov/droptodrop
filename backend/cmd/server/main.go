@@ -1489,7 +1489,7 @@ func main() {
 			supplierPayout := wholesale - platformFee
 
 			// Update to payment_sent or create record
-			result, _ := db.Exec(c.Request.Context(), `UPDATE payout_records SET status = 'payment_sent', updated_at = NOW() WHERE routed_order_id = $1 AND status = 'pending'`, orderID)
+			result, _ := db.Exec(c.Request.Context(), `UPDATE payout_records SET status = 'payment_sent', updated_at = NOW() WHERE routed_order_id = $1 AND status IN ('pending', 'disputed')`, orderID)
 			if result.RowsAffected() == 0 {
 				db.Exec(c.Request.Context(), `
 					INSERT INTO payout_records (routed_order_id, supplier_shop_id, reseller_shop_id, wholesale_amount, platform_fee, supplier_payout, status)
