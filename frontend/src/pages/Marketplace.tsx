@@ -27,6 +27,7 @@ export default function Marketplace() {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState(false);
+  const [detailModal, setDetailModal] = useState<SupplierListing | null>(null);
 
   const limit = 20;
   const categoryValue = PRODUCT_CATEGORIES[selectedCategory]?.value || 'all';
@@ -198,7 +199,9 @@ export default function Marketplace() {
                       <BlockStack gap="300">
                         {/* Title & vendor */}
                         <BlockStack gap="100">
-                          <Text as="h3" variant="headingSm" fontWeight="bold">{listing.title}</Text>
+                          <div style={{ cursor: 'pointer' }} onClick={() => setDetailModal(listing)}>
+                            <Text as="h3" variant="headingSm" fontWeight="bold">{listing.title}</Text>
+                          </div>
                           <Text as="p" variant="bodySm" tone="subdued">{listing.vendor || 'Unknown vendor'}</Text>
                         </BlockStack>
 
@@ -264,6 +267,18 @@ export default function Marketplace() {
                             onMouseOut={(e) => (e.currentTarget.style.background = '#fef3cd')}
                           >
                             Sample
+                          </div>
+                          <div
+                            onClick={() => setDetailModal(listing)}
+                            style={{
+                              flex: 1, textAlign: 'center', padding: '8px 4px', borderRadius: '8px',
+                              background: '#e8f5e9', color: '#2d6a4f', cursor: 'pointer', fontSize: '12px', fontWeight: 500,
+                              transition: 'background 0.15s',
+                            }}
+                            onMouseOver={(e) => (e.currentTarget.style.background = '#c8e6c9')}
+                            onMouseOut={(e) => (e.currentTarget.style.background = '#e8f5e9')}
+                          >
+                            Details
                           </div>
                         </div>
                       </BlockStack>
@@ -351,6 +366,105 @@ export default function Marketplace() {
                   </BlockStack>
                 )}
               </FormLayout>
+            </BlockStack>
+          </Modal.Section>
+        </Modal>
+      )}
+
+      {/* Product Detail Modal */}
+      {detailModal && (
+        <Modal open onClose={() => setDetailModal(null)} title={detailModal.title} large
+          primaryAction={{ content: 'Import This Product', onAction: () => { setDetailModal(null); setImportModal(detailModal); } }}
+          secondaryActions={[{ content: 'Close', onAction: () => setDetailModal(null) }]}
+        >
+          <Modal.Section>
+            <BlockStack gap="400">
+              {/* Image */}
+              {(() => {
+                const img = getProductImage(detailModal);
+                return img ? (
+                  <div style={{ textAlign: 'center' }}>
+                    <img src={img} alt={detailModal.title} style={{ maxWidth: '100%', maxHeight: '300px', objectFit: 'contain', borderRadius: '12px' }} />
+                  </div>
+                ) : null;
+              })()}
+
+              {/* Info grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ background: '#f8fafb', borderRadius: '8px', padding: '12px' }}>
+                  <Text as="p" variant="bodySm" tone="subdued">Vendor</Text>
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">{detailModal.vendor || 'Unknown'}</Text>
+                </div>
+                <div style={{ background: '#f8fafb', borderRadius: '8px', padding: '12px' }}>
+                  <Text as="p" variant="bodySm" tone="subdued">Category</Text>
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">{getCategoryLabel(detailModal.category)}</Text>
+                </div>
+                <div style={{ background: '#f8fafb', borderRadius: '8px', padding: '12px' }}>
+                  <Text as="p" variant="bodySm" tone="subdued">Processing Time</Text>
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">{detailModal.processing_days} days</Text>
+                </div>
+                <div style={{ background: '#f8fafb', borderRadius: '8px', padding: '12px' }}>
+                  <Text as="p" variant="bodySm" tone="subdued">Stock Allocation</Text>
+                  <Text as="p" variant="bodyMd" fontWeight="semibold">{detailModal.marketplace_stock_percent || 100}%</Text>
+                </div>
+              </div>
+
+              {/* Description */}
+              {detailModal.description && (
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">Description</Text>
+                  <div style={{ fontSize: '14px', lineHeight: '1.6' }} dangerouslySetInnerHTML={{ __html: detailModal.description }} />
+                </BlockStack>
+              )}
+
+              {/* Variants with cost */}
+              {detailModal.variants && detailModal.variants.length > 0 && (
+                <BlockStack gap="200">
+                  <Text as="p" variant="headingSm">Variants & Pricing</Text>
+                  <Divider />
+                  {detailModal.variants.map((v) => {
+                    const smart = getSmartPrice(v.wholesale_price);
+                    const profit = smart - v.wholesale_price;
+                    const marginPct = smart > 0 ? ((profit / smart) * 100) : 0;
+                    return (
+                      <div key={v.id} style={{ background: '#f8fafb', borderRadius: '8px', padding: '12px' }}>
+                        <InlineStack align="space-between" blockAlign="center">
+                          <BlockStack gap="050">
+                            <Text as="span" variant="bodyMd" fontWeight="semibold">{v.title || 'Default'}</Text>
+                            {v.sku && <Text as="span" variant="bodySm" tone="subdued">SKU: {v.sku}</Text>}
+                          </BlockStack>
+                          <InlineStack gap="400">
+                            <BlockStack gap="050" align="end">
+                              <Text as="span" variant="bodySm" tone="subdued">Cost</Text>
+                              <Text as="span" variant="headingSm">${v.wholesale_price.toFixed(2)}</Text>
+                            </BlockStack>
+                            <BlockStack gap="050" align="end">
+                              <Text as="span" variant="bodySm" tone="subdued">Sell for</Text>
+                              <Text as="span" variant="headingSm" tone="success">${smart.toFixed(2)}</Text>
+                            </BlockStack>
+                            <BlockStack gap="050" align="end">
+                              <Text as="span" variant="bodySm" tone="subdued">Profit</Text>
+                              <Text as="span" variant="headingSm" fontWeight="bold">${profit.toFixed(2)} ({marginPct.toFixed(0)}%)</Text>
+                            </BlockStack>
+                          </InlineStack>
+                        </InlineStack>
+                      </div>
+                    );
+                  })}
+                </BlockStack>
+              )}
+
+              {/* Tags */}
+              {detailModal.tags && (
+                <BlockStack gap="100">
+                  <Text as="p" variant="bodySm" tone="subdued">Tags</Text>
+                  <InlineStack gap="200">
+                    {detailModal.tags.split(',').map((tag, i) => (
+                      <Badge key={i}>{tag.trim()}</Badge>
+                    ))}
+                  </InlineStack>
+                </BlockStack>
+              )}
             </BlockStack>
           </Modal.Section>
         </Modal>
