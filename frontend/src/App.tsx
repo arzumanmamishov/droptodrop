@@ -34,6 +34,7 @@ import ShippingRules from './pages/ShippingRules';
 import Samples from './pages/Samples';
 import SetupWizard from './pages/SetupWizard';
 import Onboarding from './pages/Onboarding';
+import ResellerSettings from './pages/ResellerSettings';
 
 export default function App() {
   const [shop, setShop] = useState<Shop | null>(null);
@@ -99,6 +100,7 @@ export default function App() {
                   <Route path="/bulk-import" element={<BulkImport />} />
                   <Route path="/supplier/:id" element={<SupplierInfo />} />
                   <Route path="/imports" element={<Imports />} />
+                  <Route path="/reseller/settings" element={<ResellerSettings />} />
                 </>
               )}
               <Route path="/analytics" element={<Analytics />} />

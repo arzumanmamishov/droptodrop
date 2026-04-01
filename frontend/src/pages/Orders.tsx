@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Page, Layout, Card, DataTable, Badge, Button, Spinner,
@@ -34,12 +34,6 @@ export default function Orders({ role }: OrdersProps) {
   const { data, loading, error, refetch } = useApi<OrdersResponse>(
     `${endpoint}?limit=${limit}&offset=${page * limit}${statusQuery}`,
   );
-
-  // Auto-refresh every 10 seconds
-  useEffect(() => {
-    const interval = setInterval(() => refetch(), 10000);
-    return () => clearInterval(interval);
-  }, [refetch]);
 
   const handleExport = () => {
     (async () => {

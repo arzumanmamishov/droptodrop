@@ -53,7 +53,6 @@ export default function AppFrame({ shop, children }: AppFrameProps) {
     { url: '/payouts', label: 'Payouts', icon: CashDollarIcon, selected: location.pathname === '/payouts' },
     { url: '/billing', label: 'Billing', icon: CashDollarIcon, selected: location.pathname === '/billing' },
     { url: '/audit', label: 'Audit Log', icon: ListBulletedIcon, selected: location.pathname === '/audit' },
-    { url: '/settings', label: 'Settings', icon: SettingsIcon, selected: location.pathname === '/settings' },
   ];
 
   const resellerNavItems = [
@@ -72,7 +71,7 @@ export default function AppFrame({ shop, children }: AppFrameProps) {
     { url: '/payouts', label: 'Payouts', icon: CashDollarIcon, selected: location.pathname === '/payouts' },
     { url: '/billing', label: 'Billing', icon: CashDollarIcon, selected: location.pathname === '/billing' },
     { url: '/audit', label: 'Audit Log', icon: ListBulletedIcon, selected: location.pathname === '/audit' },
-    { url: '/settings', label: 'Settings', icon: SettingsIcon, selected: location.pathname === '/settings' },
+    { url: '/reseller/settings', label: 'Settings', icon: SettingsIcon, selected: location.pathname === '/reseller/settings' },
   ];
 
   const navItems = shop.role === 'supplier' ? supplierNavItems : resellerNavItems;

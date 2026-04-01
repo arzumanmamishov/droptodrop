@@ -622,6 +622,20 @@ func main() {
 				c.JSON(http.StatusOK, profile)
 			})
 
+			reseller.PUT("/profile", func(c *gin.Context) {
+				shopID, _ := c.Get("shop_id")
+				var body map[string]interface{}
+				if err := c.ShouldBindJSON(&body); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
+				if err := shopsSvc.UpdateResellerProfile(c.Request.Context(), shopID.(string), body); err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
+				c.JSON(http.StatusOK, gin.H{"status": "ok"})
+			})
+
 			reseller.GET("/marketplace", func(c *gin.Context) {
 				var filters products.MarketplaceFilters
 				c.ShouldBindQuery(&filters)
@@ -1401,7 +1415,8 @@ func main() {
 					COALESCE(pr.status, 'unpaid') as pay_status,
 					COALESCE(pr.platform_fee, 0) as platform_fee,
 					COALESCE(pr.supplier_payout, 0) as supplier_payout,
-					COALESCE((SELECT string_agg(roi.title, ', ') FROM routed_order_items roi WHERE roi.routed_order_id = ro.id), '') as products
+					COALESCE((SELECT string_agg(roi.title, ', ') FROM routed_order_items roi WHERE roi.routed_order_id = ro.id), '') as products,
+					COALESCE((SELECT sp.paypal_email FROM supplier_profiles sp WHERE sp.shop_id = ro.supplier_shop_id), '') as supplier_paypal
 				FROM routed_orders ro
 				JOIN shops s ON s.id = ro.%s
 				LEFT JOIN payout_records pr ON pr.routed_order_id = ro.id
@@ -1418,13 +1433,14 @@ func main() {
 			var payouts []gin.H
 			var grandTotal, grandPaid float64
 			for rows.Next() {
-				var id, orderNum, status, currency, domain, payStatus, products string
+				var id, orderNum, status, currency, domain, payStatus, products, supplierPaypal string
 				var wholesale, fee, payout float64
 				var createdAt time.Time
-				rows.Scan(&id, &orderNum, &status, &wholesale, &currency, &createdAt, &domain, &payStatus, &fee, &payout, &products)
+				rows.Scan(&id, &orderNum, &status, &wholesale, &currency, &createdAt, &domain, &payStatus, &fee, &payout, &products, &supplierPaypal)
 				payouts = append(payouts, gin.H{
 					"id": id, "order_number": orderNum, "status": status,
 					"wholesale": wholesale, "currency": currency, "domain": domain,
+					"supplier_paypal": supplierPaypal,
 					"pay_status": payStatus, "platform_fee": fee, "supplier_payout": payout,
 					"products": products, "created_at": createdAt,
 				})

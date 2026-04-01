@@ -21,6 +21,7 @@ export interface SupplierProfile {
   company_name: string;
   support_email: string;
   return_policy_url: string;
+  paypal_email: string;
 }
 
 export interface ResellerProfile {

@@ -28,6 +28,7 @@ export default function SupplierSetup() {
   const [companyName, setCompanyName] = useState('');
   const [supportEmail, setSupportEmail] = useState('');
   const [returnPolicyUrl, setReturnPolicyUrl] = useState('');
+  const [paypalEmail, setPaypalEmail] = useState('');
 
   useEffect(() => {
     api
@@ -41,6 +42,7 @@ export default function SupplierSetup() {
         setCompanyName(data.company_name);
         setSupportEmail(data.support_email);
         setReturnPolicyUrl(data.return_policy_url);
+        setPaypalEmail(data.paypal_email || '');
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -59,6 +61,7 @@ export default function SupplierSetup() {
         company_name: companyName,
         support_email: supportEmail,
         return_policy_url: returnPolicyUrl,
+        paypal_email: paypalEmail,
       });
       setSuccess(true);
     } catch (err) {
@@ -66,7 +69,7 @@ export default function SupplierSetup() {
     } finally {
       setSaving(false);
     }
-  }, [isEnabled, processingDays, blindFulfillment, approvalMode, companyName, supportEmail, returnPolicyUrl]);
+  }, [isEnabled, processingDays, blindFulfillment, approvalMode, companyName, supportEmail, returnPolicyUrl, paypalEmail]);
 
   if (loading) {
     return (
@@ -162,6 +165,7 @@ export default function SupplierSetup() {
               <TextField label="Company name" value={companyName} onChange={setCompanyName} autoComplete="organization" />
               <TextField label="Support email" type="email" value={supportEmail} onChange={setSupportEmail} autoComplete="email" />
               <TextField label="Return policy URL" value={returnPolicyUrl} onChange={setReturnPolicyUrl} autoComplete="url" />
+              <TextField label="PayPal email" type="email" value={paypalEmail} onChange={setPaypalEmail} autoComplete="email" helpText="Resellers will use this to send you payments via PayPal." />
             </FormLayout>
           </Card>
         </Layout.AnnotatedSection>

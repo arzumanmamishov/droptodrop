@@ -37,6 +37,7 @@ type SupplierProfile struct {
 	CompanyName          string   `json:"company_name"`
 	SupportEmail         string   `json:"support_email"`
 	ReturnPolicyURL      string   `json:"return_policy_url"`
+	PaypalEmail          string   `json:"paypal_email"`
 }
 
 // ResellerProfile represents reseller-specific settings.
@@ -50,6 +51,7 @@ type ResellerProfile struct {
 	AutoSyncInventory  bool    `json:"auto_sync_inventory"`
 	AutoSyncPrice      bool    `json:"auto_sync_price"`
 	AutoSyncContent    bool    `json:"auto_sync_content"`
+	PaypalEmail        string  `json:"paypal_email"`
 }
 
 // Service handles shop operations.
@@ -119,10 +121,10 @@ func (s *Service) GetSupplierProfile(ctx context.Context, shopID string) (*Suppl
 	var p SupplierProfile
 	err := s.db.QueryRow(ctx, `
 		SELECT id, shop_id, is_enabled, default_processing_days, blind_fulfillment, reseller_approval_mode,
-			COALESCE(company_name,''), COALESCE(support_email,''), COALESCE(return_policy_url,'')
+			COALESCE(company_name,''), COALESCE(support_email,''), COALESCE(return_policy_url,''), COALESCE(paypal_email,'')
 		FROM supplier_profiles WHERE shop_id = $1
 	`, shopID).Scan(&p.ID, &p.ShopID, &p.IsEnabled, &p.DefaultProcessingDays, &p.BlindFulfillment,
-		&p.ResellerApprovalMode, &p.CompanyName, &p.SupportEmail, &p.ReturnPolicyURL)
+		&p.ResellerApprovalMode, &p.CompanyName, &p.SupportEmail, &p.ReturnPolicyURL, &p.PaypalEmail)
 	if err != nil {
 		return nil, fmt.Errorf("get supplier profile: %w", err)
 	}
@@ -139,7 +141,8 @@ func (s *Service) UpdateSupplierProfile(ctx context.Context, shopID string, upda
 			reseller_approval_mode = COALESCE($5, reseller_approval_mode),
 			company_name = COALESCE($6, company_name),
 			support_email = COALESCE($7, support_email),
-			return_policy_url = COALESCE($8, return_policy_url)
+			return_policy_url = COALESCE($8, return_policy_url),
+			paypal_email = COALESCE($9, paypal_email)
 		WHERE shop_id = $1
 	`, shopID,
 		update["is_enabled"],
@@ -149,6 +152,7 @@ func (s *Service) UpdateSupplierProfile(ctx context.Context, shopID string, upda
 		update["company_name"],
 		update["support_email"],
 		update["return_policy_url"],
+		update["paypal_email"],
 	)
 	if err != nil {
 		return fmt.Errorf("update supplier profile: %w", err)
@@ -163,14 +167,28 @@ func (s *Service) GetResellerProfile(ctx context.Context, shopID string) (*Resel
 	var p ResellerProfile
 	err := s.db.QueryRow(ctx, `
 		SELECT id, shop_id, is_enabled, default_markup_type, default_markup_value, min_margin_percentage,
-			auto_sync_inventory, auto_sync_price, auto_sync_content
+			auto_sync_inventory, auto_sync_price, auto_sync_content, COALESCE(paypal_email,'')
 		FROM reseller_profiles WHERE shop_id = $1
 	`, shopID).Scan(&p.ID, &p.ShopID, &p.IsEnabled, &p.DefaultMarkupType, &p.DefaultMarkupValue,
-		&p.MinMarginPercentage, &p.AutoSyncInventory, &p.AutoSyncPrice, &p.AutoSyncContent)
+		&p.MinMarginPercentage, &p.AutoSyncInventory, &p.AutoSyncPrice, &p.AutoSyncContent, &p.PaypalEmail)
 	if err != nil {
 		return nil, fmt.Errorf("get reseller profile: %w", err)
 	}
 	return &p, nil
+}
+
+// UpdateResellerProfile updates reseller settings.
+func (s *Service) UpdateResellerProfile(ctx context.Context, shopID string, update map[string]interface{}) error {
+	_, err := s.db.Exec(ctx, `
+		UPDATE reseller_profiles SET
+			paypal_email = COALESCE($2, paypal_email)
+		WHERE shop_id = $1
+	`, shopID, update["paypal_email"])
+	if err != nil {
+		return fmt.Errorf("update reseller profile: %w", err)
+	}
+	s.audit.Log(ctx, shopID, "merchant", shopID, "reseller_profile_updated", "reseller_profile", shopID, update, "success", "")
+	return nil
 }
 
 // Deactivate soft-deactivates a shop on uninstall.
