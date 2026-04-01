@@ -23,6 +23,7 @@ import Analytics from './pages/Analytics';
 import Disputes from './pages/Disputes';
 import Notifications from './pages/Notifications';
 import Resellers from './pages/Resellers';
+import Payouts from './pages/Payouts';
 import Billing from './pages/Billing';
 import BulkImport from './pages/BulkImport';
 import Messages from './pages/Messages';
@@ -103,6 +104,7 @@ export default function App() {
               <Route path="/analytics" element={<Analytics />} />
               <Route path="/disputes" element={<Disputes />} />
               <Route path="/notifications" element={<Notifications />} />
+              <Route path="/payouts" element={<Payouts role={shop.role} />} />
               <Route path="/billing" element={<Billing />} />
               <Route path="/messages" element={<Messages />} />
               <Route path="/announcements" element={<Announcements role={shop.role} />} />

@@ -1374,6 +1374,117 @@ func main() {
 			}
 			c.JSON(http.StatusOK, gin.H{"entries": entries, "total": total})
 		})
+
+		// ===== Payouts =====
+		api.GET("/payouts", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			role, _ := c.Get("shop_role")
+			sid := shopID.(string)
+
+			var query string
+			if role.(string) == "supplier" {
+				query = `SELECT ro.supplier_shop_id, ro.reseller_shop_id, s.shopify_domain,
+					COUNT(ro.id) as order_count,
+					COALESCE(SUM(ro.total_wholesale_amount), 0) as total_owed,
+					COALESCE(SUM(CASE WHEN pr.status = 'paid' THEN pr.supplier_payout ELSE 0 END), 0) as total_paid
+				FROM routed_orders ro
+				JOIN shops s ON s.id = ro.reseller_shop_id
+				LEFT JOIN payout_records pr ON pr.routed_order_id = ro.id
+				WHERE ro.supplier_shop_id = $1 AND ro.status IN ('pending', 'accepted', 'processing', 'fulfilled')
+				GROUP BY ro.supplier_shop_id, ro.reseller_shop_id, s.shopify_domain
+				ORDER BY total_owed DESC`
+			} else {
+				query = `SELECT ro.supplier_shop_id, ro.reseller_shop_id, s.shopify_domain,
+					COUNT(ro.id) as order_count,
+					COALESCE(SUM(ro.total_wholesale_amount), 0) as total_owed,
+					COALESCE(SUM(CASE WHEN pr.status = 'paid' THEN pr.supplier_payout ELSE 0 END), 0) as total_paid
+				FROM routed_orders ro
+				JOIN shops s ON s.id = ro.supplier_shop_id
+				LEFT JOIN payout_records pr ON pr.routed_order_id = ro.id
+				WHERE ro.reseller_shop_id = $1 AND ro.status IN ('pending', 'accepted', 'processing', 'fulfilled')
+				GROUP BY ro.supplier_shop_id, ro.reseller_shop_id, s.shopify_domain
+				ORDER BY total_owed DESC`
+			}
+
+			rows, err := db.Query(c.Request.Context(), query, sid)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			defer rows.Close()
+
+			var payouts []gin.H
+			var grandTotal, grandPaid float64
+			for rows.Next() {
+				var supplierID, resellerID, domain string
+				var orderCount int
+				var totalOwed, totalPaid float64
+				rows.Scan(&supplierID, &resellerID, &domain, &orderCount, &totalOwed, &totalPaid)
+				payouts = append(payouts, gin.H{
+					"supplier_shop_id": supplierID,
+					"reseller_shop_id": resellerID,
+					"domain": domain,
+					"order_count": orderCount,
+					"total_owed": totalOwed,
+					"total_paid": totalPaid,
+					"balance": totalOwed - totalPaid,
+				})
+				grandTotal += totalOwed
+				grandPaid += totalPaid
+			}
+			c.JSON(http.StatusOK, gin.H{
+				"payouts": payouts,
+				"grand_total": grandTotal,
+				"grand_paid": grandPaid,
+				"grand_balance": grandTotal - grandPaid,
+			})
+		})
+
+		api.POST("/payouts/mark-paid", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			var body struct {
+				SupplierShopID string  `json:"supplier_shop_id"`
+				ResellerShopID string  `json:"reseller_shop_id"`
+				Amount         float64 `json:"amount"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			// Create payout records for unpaid orders
+			rows, err := db.Query(c.Request.Context(), `
+				SELECT ro.id, ro.total_wholesale_amount FROM routed_orders ro
+				LEFT JOIN payout_records pr ON pr.routed_order_id = ro.id AND pr.status = 'paid'
+				WHERE ro.supplier_shop_id = $1 AND ro.reseller_shop_id = $2
+				AND ro.status IN ('fulfilled', 'accepted', 'processing')
+				AND pr.id IS NULL
+				ORDER BY ro.created_at
+			`, body.SupplierShopID, body.ResellerShopID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			defer rows.Close()
+
+			var marked int
+			for rows.Next() {
+				var orderID string
+				var amount float64
+				rows.Scan(&orderID, &amount)
+				db.Exec(c.Request.Context(), `
+					INSERT INTO payout_records (routed_order_id, supplier_shop_id, reseller_shop_id, wholesale_amount, supplier_payout, status)
+					VALUES ($1, $2, $3, $4, $4, 'paid')
+					ON CONFLICT DO NOTHING
+				`, orderID, body.SupplierShopID, body.ResellerShopID, amount)
+				marked++
+			}
+
+			auditSvc.Log(c.Request.Context(), shopID.(string), "merchant", shopID.(string), "payout_marked_paid",
+				"payout", body.SupplierShopID, map[string]interface{}{"marked": marked, "amount": body.Amount}, "success", "")
+
+			c.JSON(http.StatusOK, gin.H{"status": "ok", "marked": marked})
+		})
 	}
 
 	// Serve frontend static files if available (production single-container mode)
