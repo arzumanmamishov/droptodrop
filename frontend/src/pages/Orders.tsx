@@ -112,10 +112,11 @@ export default function Orders({ role }: OrdersProps) {
     }
   };
 
-  const secondaryActions = [{ content: 'Export CSV', onAction: handleExport }];
+  const secondaryActions: Array<{ content: string; onAction: () => void }> = [];
   if (role === 'reseller') {
-    secondaryActions.unshift({ content: 'Route Order', onAction: () => setShowRouteModal(true) });
+    secondaryActions.push({ content: 'Route Order', onAction: () => setShowRouteModal(true) });
   }
+  secondaryActions.push({ content: 'Export CSV', onAction: () => { handleExport(); } });
 
   return (
     <Page title="Orders" secondaryActions={secondaryActions}>
