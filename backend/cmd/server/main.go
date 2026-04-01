@@ -1380,33 +1380,34 @@ func main() {
 			shopID, _ := c.Get("shop_id")
 			role, _ := c.Get("shop_role")
 			sid := shopID.(string)
+			limit := getIntQuery(c, "limit", 20)
+			offset := getIntQuery(c, "offset", 0)
 
-			var query string
+			// Count total
+			var total int
+			shopCol := "reseller_shop_id"
+			otherCol := "supplier_shop_id"
 			if role.(string) == "supplier" {
-				query = `SELECT ro.supplier_shop_id, ro.reseller_shop_id, s.shopify_domain,
-					COUNT(ro.id) as order_count,
-					COALESCE(SUM(ro.total_wholesale_amount), 0) as total_owed,
-					COALESCE(SUM(CASE WHEN pr.status = 'paid' THEN pr.supplier_payout ELSE 0 END), 0) as total_paid
-				FROM routed_orders ro
-				JOIN shops s ON s.id = ro.reseller_shop_id
-				LEFT JOIN payout_records pr ON pr.routed_order_id = ro.id
-				WHERE ro.supplier_shop_id = $1 AND ro.status IN ('pending', 'accepted', 'processing', 'fulfilled')
-				GROUP BY ro.supplier_shop_id, ro.reseller_shop_id, s.shopify_domain
-				ORDER BY total_owed DESC`
-			} else {
-				query = `SELECT ro.supplier_shop_id, ro.reseller_shop_id, s.shopify_domain,
-					COUNT(ro.id) as order_count,
-					COALESCE(SUM(ro.total_wholesale_amount), 0) as total_owed,
-					COALESCE(SUM(CASE WHEN pr.status = 'paid' THEN pr.supplier_payout ELSE 0 END), 0) as total_paid
-				FROM routed_orders ro
-				JOIN shops s ON s.id = ro.supplier_shop_id
-				LEFT JOIN payout_records pr ON pr.routed_order_id = ro.id
-				WHERE ro.reseller_shop_id = $1 AND ro.status IN ('pending', 'accepted', 'processing', 'fulfilled')
-				GROUP BY ro.supplier_shop_id, ro.reseller_shop_id, s.shopify_domain
-				ORDER BY total_owed DESC`
+				shopCol = "supplier_shop_id"
+				otherCol = "reseller_shop_id"
 			}
+			db.QueryRow(c.Request.Context(), fmt.Sprintf(`SELECT COUNT(*) FROM routed_orders WHERE %s = $1 AND status IN ('pending','accepted','processing','fulfilled')`, shopCol), sid).Scan(&total)
 
-			rows, err := db.Query(c.Request.Context(), query, sid)
+			// Get per-order payouts with product details
+			rows, err := db.Query(c.Request.Context(), fmt.Sprintf(`
+				SELECT ro.id, ro.reseller_order_number, ro.status, ro.total_wholesale_amount, ro.currency, ro.created_at,
+					s.shopify_domain,
+					COALESCE(pr.status, 'unpaid') as pay_status,
+					COALESCE(pr.platform_fee, 0) as platform_fee,
+					COALESCE(pr.supplier_payout, 0) as supplier_payout,
+					COALESCE((SELECT string_agg(roi.title, ', ') FROM routed_order_items roi WHERE roi.routed_order_id = ro.id), '') as products
+				FROM routed_orders ro
+				JOIN shops s ON s.id = ro.%s
+				LEFT JOIN payout_records pr ON pr.routed_order_id = ro.id
+				WHERE ro.%s = $1 AND ro.status IN ('pending','accepted','processing','fulfilled')
+				ORDER BY ro.created_at DESC
+				LIMIT $2 OFFSET $3
+			`, otherCol, shopCol), sid, limit, offset)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -1416,74 +1417,48 @@ func main() {
 			var payouts []gin.H
 			var grandTotal, grandPaid float64
 			for rows.Next() {
-				var supplierID, resellerID, domain string
-				var orderCount int
-				var totalOwed, totalPaid float64
-				rows.Scan(&supplierID, &resellerID, &domain, &orderCount, &totalOwed, &totalPaid)
+				var id, orderNum, status, currency, domain, payStatus, products string
+				var wholesale, fee, payout float64
+				var createdAt time.Time
+				rows.Scan(&id, &orderNum, &status, &wholesale, &currency, &createdAt, &domain, &payStatus, &fee, &payout, &products)
 				payouts = append(payouts, gin.H{
-					"supplier_shop_id": supplierID,
-					"reseller_shop_id": resellerID,
-					"domain": domain,
-					"order_count": orderCount,
-					"total_owed": totalOwed,
-					"total_paid": totalPaid,
-					"balance": totalOwed - totalPaid,
+					"id": id, "order_number": orderNum, "status": status,
+					"wholesale": wholesale, "currency": currency, "domain": domain,
+					"pay_status": payStatus, "platform_fee": fee, "supplier_payout": payout,
+					"products": products, "created_at": createdAt,
 				})
-				grandTotal += totalOwed
-				grandPaid += totalPaid
+				grandTotal += wholesale
+				if payStatus == "paid" { grandPaid += payout }
 			}
 			c.JSON(http.StatusOK, gin.H{
-				"payouts": payouts,
-				"grand_total": grandTotal,
-				"grand_paid": grandPaid,
+				"payouts": payouts, "total": total,
+				"grand_total": grandTotal, "grand_paid": grandPaid,
 				"grand_balance": grandTotal - grandPaid,
 			})
 		})
 
-		api.POST("/payouts/mark-paid", func(c *gin.Context) {
+		api.POST("/payouts/mark-paid/:orderId", func(c *gin.Context) {
 			shopID, _ := c.Get("shop_id")
-			var body struct {
-				SupplierShopID string  `json:"supplier_shop_id"`
-				ResellerShopID string  `json:"reseller_shop_id"`
-				Amount         float64 `json:"amount"`
-			}
-			if err := c.ShouldBindJSON(&body); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
+			orderID := c.Param("orderId")
 
-			// Create payout records for unpaid orders
-			rows, err := db.Query(c.Request.Context(), `
-				SELECT ro.id, ro.total_wholesale_amount FROM routed_orders ro
-				LEFT JOIN payout_records pr ON pr.routed_order_id = ro.id AND pr.status = 'paid'
-				WHERE ro.supplier_shop_id = $1 AND ro.reseller_shop_id = $2
-				AND ro.status IN ('fulfilled', 'accepted', 'processing')
-				AND pr.id IS NULL
-				ORDER BY ro.created_at
-			`, body.SupplierShopID, body.ResellerShopID)
-			if err != nil {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-				return
-			}
-			defer rows.Close()
+			// Get order details
+			var supplierID, resellerID string
+			var wholesale float64
+			db.QueryRow(c.Request.Context(), `SELECT supplier_shop_id, reseller_shop_id, total_wholesale_amount FROM routed_orders WHERE id = $1`, orderID).Scan(&supplierID, &resellerID, &wholesale)
 
-			var marked int
-			for rows.Next() {
-				var orderID string
-				var amount float64
-				rows.Scan(&orderID, &amount)
+			// Update existing payout record to paid, or create one
+			result, _ := db.Exec(c.Request.Context(), `UPDATE payout_records SET status = 'paid', updated_at = NOW() WHERE routed_order_id = $1`, orderID)
+			if result.RowsAffected() == 0 {
 				db.Exec(c.Request.Context(), `
-					INSERT INTO payout_records (routed_order_id, supplier_shop_id, reseller_shop_id, wholesale_amount, supplier_payout, status)
-					VALUES ($1, $2, $3, $4, $4, 'paid')
-					ON CONFLICT DO NOTHING
-				`, orderID, body.SupplierShopID, body.ResellerShopID, amount)
-				marked++
+					INSERT INTO payout_records (routed_order_id, supplier_shop_id, reseller_shop_id, wholesale_amount, platform_fee, supplier_payout, status)
+					VALUES ($1, $2, $3, $4, 0, $4, 'paid')
+				`, orderID, supplierID, resellerID, wholesale)
 			}
 
 			auditSvc.Log(c.Request.Context(), shopID.(string), "merchant", shopID.(string), "payout_marked_paid",
-				"payout", body.SupplierShopID, map[string]interface{}{"marked": marked, "amount": body.Amount}, "success", "")
+				"payout", orderID, map[string]interface{}{"amount": wholesale}, "success", "")
 
-			c.JSON(http.StatusOK, gin.H{"status": "ok", "marked": marked})
+			c.JSON(http.StatusOK, gin.H{"status": "ok"})
 		})
 	}
 
