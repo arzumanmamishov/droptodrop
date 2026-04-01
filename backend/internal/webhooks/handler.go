@@ -75,14 +75,16 @@ func (h *Handler) recordWebhookEvent(c *gin.Context, topic string, rawBody []byt
 	// Compute payload hash for deduplication
 	hash := fmt.Sprintf("%x", sha256.Sum256(rawBody))
 
-	// Check for duplicate
+	// Check for duplicate using Shopify's webhook ID (unique per delivery)
 	var existingID string
-	err := h.db.QueryRow(c.Request.Context(), `
-		SELECT id FROM webhook_events WHERE payload_hash = $1 AND topic = $2 AND status IN ('processed', 'processing')
-	`, hash, topic).Scan(&existingID)
-	if err == nil {
-		h.logger.Info().Str("topic", topic).Str("existing_id", existingID).Msg("duplicate webhook, skipping")
-		return existingID, true
+	if webhookID != "" {
+		err := h.db.QueryRow(c.Request.Context(), `
+			SELECT id FROM webhook_events WHERE shopify_webhook_id = $1 AND status IN ('processed', 'processing')
+		`, webhookID).Scan(&existingID)
+		if err == nil {
+			h.logger.Info().Str("topic", topic).Str("webhook_id", webhookID).Msg("duplicate webhook, skipping")
+			return existingID, true
+		}
 	}
 
 	// Get shop ID
@@ -91,7 +93,7 @@ func (h *Handler) recordWebhookEvent(c *gin.Context, topic string, rawBody []byt
 
 	// Insert event record
 	var eventID string
-	err = h.db.QueryRow(c.Request.Context(), `
+	err := h.db.QueryRow(c.Request.Context(), `
 		INSERT INTO webhook_events (shop_id, topic, shopify_webhook_id, payload_hash, status)
 		VALUES ($1, $2, $3, $4, 'processing')
 		RETURNING id
