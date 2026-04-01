@@ -214,11 +214,13 @@ func main() {
 						if domain == "" { domain = shop.ShopifyDomain }
 						client := shopify.NewClient(domain, token, logger)
 						bgCtx := context.Background()
-						for _, topic := range []string{"PRODUCTS_DELETE", "PRODUCTS_UPDATE", "APP_UNINSTALLED"} {
+						for _, topic := range []string{"ORDERS_CREATE", "FULFILLMENTS_CREATE", "PRODUCTS_DELETE", "PRODUCTS_UPDATE", "APP_UNINSTALLED"} {
 							paths := map[string]string{
-								"PRODUCTS_DELETE": "/webhooks/products/delete",
-								"PRODUCTS_UPDATE": "/webhooks/products/update",
-								"APP_UNINSTALLED": "/webhooks/app/uninstalled",
+								"ORDERS_CREATE":      "/webhooks/orders/create",
+								"FULFILLMENTS_CREATE": "/webhooks/fulfillments/create",
+								"PRODUCTS_DELETE":     "/webhooks/products/delete",
+								"PRODUCTS_UPDATE":     "/webhooks/products/update",
+								"APP_UNINSTALLED":     "/webhooks/app/uninstalled",
 							}
 							client.DeleteAndRegisterWebhook(bgCtx, topic, cfg.Shopify.AppURL+paths[topic])
 						}
