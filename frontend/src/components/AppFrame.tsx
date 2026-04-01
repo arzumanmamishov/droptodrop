@@ -17,6 +17,7 @@ import {
   MegaphoneIcon,
   StarIcon,
   DiscountIcon,
+  PersonIcon,
   DeliveryIcon,
   InventoryIcon,
 } from '@shopify/polaris-icons';
@@ -38,6 +39,7 @@ export default function AppFrame({ shop, children }: AppFrameProps) {
     { url: '/', label: 'Dashboard', icon: HomeIcon, selected: location.pathname === '/' },
     { url: '/supplier/setup', label: 'Supplier Setup', icon: StoreIcon, selected: location.pathname === '/supplier/setup' },
     { url: '/supplier/listings', label: 'Listings', icon: ProductIcon, selected: location.pathname === '/supplier/listings' },
+    { url: '/supplier/resellers', label: 'My Resellers', icon: PersonIcon, selected: location.pathname === '/supplier/resellers' },
     { url: '/orders', label: 'Orders', icon: OrderIcon, selected: location.pathname.startsWith('/orders') },
     { url: '/analytics', label: 'Analytics', icon: ChartVerticalFilledIcon, selected: location.pathname === '/analytics' },
     { url: '/disputes', label: 'Disputes', icon: AlertCircleIcon, selected: location.pathname === '/disputes' },

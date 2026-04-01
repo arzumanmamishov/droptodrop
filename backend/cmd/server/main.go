@@ -425,6 +425,114 @@ func main() {
 				c.JSON(http.StatusOK, gin.H{"status": "ok"})
 			})
 
+			// Reseller management for suppliers
+			supplier.GET("/resellers", func(c *gin.Context) {
+				shopID, _ := c.Get("shop_id")
+				sid := shopID.(string)
+				rows, err := db.Query(c.Request.Context(), `
+					SELECT DISTINCT ri.reseller_shop_id, s.shopify_domain,
+						COALESCE(srl.status, 'active') as link_status,
+						COALESCE(srl.reason, '') as reason,
+						COUNT(ri.id) as import_count,
+						(SELECT COUNT(*) FROM routed_orders ro WHERE ro.reseller_shop_id = ri.reseller_shop_id AND ro.supplier_shop_id = $1) as order_count
+					FROM reseller_imports ri
+					JOIN supplier_listings sl ON sl.id = ri.supplier_listing_id AND sl.supplier_shop_id = $1
+					JOIN shops s ON s.id = ri.reseller_shop_id
+					LEFT JOIN supplier_reseller_links srl ON srl.supplier_shop_id = $1 AND srl.reseller_shop_id = ri.reseller_shop_id
+					GROUP BY ri.reseller_shop_id, s.shopify_domain, srl.status, srl.reason
+					ORDER BY order_count DESC
+				`, sid)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
+				defer rows.Close()
+				var resellers []gin.H
+				for rows.Next() {
+					var resellerID, domain, status, reason string
+					var importCount, orderCount int
+					rows.Scan(&resellerID, &domain, &status, &reason, &importCount, &orderCount)
+					resellers = append(resellers, gin.H{
+						"reseller_shop_id": resellerID,
+						"domain":           domain,
+						"status":           status,
+						"reason":           reason,
+						"import_count":     importCount,
+						"order_count":      orderCount,
+					})
+				}
+				c.JSON(http.StatusOK, gin.H{"resellers": resellers})
+			})
+
+			supplier.PUT("/resellers/:resellerId/status", func(c *gin.Context) {
+				shopID, _ := c.Get("shop_id")
+				var body struct {
+					Status string `json:"status" binding:"required"`
+					Reason string `json:"reason"`
+				}
+				if err := c.ShouldBindJSON(&body); err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
+				if body.Status != "active" && body.Status != "paused" && body.Status != "blocked" {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "status must be active, paused, or blocked"})
+					return
+				}
+
+				// Upsert link
+				_, err := db.Exec(c.Request.Context(), `
+					INSERT INTO supplier_reseller_links (supplier_shop_id, reseller_shop_id, status, reason)
+					VALUES ($1, $2, $3, $4)
+					ON CONFLICT (supplier_shop_id, reseller_shop_id) DO UPDATE SET
+						status = $3, reason = $4, updated_at = NOW()
+				`, shopID, c.Param("resellerId"), body.Status, body.Reason)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+					return
+				}
+
+				// If blocked or paused, deactivate all imports from this reseller
+				if body.Status == "blocked" || body.Status == "paused" {
+					db.Exec(c.Request.Context(), `
+						UPDATE reseller_imports SET status = 'paused', last_sync_error = $1
+						WHERE reseller_shop_id = $2 AND supplier_listing_id IN (
+							SELECT id FROM supplier_listings WHERE supplier_shop_id = $3
+						) AND status = 'active'
+					`, "Supplier "+body.Status+" your access: "+body.Reason, c.Param("resellerId"), shopID)
+
+					db.Exec(c.Request.Context(), `
+						UPDATE product_links SET is_active = FALSE
+						WHERE supplier_shop_id = $1 AND reseller_shop_id = $2
+					`, shopID, c.Param("resellerId"))
+
+					// Notify reseller
+					inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{
+						ShopID: c.Param("resellerId"),
+						Title: "Access Restricted",
+						Message: "A supplier has " + body.Status + " your access. Reason: " + body.Reason,
+						Type: "warning",
+						Link: strPtr("/imports"),
+					})
+				} else if body.Status == "active" {
+					// Re-activate
+					db.Exec(c.Request.Context(), `
+						UPDATE reseller_imports SET status = 'active', last_sync_error = NULL
+						WHERE reseller_shop_id = $1 AND supplier_listing_id IN (
+							SELECT id FROM supplier_listings WHERE supplier_shop_id = $2
+						) AND status = 'paused'
+					`, c.Param("resellerId"), shopID)
+
+					db.Exec(c.Request.Context(), `
+						UPDATE product_links SET is_active = TRUE
+						WHERE supplier_shop_id = $1 AND reseller_shop_id = $2
+					`, shopID, c.Param("resellerId"))
+				}
+
+				auditSvc.Log(c.Request.Context(), shopID.(string), "merchant", shopID.(string), "reseller_status_changed",
+					"reseller", c.Param("resellerId"), map[string]string{"status": body.Status, "reason": body.Reason}, "success", "")
+				c.JSON(http.StatusOK, gin.H{"status": "ok"})
+			})
+
 			supplier.GET("/orders", func(c *gin.Context) {
 				shopID, _ := c.Get("shop_id")
 				status := c.Query("status")
@@ -571,6 +679,19 @@ func main() {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
+
+				// Check if supplier has blocked this reseller
+				var supplierID string
+				db.QueryRow(c.Request.Context(), `SELECT supplier_shop_id FROM supplier_listings WHERE id = $1`, input.SupplierListingID).Scan(&supplierID)
+				if supplierID != "" {
+					var linkStatus string
+					db.QueryRow(c.Request.Context(), `SELECT status FROM supplier_reseller_links WHERE supplier_shop_id = $1 AND reseller_shop_id = $2`, supplierID, shopID).Scan(&linkStatus)
+					if linkStatus == "blocked" || linkStatus == "paused" {
+						c.JSON(http.StatusForbidden, gin.H{"error": "This supplier has restricted your access. You cannot import their products."})
+						return
+					}
+				}
+
 				imp, err := importsSvc.Create(c.Request.Context(), shopID.(string), input)
 				if err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

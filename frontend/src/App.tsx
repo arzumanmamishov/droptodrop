@@ -22,6 +22,7 @@ import SupplierInfo from './pages/SupplierInfo';
 import Analytics from './pages/Analytics';
 import Disputes from './pages/Disputes';
 import Notifications from './pages/Notifications';
+import Resellers from './pages/Resellers';
 import Billing from './pages/Billing';
 import BulkImport from './pages/BulkImport';
 import Messages from './pages/Messages';
@@ -87,6 +88,7 @@ export default function App() {
                 <>
                   <Route path="/supplier/setup" element={<SupplierSetup />} />
                   <Route path="/supplier/listings" element={<SupplierListings />} />
+                  <Route path="/supplier/resellers" element={<Resellers />} />
                   <Route path="/supplier/listings/:id" element={<ListingEdit />} />
                 </>
               )}
