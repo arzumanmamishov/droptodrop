@@ -185,7 +185,7 @@ export default function Imports() {
       <ConfirmDialog
         open={confirmDelete !== null}
         title="Delete Import"
-        message="Are you sure you want to remove this imported product? The product will remain in your Shopify store but will no longer sync with the supplier."
+        message="Are you sure you want to delete this imported product? The product will be permanently removed from your Shopify store."
         onConfirm={() => { if (confirmDelete) { handleDelete(confirmDelete); setConfirmDelete(null); } }}
         onCancel={() => setConfirmDelete(null)}
       />
