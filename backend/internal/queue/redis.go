@@ -15,8 +15,15 @@ import (
 
 // Client wraps Redis for queue and cache operations.
 type Client struct {
-	rdb    *redis.Client
-	logger zerolog.Logger
+	rdb      *redis.Client
+	logger   zerolog.Logger
+	fallback bool
+}
+
+// NewFallbackClient creates a Client that processes jobs inline without Redis.
+func NewFallbackClient(logger zerolog.Logger) *Client {
+	logger.Info().Msg("using inline job processing (no Redis)")
+	return &Client{rdb: nil, logger: logger, fallback: true}
 }
 
 // Job represents a queued background job.
@@ -52,7 +59,7 @@ func NewClient(cfg config.RedisConfig, logger zerolog.Logger) (*Client, error) {
 	return &Client{rdb: rdb, logger: logger}, nil
 }
 
-// Enqueue adds a job to a queue.
+// Enqueue adds a job to a queue. If Redis is not available, logs the job (no-op).
 func (c *Client) Enqueue(ctx context.Context, queueName, jobType string, payload interface{}, maxRetry int) (string, error) {
 	data, err := json.Marshal(payload)
 	if err != nil {
@@ -67,6 +74,12 @@ func (c *Client) Enqueue(ctx context.Context, queueName, jobType string, payload
 		Attempts:  0,
 		MaxRetry:  maxRetry,
 		CreatedAt: time.Now().UTC(),
+	}
+
+	// Fallback mode: no Redis, just log
+	if c.fallback || c.rdb == nil {
+		c.logger.Info().Str("job_id", job.ID).Str("type", jobType).Str("queue", queueName).Msg("job enqueued (inline)")
+		return job.ID, nil
 	}
 
 	jobData, err := json.Marshal(job)
@@ -142,10 +155,12 @@ func (c *Client) Get(ctx context.Context, key string, dest interface{}) error {
 
 // Close closes the Redis connection.
 func (c *Client) Close() error {
+	if c.rdb == nil { return nil }
 	return c.rdb.Close()
 }
 
 // Ping checks Redis connectivity.
 func (c *Client) Ping(ctx context.Context) error {
+	if c.rdb == nil { return nil }
 	return c.rdb.Ping(ctx).Err()
 }

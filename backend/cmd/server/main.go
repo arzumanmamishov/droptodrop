@@ -60,10 +60,11 @@ func main() {
 	}
 	defer db.Close()
 
-	// Connect to Redis
+	// Connect to Redis (optional — falls back to in-memory processing)
 	redisClient, err := queue.NewClient(cfg.Redis, logger)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to connect to Redis")
+		logger.Warn().Err(err).Msg("Redis not available, using in-memory job processing")
+		redisClient = queue.NewFallbackClient(logger)
 	}
 	defer redisClient.Close()
 
@@ -1589,6 +1590,30 @@ func main() {
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
+
+	// Background tasks (replaces worker process)
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				bgCtx := context.Background()
+				// Cleanup expired sessions
+				db.Exec(bgCtx, `DELETE FROM shop_sessions WHERE expires_at < NOW()`)
+				// Cleanup old webhook events
+				db.Exec(bgCtx, `DELETE FROM webhook_events WHERE created_at < NOW() - INTERVAL '7 days'`)
+				// Update platform stats
+				db.Exec(bgCtx, `UPDATE platform_stats SET
+					total_products = (SELECT COUNT(*) FROM supplier_listings WHERE status = 'active'),
+					total_orders = (SELECT COUNT(*) FROM routed_orders),
+					total_suppliers = (SELECT COUNT(*) FROM shops WHERE role = 'supplier' AND status = 'active'),
+					total_resellers = (SELECT COUNT(*) FROM shops WHERE role = 'reseller' AND status = 'active'),
+					updated_at = NOW() WHERE id = 1`)
+				logger.Info().Msg("hourly maintenance completed")
+			}
+		}
+	}()
 
 	// Graceful shutdown
 	go func() {

@@ -2,6 +2,7 @@ package webhooks
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
@@ -171,21 +172,15 @@ func (h *Handler) OrdersCreate(c *gin.Context) {
 		return
 	}
 
-	// Queue the order routing asynchronously
-	_, queueErr := h.queue.Enqueue(c.Request.Context(), "orders", "route_order", map[string]interface{}{
-		"shop_id":      shopID,
-		"shop_domain":  shopDomain,
-		"order_payload": payload,
-	}, 3)
-	if queueErr != nil {
-		// Fallback: process inline
-		h.logger.Warn().Err(queueErr).Msg("failed to enqueue, processing inline")
-		if err := h.ordersSvc.RouteOrder(c.Request.Context(), shopID, payload); err != nil {
-			h.markWebhookProcessed(c, eventID, "failed", err.Error())
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "routing failed"})
-			return
+	// Process order routing in background goroutine
+	go func() {
+		bgCtx := context.Background()
+		if err := h.ordersSvc.RouteOrder(bgCtx, shopID, payload); err != nil {
+			h.logger.Error().Err(err).Msg("order routing failed")
+		} else {
+			h.logger.Info().Str("shop_id", shopID).Msg("order routed successfully")
 		}
-	}
+	}()
 
 	h.markWebhookProcessed(c, eventID, "processed", "")
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
