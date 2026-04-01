@@ -1,21 +1,9 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Page,
-  Layout,
-  Card,
-  DataTable,
-  Badge,
-  Button,
-  Spinner,
-  Banner,
-  BlockStack,
-  Text,
-  InlineStack,
-  Filters,
-  ChoiceList,
-  Modal,
-  TextField,
+  Page, Layout, Card, DataTable, Badge, Button, Spinner,
+  Banner, BlockStack, Text, InlineStack, Filters, ChoiceList,
+  Modal, TextField,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
 import { api } from '../utils/api';
@@ -34,6 +22,11 @@ export default function Orders({ role }: OrdersProps) {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [page, setPage] = useState(0);
+  const [routeOrderId, setRouteOrderId] = useState('');
+  const [routing, setRouting] = useState(false);
+  const [routeResult, setRouteResult] = useState<string | null>(null);
+  const [routeError, setRouteError] = useState<string | null>(null);
+  const [showRouteModal, setShowRouteModal] = useState(false);
   const limit = 20;
 
   const endpoint = role === 'supplier' ? '/supplier/orders' : '/reseller/orders';
@@ -42,57 +35,17 @@ export default function Orders({ role }: OrdersProps) {
     `${endpoint}?limit=${limit}&offset=${page * limit}${statusQuery}`,
   );
 
-  if (loading) {
-    return (
-      <Page title="Orders">
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
-          <Spinner size="large" />
-        </div>
-      </Page>
-    );
-  }
-
-  const statusBadge = (status: string) => {
-    const toneMap: Record<string, 'success' | 'attention' | 'critical' | 'info' | 'warning'> = {
-      pending: 'attention',
-      accepted: 'info',
-      rejected: 'critical',
-      processing: 'info',
-      fulfilled: 'success',
-      partially_fulfilled: 'warning',
-      cancelled: 'critical',
-    };
-    return <Badge tone={toneMap[status]}>{status}</Badge>;
-  };
-
-  const rows = (data?.orders || []).map((order) => [
-    <Button key={order.id} variant="plain" onClick={() => navigate(`/orders/${order.id}`)}>
-      {order.reseller_order_number || order.id.slice(0, 8)}
-    </Button>,
-    statusBadge(order.status),
-    `$${order.total_wholesale_amount.toFixed(2)}`,
-    order.currency,
-    order.customer_shipping_name || '-',
-    new Date(order.created_at).toLocaleDateString(),
-  ]);
-
-  const totalPages = Math.ceil((data?.total || 0) / limit);
-
-  const [routeOrderId, setRouteOrderId] = useState('');
-  const [routing, setRouting] = useState(false);
-  const [routeResult, setRouteResult] = useState<string | null>(null);
-  const [routeError, setRouteError] = useState<string | null>(null);
-  const [showRouteModal, setShowRouteModal] = useState(false);
-
-  const handleExport = async () => {
-    try {
-      const token = window.shopify?.idToken ? await window.shopify.idToken() : (localStorage.getItem('droptodrop_session') || '');
-      const response = await fetch('/api/v1/export/orders', { headers: { Authorization: `Bearer ${token}` } });
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = 'orders.csv'; a.click();
-      URL.revokeObjectURL(url);
-    } catch { /* */ }
+  const handleExport = () => {
+    (async () => {
+      try {
+        const token = window.shopify?.idToken ? await window.shopify.idToken() : (localStorage.getItem('droptodrop_session') || '');
+        const response = await fetch('/api/v1/export/orders', { headers: { Authorization: `Bearer ${token}` } });
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a'); a.href = url; a.download = 'orders.csv'; a.click();
+        URL.revokeObjectURL(url);
+      } catch { /* */ }
+    })();
   };
 
   const handleRouteOrder = async () => {
@@ -116,7 +69,38 @@ export default function Orders({ role }: OrdersProps) {
   if (role === 'reseller') {
     secondaryActions.push({ content: 'Route Order', onAction: () => setShowRouteModal(true) });
   }
-  secondaryActions.push({ content: 'Export CSV', onAction: () => { handleExport(); } });
+  secondaryActions.push({ content: 'Export CSV', onAction: handleExport });
+
+  if (loading) {
+    return (
+      <Page title="Orders">
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
+          <Spinner size="large" />
+        </div>
+      </Page>
+    );
+  }
+
+  const statusBadge = (status: string) => {
+    const toneMap: Record<string, 'success' | 'attention' | 'critical' | 'info'> = {
+      pending: 'attention', accepted: 'info', rejected: 'critical', processing: 'info',
+      fulfilled: 'success', cancelled: 'critical',
+    };
+    return <Badge tone={toneMap[status]}>{status}</Badge>;
+  };
+
+  const rows = (data?.orders || []).map((order) => [
+    <Button key={order.id} variant="plain" onClick={() => navigate(`/orders/${order.id}`)}>
+      {order.reseller_order_number || order.id.slice(0, 8)}
+    </Button>,
+    statusBadge(order.status),
+    `$${order.total_wholesale_amount.toFixed(2)}`,
+    order.currency,
+    order.customer_shipping_name || '-',
+    new Date(order.created_at).toLocaleDateString(),
+  ]);
+
+  const totalPages = Math.ceil((data?.total || 0) / limit);
 
   return (
     <Page title="Orders" secondaryActions={secondaryActions}>
@@ -126,35 +110,38 @@ export default function Orders({ role }: OrdersProps) {
             <Banner tone="critical">{error}</Banner>
           </Layout.Section>
         )}
+        {routeResult && (
+          <Layout.Section>
+            <Banner tone="success" onDismiss={() => setRouteResult(null)}>{routeResult}</Banner>
+          </Layout.Section>
+        )}
+        {routeError && (
+          <Layout.Section>
+            <Banner tone="critical" onDismiss={() => setRouteError(null)}>{routeError}</Banner>
+          </Layout.Section>
+        )}
         <Layout.Section>
           <Card>
             <BlockStack gap="400">
               <Filters
                 queryValue=""
-                filters={[
-                  {
-                    key: 'status',
-                    label: 'Status',
-                    filter: (
-                      <ChoiceList
-                        title="Status"
-                        titleHidden
-                        choices={[
-                          { label: 'Pending', value: 'pending' },
-                          { label: 'Accepted', value: 'accepted' },
-                          { label: 'Fulfilled', value: 'fulfilled' },
-                          { label: 'Rejected', value: 'rejected' },
-                        ]}
-                        selected={statusFilter}
-                        onChange={setStatusFilter}
-                      />
-                    ),
-                    shortcut: true,
-                  },
-                ]}
-                onQueryChange={() => {}}
-                onQueryClear={() => {}}
-                onClearAll={() => setStatusFilter([])}
+                filters={[{
+                  key: 'status', label: 'Status',
+                  filter: (
+                    <ChoiceList title="Status" titleHidden
+                      choices={[
+                        { label: 'Pending', value: 'pending' },
+                        { label: 'Accepted', value: 'accepted' },
+                        { label: 'Fulfilled', value: 'fulfilled' },
+                        { label: 'Rejected', value: 'rejected' },
+                        { label: 'Cancelled', value: 'cancelled' },
+                      ]}
+                      selected={statusFilter} onChange={setStatusFilter}
+                    />
+                  ),
+                  shortcut: true,
+                }]}
+                onQueryChange={() => {}} onQueryClear={() => {}} onClearAll={() => setStatusFilter([])}
               />
 
               {rows.length > 0 ? (
@@ -179,23 +166,10 @@ export default function Orders({ role }: OrdersProps) {
             </BlockStack>
           </Card>
         </Layout.Section>
-        {routeResult && (
-          <Layout.Section>
-            <Banner tone="success" onDismiss={() => setRouteResult(null)}>{routeResult}</Banner>
-          </Layout.Section>
-        )}
-        {routeError && (
-          <Layout.Section>
-            <Banner tone="critical" onDismiss={() => setRouteError(null)}>{routeError}</Banner>
-          </Layout.Section>
-        )}
       </Layout>
 
       {showRouteModal && (
-        <Modal
-          open
-          onClose={() => setShowRouteModal(false)}
-          title="Route a Shopify Order"
+        <Modal open onClose={() => setShowRouteModal(false)} title="Route a Shopify Order"
           primaryAction={{ content: 'Route Order', onAction: handleRouteOrder, loading: routing, disabled: !routeOrderId }}
           secondaryActions={[{ content: 'Cancel', onAction: () => setShowRouteModal(false) }]}
         >
@@ -203,15 +177,10 @@ export default function Orders({ role }: OrdersProps) {
             <BlockStack gap="300">
               <Text as="p" variant="bodyMd">
                 Enter the Shopify order ID to manually route it to the supplier.
-                Find the order ID in your Shopify admin → Orders → click the order → the number in the URL.
+                Find it in Shopify admin → Orders → click the order → copy the number from the URL.
               </Text>
-              <TextField
-                label="Shopify Order ID"
-                value={routeOrderId}
-                onChange={setRouteOrderId}
-                type="number"
-                autoComplete="off"
-                placeholder="e.g. 6789012345"
+              <TextField label="Shopify Order ID" value={routeOrderId} onChange={setRouteOrderId}
+                type="number" autoComplete="off" placeholder="e.g. 6789012345"
                 helpText="The numeric order ID from your Shopify admin URL"
               />
             </BlockStack>
