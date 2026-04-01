@@ -373,7 +373,7 @@ export default function Marketplace() {
 
       {/* Product Detail Modal */}
       {detailModal && (
-        <Modal open onClose={() => setDetailModal(null)} title={detailModal.title} large
+        <Modal open onClose={() => setDetailModal(null)} title={detailModal.title}
           primaryAction={{ content: 'Import This Product', onAction: () => { setDetailModal(null); setImportModal(detailModal); } }}
           secondaryActions={[{ content: 'Close', onAction: () => setDetailModal(null) }]}
         >
