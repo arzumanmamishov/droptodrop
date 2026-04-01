@@ -1431,12 +1431,14 @@ func main() {
 			defer rows.Close()
 
 			var payouts []gin.H
-			var grandTotal, grandPaid float64
+			var grandTotal, grandPaid, grandFees float64
 			for rows.Next() {
 				var id, orderNum, status, currency, domain, payStatus, products, supplierPaypal string
 				var wholesale, fee, payout float64
 				var createdAt time.Time
 				rows.Scan(&id, &orderNum, &status, &wholesale, &currency, &createdAt, &domain, &payStatus, &fee, &payout, &products, &supplierPaypal)
+				// If payout not yet calculated, use wholesale
+				if payout == 0 { payout = wholesale }
 				payouts = append(payouts, gin.H{
 					"id": id, "order_number": orderNum, "status": status,
 					"wholesale": wholesale, "currency": currency, "domain": domain,
@@ -1444,13 +1446,15 @@ func main() {
 					"pay_status": payStatus, "platform_fee": fee, "supplier_payout": payout,
 					"products": products, "created_at": createdAt,
 				})
-				grandTotal += wholesale
+				grandTotal += payout
+				grandFees += fee
 				if payStatus == "paid" { grandPaid += payout }
 			}
 			c.JSON(http.StatusOK, gin.H{
 				"payouts": payouts, "total": total,
 				"grand_total": grandTotal, "grand_paid": grandPaid,
 				"grand_balance": grandTotal - grandPaid,
+				"grand_fees": grandFees,
 			})
 		})
 

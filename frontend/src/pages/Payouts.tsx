@@ -28,6 +28,7 @@ interface PayoutsResponse {
   grand_total: number;
   grand_paid: number;
   grand_balance: number;
+  grand_fees: number;
 }
 
 interface Props { role: string; }
@@ -82,8 +83,9 @@ export default function Payouts({ role }: Props) {
   const getConfirmMessage = () => {
     if (!confirmAction) return '';
     const { order, action } = confirmAction;
-    if (action === 'send-payment') return `Confirm that you have sent $${order.wholesale.toFixed(2)} to the supplier for order ${order.order_number || order.id.slice(0, 8)}? The supplier will be asked to confirm receipt.`;
-    if (action === 'confirm-received') return `Confirm you received $${order.wholesale.toFixed(2)} for order ${order.order_number || order.id.slice(0, 8)}?`;
+    const payAmount = order.supplier_payout > 0 ? order.supplier_payout : order.wholesale;
+    if (action === 'send-payment') return `Confirm that you have sent $${payAmount.toFixed(2)} to the supplier for order ${order.order_number || order.id.slice(0, 8)}?${order.platform_fee > 0 ? ` (Platform fee of $${order.platform_fee.toFixed(2)} is collected separately via your billing plan.)` : ''} The supplier will be asked to confirm receipt.`;
+    if (action === 'confirm-received') return `Confirm you received $${payAmount.toFixed(2)} for order ${order.order_number || order.id.slice(0, 8)}?`;
     if (action === 'dispute-payment') return `Report that you have NOT received payment for order ${order.order_number || order.id.slice(0, 8)}? The reseller will be notified.`;
     return '';
   };
@@ -109,6 +111,14 @@ export default function Payouts({ role }: Props) {
               </div>
               <div className="stat-card-label">Outstanding</div>
             </div>
+            {!isSupplier && (data?.grand_fees || 0) > 0 && (
+              <div className="stat-card" style={{ flex: 1 }}>
+                <div className="stat-card-value" style={{ color: '#6b7280' }}>
+                  ${(data?.grand_fees || 0).toFixed(2)}
+                </div>
+                <div className="stat-card-label">Platform Fees</div>
+              </div>
+            )}
           </InlineStack>
         </Layout.Section>
 
@@ -137,15 +147,24 @@ export default function Payouts({ role }: Props) {
 
                         <InlineStack gap="300" blockAlign="center" wrap={false}>
                           <BlockStack gap="050" align="end">
-                            <Text as="span" variant="headingSm" fontWeight="bold">${p.wholesale.toFixed(2)}</Text>
-                            <Text as="span" variant="bodySm" tone="subdued">amount</Text>
+                            <Text as="span" variant="headingSm" fontWeight="bold">
+                              ${(p.supplier_payout > 0 ? p.supplier_payout : p.wholesale).toFixed(2)}
+                            </Text>
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              {isSupplier ? 'you receive' : 'to supplier'}
+                            </Text>
+                            {p.platform_fee > 0 && (
+                              <Text as="span" variant="bodySm" tone="subdued">
+                                fee: ${p.platform_fee.toFixed(2)}
+                              </Text>
+                            )}
                           </BlockStack>
 
                           {/* RESELLER: Pay button */}
                           {!isSupplier && (p.pay_status === 'pending' || p.pay_status === 'unpaid') && (
                             <InlineStack gap="200">
                               {p.supplier_paypal && (
-                                <Button size="slim" variant="primary" url={`https://paypal.me/${p.supplier_paypal}/${p.wholesale.toFixed(2)}${p.currency ? p.currency : ''}`} external>
+                                <Button size="slim" variant="primary" url={`https://paypal.me/${p.supplier_paypal}/${(p.supplier_payout > 0 ? p.supplier_payout : p.wholesale).toFixed(2)}${p.currency ? p.currency : ''}`} external>
                                   Pay via PayPal
                                 </Button>
                               )}
@@ -160,7 +179,7 @@ export default function Payouts({ role }: Props) {
                           {!isSupplier && p.pay_status === 'disputed' && (
                             <InlineStack gap="200">
                               {p.supplier_paypal && (
-                                <Button size="slim" variant="primary" url={`https://paypal.me/${p.supplier_paypal}/${p.wholesale.toFixed(2)}${p.currency ? p.currency : ''}`} external>
+                                <Button size="slim" variant="primary" url={`https://paypal.me/${p.supplier_paypal}/${(p.supplier_payout > 0 ? p.supplier_payout : p.wholesale).toFixed(2)}${p.currency ? p.currency : ''}`} external>
                                   Pay via PayPal
                                 </Button>
                               )}
