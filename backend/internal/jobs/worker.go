@@ -894,16 +894,27 @@ func (w *Worker) handleProductUpdate(ctx context.Context, payload json.RawMessag
 			varTitle, _ := v["title"].(string)
 			sku, _ := v["sku"].(string)
 
+			// Parse price as float
+			wholesalePrice := 0.0
+			if price != "" {
+				fmt.Sscanf(price, "%f", &wholesalePrice)
+			}
+
 			_, _ = w.db.Exec(ctx, `
 				UPDATE supplier_listing_variants
 				SET title = COALESCE(NULLIF($3,''), title),
 					sku = COALESCE(NULLIF($4,''), sku),
-					inventory_quantity = $5
+					inventory_quantity = $5,
+					wholesale_price = CASE WHEN $7 > 0 THEN $7 ELSE wholesale_price END
 				WHERE shopify_variant_id = $2
 				AND listing_id IN (SELECT id FROM supplier_listings WHERE supplier_shop_id = $1 AND shopify_product_id = $6)
-			`, shopID, int64(variantID), varTitle, sku, int(inventory), int64(productID))
+			`, shopID, int64(variantID), varTitle, sku, int(inventory), int64(productID), wholesalePrice)
 
-			_ = price // wholesale_price is set by supplier, not overwritten by webhook
+			w.logger.Debug().
+				Int64("variant_id", int64(variantID)).
+				Float64("price", wholesalePrice).
+				Int("inventory", int(inventory)).
+				Msg("supplier variant updated from webhook")
 		}
 	}
 
