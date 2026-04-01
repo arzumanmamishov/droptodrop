@@ -356,6 +356,27 @@ func (s *Service) ListMarketplace(ctx context.Context, filters MarketplaceFilter
 		listings = append(listings, l)
 	}
 
+	// Load variants for each listing
+	for i := range listings {
+		varRows, err := s.db.Query(ctx, `
+			SELECT id, listing_id, shopify_variant_id, COALESCE(title,''), COALESCE(sku,''), wholesale_price,
+				COALESCE(suggested_retail_price,0), inventory_quantity, COALESCE(weight,0), COALESCE(weight_unit,'kg'), is_active
+			FROM supplier_listing_variants WHERE listing_id = $1 AND is_active = TRUE ORDER BY created_at
+		`, listings[i].ID)
+		if err != nil {
+			continue
+		}
+		for varRows.Next() {
+			var v ListingVariant
+			if err := varRows.Scan(&v.ID, &v.ListingID, &v.ShopifyVariantID, &v.Title, &v.SKU,
+				&v.WholesalePrice, &v.SuggestedRetailPrice, &v.InventoryQuantity, &v.Weight, &v.WeightUnit, &v.IsActive); err != nil {
+				continue
+			}
+			listings[i].Variants = append(listings[i].Variants, v)
+		}
+		varRows.Close()
+	}
+
 	return listings, total, nil
 }
 
