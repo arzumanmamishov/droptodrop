@@ -9,8 +9,10 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog"
 
+	"github.com/droptodrop/droptodrop/internal/audit"
 	"github.com/droptodrop/droptodrop/internal/auth"
 	"github.com/droptodrop/droptodrop/internal/config"
+	"github.com/droptodrop/droptodrop/internal/orders"
 	"github.com/droptodrop/droptodrop/internal/queue"
 	"github.com/droptodrop/droptodrop/pkg/shopify"
 )
@@ -1165,12 +1167,15 @@ func (w *Worker) handleRouteOrder(ctx context.Context, payload json.RawMessage) 
 		return fmt.Errorf("parse payload: %w", err)
 	}
 
-	// The actual routing logic lives in the orders service.
-	// We re-use it here for async processing.
-	w.logger.Info().Str("shop_id", params.ShopID).Msg("async order routing")
-	// Note: The orders service RouteOrder is called inline from the webhook handler
-	// as a fallback. This job exists for when the queue is used.
-	return nil
+	w.logger.Info().Str("shop_id", params.ShopID).Msg("routing order from webhook")
+
+	if params.OrderPayload == nil {
+		return fmt.Errorf("no order payload")
+	}
+
+	auditSvc := audit.NewService(w.db, w.logger)
+	ordersSvc := orders.NewService(w.db, w.queue, w.logger, auditSvc)
+	return ordersSvc.RouteOrder(ctx, params.ShopID, params.OrderPayload)
 }
 
 // =============================================================================
