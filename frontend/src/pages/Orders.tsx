@@ -14,8 +14,11 @@ import {
   InlineStack,
   Filters,
   ChoiceList,
+  Modal,
+  TextField,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
+import { api } from '../utils/api';
 import { RoutedOrder } from '../types';
 
 interface OrdersResponse {
@@ -35,7 +38,7 @@ export default function Orders({ role }: OrdersProps) {
 
   const endpoint = role === 'supplier' ? '/supplier/orders' : '/reseller/orders';
   const statusQuery = statusFilter.length === 1 ? `&status=${statusFilter[0]}` : '';
-  const { data, loading, error } = useApi<OrdersResponse>(
+  const { data, loading, error, refetch } = useApi<OrdersResponse>(
     `${endpoint}?limit=${limit}&offset=${page * limit}${statusQuery}`,
   );
 
@@ -75,6 +78,12 @@ export default function Orders({ role }: OrdersProps) {
 
   const totalPages = Math.ceil((data?.total || 0) / limit);
 
+  const [routeOrderId, setRouteOrderId] = useState('');
+  const [routing, setRouting] = useState(false);
+  const [routeResult, setRouteResult] = useState<string | null>(null);
+  const [routeError, setRouteError] = useState<string | null>(null);
+  const [showRouteModal, setShowRouteModal] = useState(false);
+
   const handleExport = async () => {
     try {
       const token = window.shopify?.idToken ? await window.shopify.idToken() : (localStorage.getItem('droptodrop_session') || '');
@@ -86,8 +95,30 @@ export default function Orders({ role }: OrdersProps) {
     } catch { /* */ }
   };
 
+  const handleRouteOrder = async () => {
+    setRouting(true);
+    setRouteError(null);
+    setRouteResult(null);
+    try {
+      const result = await api.post<{ message: string }>('/test/route-order', { order_id: parseInt(routeOrderId) });
+      setRouteResult(result.message || 'Order routed!');
+      setShowRouteModal(false);
+      setRouteOrderId('');
+      refetch();
+    } catch (err) {
+      setRouteError(err instanceof Error ? err.message : 'Failed to route order');
+    } finally {
+      setRouting(false);
+    }
+  };
+
+  const secondaryActions = [{ content: 'Export CSV', onAction: handleExport }];
+  if (role === 'reseller') {
+    secondaryActions.unshift({ content: 'Route Order', onAction: () => setShowRouteModal(true) });
+  }
+
   return (
-    <Page title="Orders" secondaryActions={[{ content: 'Export CSV', onAction: handleExport }]}>
+    <Page title="Orders" secondaryActions={secondaryActions}>
       <Layout>
         {error && (
           <Layout.Section>
@@ -147,7 +178,45 @@ export default function Orders({ role }: OrdersProps) {
             </BlockStack>
           </Card>
         </Layout.Section>
+        {routeResult && (
+          <Layout.Section>
+            <Banner tone="success" onDismiss={() => setRouteResult(null)}>{routeResult}</Banner>
+          </Layout.Section>
+        )}
+        {routeError && (
+          <Layout.Section>
+            <Banner tone="critical" onDismiss={() => setRouteError(null)}>{routeError}</Banner>
+          </Layout.Section>
+        )}
       </Layout>
+
+      {showRouteModal && (
+        <Modal
+          open
+          onClose={() => setShowRouteModal(false)}
+          title="Route a Shopify Order"
+          primaryAction={{ content: 'Route Order', onAction: handleRouteOrder, loading: routing, disabled: !routeOrderId }}
+          secondaryActions={[{ content: 'Cancel', onAction: () => setShowRouteModal(false) }]}
+        >
+          <Modal.Section>
+            <BlockStack gap="300">
+              <Text as="p" variant="bodyMd">
+                Enter the Shopify order ID to manually route it to the supplier.
+                Find the order ID in your Shopify admin → Orders → click the order → the number in the URL.
+              </Text>
+              <TextField
+                label="Shopify Order ID"
+                value={routeOrderId}
+                onChange={setRouteOrderId}
+                type="number"
+                autoComplete="off"
+                placeholder="e.g. 6789012345"
+                helpText="The numeric order ID from your Shopify admin URL"
+              />
+            </BlockStack>
+          </Modal.Section>
+        </Modal>
+      )}
     </Page>
   );
 }
