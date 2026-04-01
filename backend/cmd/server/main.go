@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"net/http"
@@ -1291,6 +1292,57 @@ func main() {
 				return
 			}
 			c.JSON(http.StatusOK, gin.H{"products": perf})
+		})
+
+		// ===== Test Order Routing (for development) =====
+		api.POST("/test/route-order", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			shopDomain, _ := c.Get("shop_domain")
+			role, _ := c.Get("shop_role")
+			if role.(string) != "reseller" {
+				c.JSON(http.StatusForbidden, gin.H{"error": "only resellers can test"})
+				return
+			}
+			var body struct {
+				OrderID int64 `json:"order_id" binding:"required"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+
+			// Fetch order from Shopify REST API
+			var encToken string
+			db.QueryRow(c.Request.Context(), `SELECT access_token FROM app_installations WHERE shop_id = $1 AND is_active = TRUE`, shopID).Scan(&encToken)
+			token, _ := authpkg.Decrypt(encToken, cfg.Security.EncryptionKey)
+			domain := ""
+			if d, ok := shopDomain.(string); ok { domain = d }
+
+			// Use REST API to get order
+			orderURL := fmt.Sprintf("https://%s/admin/api/2024-10/orders/%d.json", domain, body.OrderID)
+			req, _ := http.NewRequest("GET", orderURL, nil)
+			req.Header.Set("X-Shopify-Access-Token", token)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch order"})
+				return
+			}
+			defer resp.Body.Close()
+			var orderResp struct {
+				Order map[string]interface{} `json:"order"`
+			}
+			json.NewDecoder(resp.Body).Decode(&orderResp)
+			if orderResp.Order == nil {
+				c.JSON(http.StatusNotFound, gin.H{"error": "order not found"})
+				return
+			}
+
+			err = ordersSvc.RouteOrder(c.Request.Context(), shopID.(string), orderResp.Order)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Order routed! Check supplier's Orders page."})
 		})
 
 		// ===== Export =====
