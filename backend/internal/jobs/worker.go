@@ -459,6 +459,18 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 			} else if len(locResp.Data.Locations.Edges) > 0 {
 				locationID := locResp.Data.Locations.Edges[0].Node.ID
 
+				// Activate inventory at location (required before setting quantities)
+				activateQuery := `mutation activateInventory($inventoryItemId: ID!, $locationId: ID!) {
+					inventoryActivate(inventoryItemId: $inventoryItemId, available: 0, locationId: $locationId) {
+						inventoryLevel { id }
+					}
+				}`
+				var activateResp json.RawMessage
+				client.GraphQL(ctx, activateQuery, map[string]interface{}{
+					"inventoryItemId": inventoryItemID,
+					"locationId":      locationID,
+				}, &activateResp)
+
 				// Get supplier's inventory quantity for this variant
 				supplierQty := 100 // default
 				if len(variants) > 0 {
@@ -711,6 +723,11 @@ func (w *Worker) handleSyncProduct(ctx context.Context, payload json.RawMessage)
 					}
 					if err := client.GraphQL(ctx, `{ locations(first:1) { edges { node { id } } } }`, nil, &locResp); err == nil && len(locResp.Data.Locations.Edges) > 0 {
 						locationID := locResp.Data.Locations.Edges[0].Node.ID
+
+						// Activate inventory at location
+						var actResp json.RawMessage
+						client.GraphQL(ctx, `mutation($iid: ID!, $lid: ID!) { inventoryActivate(inventoryItemId: $iid, available: 0, locationId: $lid) { inventoryLevel { id } } }`,
+							map[string]interface{}{"iid": invItemID, "lid": locationID}, &actResp)
 
 						// Get stock percent
 						var stockPct int
