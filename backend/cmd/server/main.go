@@ -222,7 +222,11 @@ func main() {
 								"PRODUCTS_UPDATE":     "/webhooks/products/update",
 								"APP_UNINSTALLED":     "/webhooks/app/uninstalled",
 							}
-							client.DeleteAndRegisterWebhook(bgCtx, topic, cfg.Shopify.AppURL+paths[topic])
+							if err := client.DeleteAndRegisterWebhook(bgCtx, topic, cfg.Shopify.AppURL+paths[topic]); err != nil {
+								logger.Error().Err(err).Str("topic", topic).Msg("WEBHOOK REGISTRATION FAILED")
+							} else {
+								logger.Info().Str("topic", topic).Msg("webhook registered successfully")
+							}
 						}
 					}
 				}
