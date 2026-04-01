@@ -2,11 +2,10 @@ import { useState, useCallback } from 'react';
 import {
   Page, Layout, Card, BlockStack, Text, Badge, Spinner,
   Banner, InlineStack, Divider, EmptyState, Button,
-  Modal, FormLayout, TextField, Select,
+  Modal, TextField,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
 import { api } from '../utils/api';
-import ConfirmDialog from '../components/ConfirmDialog';
 
 interface Reseller {
   reseller_shop_id: string;
