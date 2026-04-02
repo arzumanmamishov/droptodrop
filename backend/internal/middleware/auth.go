@@ -86,9 +86,19 @@ func SessionAuth(db *pgxpool.Pool, apiKey, apiSecret string, sessionMaxAge int, 
 				SELECT id, role FROM shops WHERE shopify_domain = $1 AND status = 'active'
 			`, shopDomain).Scan(&shopID, &shopRole)
 			if err != nil {
-				logger.Warn().Err(err).Str("shop", shopDomain).Msg("shop not found for JWT")
-				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "shop not found or inactive"})
-				return
+				// Shop not in DB — auto-create it so OAuth callback can update it
+				logger.Info().Str("shop", shopDomain).Msg("auto-creating shop from JWT")
+				err = db.QueryRow(c.Request.Context(), `
+					INSERT INTO shops (shopify_domain, status)
+					VALUES ($1, 'active')
+					ON CONFLICT (shopify_domain) DO UPDATE SET status = 'active', updated_at = NOW()
+					RETURNING id, role
+				`, shopDomain).Scan(&shopID, &shopRole)
+				if err != nil {
+					logger.Warn().Err(err).Str("shop", shopDomain).Msg("failed to auto-create shop")
+					c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "shop not found or inactive"})
+					return
+				}
 			}
 
 			// Ensure a database session exists for this shop so that subsequent
