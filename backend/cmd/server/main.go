@@ -896,23 +896,42 @@ func main() {
 										ID string `json:"id"`
 									} `json:"inventoryItem"`
 								} `json:"productVariants"`
+								UserErrors []struct {
+									Field   []string `json:"field"`
+									Message string   `json:"message"`
+								} `json:"userErrors"`
 							} `json:"productVariantsBulkUpdate"`
 						} `json:"data"`
 					}
-					client.GraphQL(ctx, varUpdateQuery, map[string]interface{}{
+					varErr := client.GraphQL(ctx, varUpdateQuery, map[string]interface{}{
 						"productId": product.ID,
 						"variants":  variantUpdates,
 					}, &varResult)
-					logger.Info().Str("import_id", importID).Float64("price", variantInfos[0].ResellerPrice).Msg("variant price updated")
+					if varErr != nil {
+						logger.Error().Err(varErr).Msg("variant update failed")
+					} else {
+						logger.Info().Str("import_id", importID).Float64("price", variantInfos[0].ResellerPrice).Msg("variant price updated")
+						for _, ue := range varResult.Data.ProductVariantsBulkUpdate.UserErrors {
+							logger.Error().Str("field", fmt.Sprintf("%v", ue.Field)).Str("message", ue.Message).Msg("variant update user error")
+						}
+					}
 
 					// Set inventory quantity
-					if len(varResult.Data.ProductVariantsBulkUpdate.ProductVariants) > 0 {
-						invItemGID := varResult.Data.ProductVariantsBulkUpdate.ProductVariants[0].InventoryItem.ID
+					pvs := varResult.Data.ProductVariantsBulkUpdate.ProductVariants
+					logger.Info().Int("product_variants_count", len(pvs)).Msg("variant update response")
+
+					if len(pvs) > 0 {
+						invItemGID := pvs[0].InventoryItem.ID
+						logger.Info().Str("inventory_item_gid", invItemGID).Msg("got inventory item")
+
 						if invItemGID != "" {
 							// Get location
 							locations, locErr := client.GetShopLocations(ctx)
-							if locErr == nil && len(locations) > 0 {
+							if locErr != nil {
+								logger.Error().Err(locErr).Msg("failed to get locations")
+							} else if len(locations) > 0 {
 								locationGID := locations[0].ID
+								logger.Info().Str("location_gid", locationGID).Msg("got shop location")
 
 								// Get supplier inventory quantity
 								var supplierQty int
@@ -923,26 +942,36 @@ func main() {
 									WHERE riv.import_id = $1
 									LIMIT 1
 								`, importID).Scan(&supplierQty)
+								logger.Info().Int("supplier_qty", supplierQty).Msg("supplier inventory")
 
 								// Activate inventory at location
 								activateQuery := `mutation($inventoryItemId: ID!, $locationId: ID!) {
 									inventoryActivate(inventoryItemId: $inventoryItemId, locationId: $locationId) {
-										inventoryLevel { id }
+										inventoryLevel { id quantities(names: ["available"]) { name quantity } }
 										userErrors { field message }
 									}
 								}`
-								var activateResult interface{}
-								client.GraphQL(ctx, activateQuery, map[string]interface{}{
+								var activateResult json.RawMessage
+								actErr := client.GraphQL(ctx, activateQuery, map[string]interface{}{
 									"inventoryItemId": invItemGID,
 									"locationId":      locationGID,
 								}, &activateResult)
+								if actErr != nil {
+									logger.Error().Err(actErr).Msg("inventory activate failed")
+								} else {
+									logger.Info().RawJSON("activate_result", activateResult).Msg("inventory activated")
+								}
 
-								// Set quantity
+								// Set quantity using inventorySetQuantities
 								invItemID, _ := shopify.ParseGID(invItemGID)
 								locationID, _ := shopify.ParseGID(locationGID)
-								if invItemID > 0 && locationID > 0 {
-									client.SetInventoryQuantity(ctx, invItemID, locationID, supplierQty)
-									logger.Info().Int("quantity", supplierQty).Msg("inventory set")
+								if invItemID > 0 && locationID > 0 && supplierQty > 0 {
+									setErr := client.SetInventoryQuantity(ctx, invItemID, locationID, supplierQty)
+									if setErr != nil {
+										logger.Error().Err(setErr).Msg("set inventory quantity failed")
+									} else {
+										logger.Info().Int("quantity", supplierQty).Msg("inventory set successfully")
+									}
 								}
 							}
 						}
