@@ -210,7 +210,7 @@ func main() {
 			if !hasInstallation {
 				domain := shop.ShopifyDomain
 				if d, ok := shopDomain.(string); ok && d != "" { domain = d }
-				authURL := fmt.Sprintf("/auth/shopify?shop=%s", domain)
+				authURL := fmt.Sprintf("/auth/install?shop=%s", domain)
 				c.JSON(http.StatusOK, gin.H{
 					"needs_auth": true,
 					"auth_url":   authURL,
