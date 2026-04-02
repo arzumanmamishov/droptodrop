@@ -962,14 +962,14 @@ func main() {
 			db.QueryRow(ctx, `
 				SELECT COUNT(*) FROM messages m
 				JOIN conversations cv ON cv.id = m.conversation_id
-				WHERE (cv.shop_a_id = $1 OR cv.shop_b_id = $1)
+				WHERE (cv.supplier_shop_id = $1 OR cv.reseller_shop_id = $1)
 				AND m.sender_shop_id != $1 AND m.is_read = FALSE
 			`, sid).Scan(&msgCount)
 			counts["messages"] = msgCount
 
 			// Unread notifications
 			var notifCount int
-			db.QueryRow(ctx, `SELECT COUNT(*) FROM inapp_notifications WHERE shop_id = $1 AND is_read = FALSE`, sid).Scan(&notifCount)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM notifications WHERE shop_id = $1 AND is_read = FALSE`, sid).Scan(&notifCount)
 			counts["notifications"] = notifCount
 
 			// Payouts needing action

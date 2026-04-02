@@ -24,9 +24,12 @@ export default function SupplierInfo() {
 
   const handleMessage = useCallback(async () => {
     try {
-      await api.post('/conversations', { other_shop_id: id, subject: 'Inquiry' });
+      const conv = await api.post<{ id: string }>('/conversations', { other_shop_id: id, subject: 'Inquiry' });
+      navigate(`/messages?conv=${conv.id}`);
+    } catch (err) {
+      console.error('Failed to create conversation:', err);
       navigate('/messages');
-    } catch { /* */ }
+    }
   }, [id, navigate]);
 
   if (loading) {

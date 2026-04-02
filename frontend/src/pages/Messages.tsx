@@ -29,7 +29,10 @@ interface Message {
 
 export default function Messages() {
   const { data: convData, loading: convsLoading, refetch: refetchConvs } = useApi<{ conversations: Conversation[] }>('/conversations');
-  const [selectedConv, setSelectedConv] = useState<string | null>(null);
+  const [selectedConv, setSelectedConv] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('conv');
+  });
   const [messages, setMessages] = useState<Message[]>([]);
   const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [newMessage, setNewMessage] = useState('');
