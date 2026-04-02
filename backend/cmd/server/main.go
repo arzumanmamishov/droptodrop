@@ -203,7 +203,7 @@ func main() {
 				c.JSON(http.StatusNotFound, gin.H{"error": "shop not found"})
 				return
 			}
-			// Register webhooks if not already registered (non-destructive)
+			// Register webhooks and fetch shop info from Shopify
 			go func() {
 				var encToken string
 				db.QueryRow(context.Background(), `SELECT access_token FROM app_installations WHERE shop_id = $1 AND is_active = TRUE`, shopID.(string)).Scan(&encToken)
@@ -223,8 +223,13 @@ func main() {
 								"PRODUCTS_UPDATE":     "/webhooks/products/update",
 								"APP_UNINSTALLED":     "/webhooks/app/uninstalled",
 							}
-							// Use RegisterWebhook (not DeleteAndRegister) to avoid gaps
 							client.RegisterWebhook(bgCtx, topic, cfg.Shopify.AppURL+paths[topic])
+						}
+						// Fetch and save shop name from Shopify
+						shopInfo, err := client.GetShopInfo(bgCtx)
+						if err == nil && shopInfo != nil {
+							db.Exec(bgCtx, `UPDATE shops SET name = $1, email = $2 WHERE id = $3 AND (name = '' OR name IS NULL)`,
+								shopInfo["name"], shopInfo["email"], shopID.(string))
 						}
 					}
 				}

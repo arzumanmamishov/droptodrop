@@ -37,9 +37,11 @@ type Import struct {
 	SyncTitle         bool            `json:"sync_title"`
 	LastSyncAt        *time.Time      `json:"last_sync_at,omitempty"`
 	LastSyncError     *string         `json:"last_sync_error,omitempty"`
-	Variants          []ImportVariant     `json:"variants,omitempty"`
-	SupplierTitle     string              `json:"supplier_title,omitempty"`
-	SupplierImages    json.RawMessage     `json:"supplier_images,omitempty"`
+	Variants              []ImportVariant     `json:"variants,omitempty"`
+	SupplierTitle         string              `json:"supplier_title,omitempty"`
+	SupplierImages        json.RawMessage     `json:"supplier_images,omitempty"`
+	SupplierShopID        string              `json:"supplier_shop_id,omitempty"`
+	SupplierCompanyName   string              `json:"supplier_company_name,omitempty"`
 	CreatedAt         time.Time       `json:"created_at"`
 	UpdatedAt         time.Time       `json:"updated_at"`
 }
@@ -230,9 +232,13 @@ func (s *Service) List(ctx context.Context, resellerShopID string, limit, offset
 		SELECT ri.id, ri.reseller_shop_id, ri.supplier_listing_id, ri.shopify_product_id, ri.status,
 			ri.markup_type, ri.markup_value, ri.sync_images, ri.sync_description, ri.sync_title,
 			ri.last_sync_at, ri.last_sync_error, ri.created_at, ri.updated_at,
-			COALESCE(sl.title, '') as supplier_title, COALESCE(sl.images, '[]'::jsonb) as supplier_images
+			COALESCE(sl.title, '') as supplier_title, COALESCE(sl.images, '[]'::jsonb) as supplier_images,
+			COALESCE(sl.supplier_shop_id, '') as supplier_shop_id,
+			COALESCE(sp.company_name, s.name, s.shopify_domain, '') as supplier_company_name
 		FROM reseller_imports ri
 		LEFT JOIN supplier_listings sl ON sl.id = ri.supplier_listing_id
+		LEFT JOIN shops s ON s.id = sl.supplier_shop_id
+		LEFT JOIN supplier_profiles sp ON sp.shop_id = sl.supplier_shop_id
 		WHERE ri.reseller_shop_id = $1
 		ORDER BY ri.updated_at DESC
 		LIMIT $2 OFFSET $3
@@ -248,7 +254,7 @@ func (s *Service) List(ctx context.Context, resellerShopID string, limit, offset
 		if err := rows.Scan(&imp.ID, &imp.ResellerShopID, &imp.SupplierListingID, &imp.ShopifyProductID,
 			&imp.Status, &imp.MarkupType, &imp.MarkupValue, &imp.SyncImages, &imp.SyncDescription,
 			&imp.SyncTitle, &imp.LastSyncAt, &imp.LastSyncError, &imp.CreatedAt, &imp.UpdatedAt,
-			&imp.SupplierTitle, &imp.SupplierImages); err != nil {
+			&imp.SupplierTitle, &imp.SupplierImages, &imp.SupplierShopID, &imp.SupplierCompanyName); err != nil {
 			return nil, 0, fmt.Errorf("scan import: %w", err)
 		}
 		imports = append(imports, imp)

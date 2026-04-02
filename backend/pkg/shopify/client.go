@@ -570,3 +570,27 @@ func (c *Client) GetVariantInventoryItem(ctx context.Context, variantID int64) (
 
 	return ParseGID(result.Data.ProductVariant.InventoryItem.ID)
 }
+
+// GetShopInfo fetches shop name and email from Shopify.
+func (c *Client) GetShopInfo(ctx context.Context) (map[string]string, error) {
+	query := `{ shop { name email myshopifyDomain } }`
+
+	var result struct {
+		Data struct {
+			Shop struct {
+				Name             string `json:"name"`
+				Email            string `json:"email"`
+				MyshopifyDomain  string `json:"myshopifyDomain"`
+			} `json:"shop"`
+		} `json:"data"`
+	}
+
+	if err := c.GraphQL(ctx, query, nil, &result); err != nil {
+		return nil, err
+	}
+
+	return map[string]string{
+		"name":  result.Data.Shop.Name,
+		"email": result.Data.Shop.Email,
+	}, nil
+}
