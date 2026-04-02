@@ -233,7 +233,7 @@ func (s *Service) List(ctx context.Context, resellerShopID string, limit, offset
 			ri.markup_type, ri.markup_value, ri.sync_images, ri.sync_description, ri.sync_title,
 			ri.last_sync_at, ri.last_sync_error, ri.created_at, ri.updated_at,
 			COALESCE(sl.title, '') as supplier_title, COALESCE(sl.images, '[]'::jsonb) as supplier_images,
-			COALESCE(sl.supplier_shop_id, '') as supplier_shop_id,
+			COALESCE(sl.supplier_shop_id::text, '') as supplier_shop_id,
 			COALESCE(sp.company_name, s.name, s.shopify_domain, '') as supplier_company_name
 		FROM reseller_imports ri
 		LEFT JOIN supplier_listings sl ON sl.id = ri.supplier_listing_id
