@@ -790,11 +790,145 @@ func main() {
 
 			reseller.POST("/imports/:id/resync", func(c *gin.Context) {
 				shopID, _ := c.Get("shop_id")
-				if err := importsSvc.ResyncImport(c.Request.Context(), shopID.(string), c.Param("id")); err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				sid := shopID.(string)
+				importID := c.Param("id")
+				ctx := c.Request.Context()
+
+				// Check if the import exists
+				var importStatus string
+				var shopifyProductID *int64
+				var supplierListingID string
+				err := db.QueryRow(ctx, `SELECT status, shopify_product_id, supplier_listing_id FROM reseller_imports WHERE id = $1 AND reseller_shop_id = $2`, importID, sid).Scan(&importStatus, &shopifyProductID, &supplierListingID)
+				if err != nil {
+					c.JSON(http.StatusNotFound, gin.H{"error": "import not found"})
 					return
 				}
-				c.JSON(http.StatusOK, gin.H{"status": "ok"})
+
+				// Get reseller's Shopify client
+				var shopDomain, encToken string
+				err = db.QueryRow(ctx, `
+					SELECT s.shopify_domain, ai.access_token FROM shops s
+					JOIN app_installations ai ON ai.shop_id = s.id AND ai.is_active = TRUE
+					WHERE s.id = $1
+				`, sid).Scan(&shopDomain, &encToken)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "shop credentials not found"})
+					return
+				}
+				token, err := authpkg.Decrypt(encToken, cfg.Security.EncryptionKey)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to decrypt credentials"})
+					return
+				}
+				client := shopify.NewClient(shopDomain, token, logger)
+
+				// Get supplier listing data
+				var title, description string
+				var images json.RawMessage
+				var supplierProductID int64
+				err = db.QueryRow(ctx, `
+					SELECT sl.title, COALESCE(sl.description,''), sl.images, sl.shopify_product_id
+					FROM supplier_listings sl WHERE sl.id = $1
+				`, supplierListingID).Scan(&title, &description, &images, &supplierProductID)
+				if err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "supplier listing not found"})
+					return
+				}
+
+				// Create product in reseller's Shopify store
+				productInput := map[string]interface{}{
+					"title":           title,
+					"descriptionHtml": description,
+				}
+				resp, err := client.CreateProduct(ctx, productInput)
+				if err != nil {
+					db.Exec(ctx, `UPDATE reseller_imports SET status = 'failed', last_sync_error = $2 WHERE id = $1`, importID, err.Error())
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create product in Shopify: " + err.Error()})
+					return
+				}
+
+				product := resp.Data.ProductCreate.Product
+				resellerProductID, _ := shopify.ParseGID(product.ID)
+
+				// Update the import record
+				db.Exec(ctx, `UPDATE reseller_imports SET shopify_product_id = $2, status = 'active', last_sync_at = NOW(), last_sync_error = NULL WHERE id = $1`, importID, resellerProductID)
+
+				// Update variant prices using productVariantsBulkUpdate
+				type variantInfo struct {
+					ImportVariantID string
+					ResellerPrice   float64
+					ShopifyVarID    int64
+				}
+				vRows, _ := db.Query(ctx, `
+					SELECT riv.id, riv.reseller_price, slv.shopify_variant_id
+					FROM reseller_import_variants riv
+					JOIN supplier_listing_variants slv ON slv.id = riv.supplier_variant_id
+					WHERE riv.import_id = $1
+				`, importID)
+				var variantInfos []variantInfo
+				if vRows != nil {
+					for vRows.Next() {
+						var vi variantInfo
+						vRows.Scan(&vi.ImportVariantID, &vi.ResellerPrice, &vi.ShopifyVarID)
+						variantInfos = append(variantInfos, vi)
+					}
+					vRows.Close()
+				}
+
+				// If product was just created, it has 1 default variant — update its price
+				if len(product.Variants.Edges) > 0 && len(variantInfos) > 0 {
+					variantGID := product.Variants.Edges[0].Node.ID
+					variantUpdates := []map[string]interface{}{
+						{"id": variantGID, "price": fmt.Sprintf("%.2f", variantInfos[0].ResellerPrice)},
+					}
+					varUpdateQuery := `mutation($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+						productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+							productVariants { id }
+							userErrors { field message }
+						}
+					}`
+					var varResult interface{}
+					client.GraphQL(ctx, varUpdateQuery, map[string]interface{}{
+						"productId": product.ID,
+						"variants":  variantUpdates,
+					}, &varResult)
+				}
+
+				// Set images
+				var imgURLs []string
+				json.Unmarshal(images, &imgURLs)
+				if len(imgURLs) == 0 {
+					var imgObjs []struct{ URL string `json:"url"` }
+					json.Unmarshal(images, &imgObjs)
+					for _, img := range imgObjs {
+						if img.URL != "" { imgURLs = append(imgURLs, img.URL) }
+					}
+				}
+				for _, imgURL := range imgURLs {
+					imgQuery := `mutation($productId: ID!, $media: [CreateMediaInput!]!) {
+						productCreateMedia(productId: $productId, media: $media) {
+							media { id }
+							mediaUserErrors { field message }
+						}
+					}`
+					var imgResult interface{}
+					client.GraphQL(ctx, imgQuery, map[string]interface{}{
+						"productId": product.ID,
+						"media": []map[string]interface{}{
+							{"originalSource": imgURL, "mediaContentType": "IMAGE"},
+						},
+					}, &imgResult)
+				}
+
+				// Create product link
+				db.Exec(ctx, `
+					INSERT INTO product_links (supplier_shop_id, reseller_shop_id, supplier_product_id, reseller_product_id, supplier_listing_id, is_active)
+					VALUES ((SELECT supplier_shop_id FROM supplier_listings WHERE id = $1), $2, $3, $4, $1, TRUE)
+					ON CONFLICT DO NOTHING
+				`, supplierListingID, sid, supplierProductID, resellerProductID)
+
+				logger.Info().Str("import_id", importID).Int64("shopify_product_id", resellerProductID).Msg("product re-synced to Shopify")
+				c.JSON(http.StatusOK, gin.H{"status": "ok", "shopify_product_id": resellerProductID})
 			})
 
 			reseller.DELETE("/imports/:id", func(c *gin.Context) {
