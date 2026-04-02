@@ -53,8 +53,14 @@ export default function App() {
       .get<Record<string, unknown>>('/shop')
       .then((data) => {
         if (data.needs_auth && data.auth_url) {
-          // Shop exists but no access token — redirect to OAuth
-          window.location.href = data.auth_url as string;
+          // Shop exists but no access token — use top-level redirect for OAuth
+          const authUrl = window.location.origin + data.auth_url;
+          if (window.top !== window.self) {
+            // Inside Shopify iframe — redirect parent
+            window.top!.location.href = authUrl;
+          } else {
+            window.location.href = authUrl;
+          }
           return;
         }
         setShop(data as unknown as Shop);
