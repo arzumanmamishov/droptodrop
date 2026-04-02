@@ -184,6 +184,25 @@
   box-shadow: none !important;
 }
 
+/* Navigation — compact with small text */
+.Polaris-Navigation__Text {
+  font-size: 13px !important;
+}
+.Polaris-Navigation__Item {
+  padding: 4px 8px !important;
+  min-height: unset !important;
+}
+.Polaris-Navigation__Section + .Polaris-Navigation__Section .Polaris-Navigation__Text {
+  font-size: 12px !important;
+  color: var(--dt-text-muted) !important;
+}
+.Polaris-Navigation__SectionHeading span {
+  font-size: 11px !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+  color: var(--dt-text-muted) !important;
+}
+
 /* Navigation active — blue accent */
 .Polaris-Navigation__Item--selected {
   background: var(--dt-primary-bg) !important;

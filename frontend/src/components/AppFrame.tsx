@@ -56,55 +56,67 @@ export default function AppFrame({ shop, children }: AppFrameProps) {
 
   const badge = (count: number) => count > 0 ? String(count) : undefined;
 
-  const supplierNavItems = [
+  const mapItems = (items: typeof supplierMain) =>
+    items.map((item) => ({ ...item, onClick: () => navigate(item.url) }));
+
+  // === SUPPLIER NAV ===
+  const supplierMain = [
     { url: '/', label: 'Dashboard', icon: HomeIcon, selected: location.pathname === '/' },
-    { url: '/supplier/setup', label: 'Supplier Setup', icon: StoreIcon, selected: location.pathname === '/supplier/setup' },
-    { url: '/supplier/listings', label: 'Listings', icon: ProductIcon, selected: location.pathname === '/supplier/listings' },
-    { url: '/supplier/resellers', label: 'My Resellers', icon: PersonIcon, selected: location.pathname === '/supplier/resellers' },
     { url: '/orders', label: 'Orders', icon: OrderIcon, selected: location.pathname.startsWith('/orders'), badge: badge(counts.orders) },
-    { url: '/analytics', label: 'Analytics', icon: ChartVerticalFilledIcon, selected: location.pathname === '/analytics' },
-    { url: '/disputes', label: 'Disputes', icon: AlertCircleIcon, selected: location.pathname === '/disputes', badge: badge(counts.disputes) },
+    { url: '/supplier/listings', label: 'Listings', icon: ProductIcon, selected: location.pathname === '/supplier/listings' },
+    { url: '/payouts', label: 'Payouts', icon: CashDollarIcon, selected: location.pathname === '/payouts', badge: badge(counts.payouts) },
     { url: '/messages', label: 'Messages', icon: ChatIcon, selected: location.pathname === '/messages', badge: badge(counts.messages) },
+    { url: '/notifications', label: 'Notifications', icon: NotificationIcon, selected: location.pathname === '/notifications', badge: badge(counts.notifications) },
+    { url: '/disputes', label: 'Disputes', icon: AlertCircleIcon, selected: location.pathname === '/disputes', badge: badge(counts.disputes) },
+  ];
+  const supplierMore = [
+    { url: '/supplier/resellers', label: 'My Resellers', icon: PersonIcon, selected: location.pathname === '/supplier/resellers' },
+    { url: '/analytics', label: 'Analytics', icon: ChartVerticalFilledIcon, selected: location.pathname === '/analytics' },
+    { url: '/shipping-rules', label: 'Shipping', icon: DeliveryIcon, selected: location.pathname === '/shipping-rules' },
     { url: '/announcements', label: 'Announcements', icon: MegaphoneIcon, selected: location.pathname === '/announcements' },
     { url: '/reviews', label: 'Reviews', icon: StarIcon, selected: location.pathname === '/reviews' },
     { url: '/deals', label: 'Deals', icon: DiscountIcon, selected: location.pathname === '/deals' },
-    { url: '/shipping-rules', label: 'Shipping', icon: DeliveryIcon, selected: location.pathname === '/shipping-rules' },
     { url: '/samples', label: 'Samples', icon: InventoryIcon, selected: location.pathname === '/samples' },
-    { url: '/notifications', label: 'Notifications', icon: NotificationIcon, selected: location.pathname === '/notifications', badge: badge(counts.notifications) },
-    { url: '/payouts', label: 'Payouts', icon: CashDollarIcon, selected: location.pathname === '/payouts', badge: badge(counts.payouts) },
     { url: '/billing', label: 'Billing', icon: CashDollarIcon, selected: location.pathname === '/billing' },
     { url: '/audit', label: 'Audit Log', icon: ListBulletedIcon, selected: location.pathname === '/audit' },
+    { url: '/supplier/setup', label: 'Settings', icon: SettingsIcon, selected: location.pathname === '/supplier/setup' },
   ];
 
-  const resellerNavItems = [
+  // === RESELLER NAV ===
+  const resellerMain = [
     { url: '/', label: 'Dashboard', icon: HomeIcon, selected: location.pathname === '/' },
     { url: '/marketplace', label: 'Marketplace', icon: StoreIcon, selected: location.pathname === '/marketplace' },
-    { url: '/imports', label: 'Imports', icon: ImportIcon, selected: location.pathname === '/imports' },
     { url: '/orders', label: 'Orders', icon: OrderIcon, selected: location.pathname.startsWith('/orders'), badge: badge(counts.orders) },
-    { url: '/analytics', label: 'Analytics', icon: ChartVerticalFilledIcon, selected: location.pathname === '/analytics' },
-    { url: '/disputes', label: 'Disputes', icon: AlertCircleIcon, selected: location.pathname === '/disputes', badge: badge(counts.disputes) },
+    { url: '/imports', label: 'Imports', icon: ImportIcon, selected: location.pathname === '/imports' },
+    { url: '/payouts', label: 'Payouts', icon: CashDollarIcon, selected: location.pathname === '/payouts', badge: badge(counts.payouts) },
     { url: '/messages', label: 'Messages', icon: ChatIcon, selected: location.pathname === '/messages', badge: badge(counts.messages) },
+    { url: '/notifications', label: 'Notifications', icon: NotificationIcon, selected: location.pathname === '/notifications', badge: badge(counts.notifications) },
+    { url: '/disputes', label: 'Disputes', icon: AlertCircleIcon, selected: location.pathname === '/disputes', badge: badge(counts.disputes) },
+  ];
+  const resellerMore = [
+    { url: '/analytics', label: 'Analytics', icon: ChartVerticalFilledIcon, selected: location.pathname === '/analytics' },
     { url: '/announcements', label: 'Announcements', icon: MegaphoneIcon, selected: location.pathname === '/announcements' },
     { url: '/reviews', label: 'Reviews', icon: StarIcon, selected: location.pathname === '/reviews' },
     { url: '/deals', label: 'Deals', icon: DiscountIcon, selected: location.pathname === '/deals' },
     { url: '/samples', label: 'Samples', icon: InventoryIcon, selected: location.pathname === '/samples' },
-    { url: '/notifications', label: 'Notifications', icon: NotificationIcon, selected: location.pathname === '/notifications', badge: badge(counts.notifications) },
-    { url: '/payouts', label: 'Payouts', icon: CashDollarIcon, selected: location.pathname === '/payouts', badge: badge(counts.payouts) },
     { url: '/billing', label: 'Billing', icon: CashDollarIcon, selected: location.pathname === '/billing' },
     { url: '/audit', label: 'Audit Log', icon: ListBulletedIcon, selected: location.pathname === '/audit' },
     { url: '/reseller/settings', label: 'Settings', icon: SettingsIcon, selected: location.pathname === '/reseller/settings' },
   ];
 
-  const navItems = shop.role === 'supplier' ? supplierNavItems : resellerNavItems;
+  const mainItems = shop.role === 'supplier' ? supplierMain : resellerMain;
+  const moreItems = shop.role === 'supplier' ? supplierMore : resellerMore;
 
   const navigation = (
     <Navigation location={location.pathname}>
       <Navigation.Section
         title="DropToDrop"
-        items={navItems.map((item) => ({
-          ...item,
-          onClick: () => navigate(item.url),
-        }))}
+        items={mapItems(mainItems)}
+      />
+      <Navigation.Section
+        title="More"
+        separator
+        items={mapItems(moreItems)}
       />
     </Navigation>
   );
