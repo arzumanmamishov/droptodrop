@@ -25,6 +25,7 @@ interface DashboardData {
   active_listings?: number;
   imported_products?: number;
   order_count?: number;
+  paypal_email?: string;
   recent_orders?: Array<{
     id: string;
     reseller_order_number: string;
@@ -108,6 +109,20 @@ export default function Dashboard() {
           <Layout.Section>
             <Banner tone="info" action={{ content: 'Browse Marketplace', onAction: () => navigate('/marketplace') }}>
               Import products from suppliers to start selling.
+            </Banner>
+          </Layout.Section>
+        )}
+        {isSupplier && !data?.paypal_email && (
+          <Layout.Section>
+            <Banner tone="warning" action={{ content: 'Add PayPal Email', onAction: () => navigate('/supplier/setup') }}>
+              Add your PayPal email so resellers can pay you directly. Without it, resellers won't see a PayPal pay button on the Payouts page.
+            </Banner>
+          </Layout.Section>
+        )}
+        {!isSupplier && !data?.paypal_email && (
+          <Layout.Section>
+            <Banner tone="warning" action={{ content: 'Add PayPal Email', onAction: () => navigate('/reseller/settings') }}>
+              Add your PayPal email in Settings so suppliers can verify your payments.
             </Banner>
           </Layout.Section>
         )}

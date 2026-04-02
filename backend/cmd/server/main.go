@@ -266,10 +266,13 @@ func main() {
 				dashboard["listings_preview"] = listings
 				dashboard["recent_orders"] = orders
 				dashboard["order_count"] = orderTotal
-				// Count pending orders
 				pendingOrders, pendingTotal, _ := ordersSvc.ListRoutedOrders(c.Request.Context(), sid, "supplier", "pending", 100, 0)
 				_ = pendingOrders
 				dashboard["pending_order_count"] = pendingTotal
+				// PayPal setup check
+				var paypal string
+				db.QueryRow(c.Request.Context(), `SELECT COALESCE(paypal_email,'') FROM supplier_profiles WHERE shop_id = $1`, sid).Scan(&paypal)
+				dashboard["paypal_email"] = paypal
 			} else if role == "reseller" {
 				imports, importTotal, _ := importsSvc.List(c.Request.Context(), sid, 100, 0)
 				orders, orderTotal, _ := ordersSvc.ListRoutedOrders(c.Request.Context(), sid, "reseller", "", 10, 0)
@@ -280,6 +283,10 @@ func main() {
 				pendingOrders, pendingTotal, _ := ordersSvc.ListRoutedOrders(c.Request.Context(), sid, "reseller", "pending", 100, 0)
 				_ = pendingOrders
 				dashboard["pending_order_count"] = pendingTotal
+				// PayPal setup check
+				var paypal string
+				db.QueryRow(c.Request.Context(), `SELECT COALESCE(paypal_email,'') FROM reseller_profiles WHERE shop_id = $1`, sid).Scan(&paypal)
+				dashboard["paypal_email"] = paypal
 			}
 
 			c.JSON(http.StatusOK, dashboard)
@@ -1505,11 +1512,20 @@ func main() {
 				grandFees += fee
 				if payStatus == "paid" { grandPaid += payout }
 			}
+			// Check if this shop has PayPal set up
+			var myPaypal string
+			if role.(string) == "supplier" {
+				db.QueryRow(c.Request.Context(), `SELECT COALESCE(paypal_email,'') FROM supplier_profiles WHERE shop_id = $1`, sid).Scan(&myPaypal)
+			} else {
+				db.QueryRow(c.Request.Context(), `SELECT COALESCE(paypal_email,'') FROM reseller_profiles WHERE shop_id = $1`, sid).Scan(&myPaypal)
+			}
+
 			c.JSON(http.StatusOK, gin.H{
 				"payouts": payouts, "total": total,
 				"grand_total": grandTotal, "grand_paid": grandPaid,
 				"grand_balance": grandTotal - grandPaid,
 				"grand_fees": grandFees,
+				"has_paypal": myPaypal != "",
 			})
 		})
 

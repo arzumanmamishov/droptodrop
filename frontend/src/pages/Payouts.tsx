@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Page, Layout, Card, BlockStack, Text, Badge, Spinner,
   Banner, InlineStack, Divider, EmptyState, Button,
@@ -29,11 +30,13 @@ interface PayoutsResponse {
   grand_paid: number;
   grand_balance: number;
   grand_fees: number;
+  has_paypal: boolean;
 }
 
 interface Props { role: string; }
 
 export default function Payouts({ role }: Props) {
+  const navigate = useNavigate();
   const [page, setPage] = useState(0);
   const limit = 20;
   const { data, loading, refetch } = useApi<PayoutsResponse>(`/payouts?limit=${limit}&offset=${page * limit}`);
@@ -93,6 +96,22 @@ export default function Payouts({ role }: Props) {
     <Page title="Payouts" subtitle={isSupplier ? 'Money owed to you' : 'Money you owe suppliers'}>
       <Layout>
         {success && <Layout.Section><Banner tone="success" onDismiss={() => setSuccess(null)}>{success}</Banner></Layout.Section>}
+
+        {data && !data.has_paypal && (
+          <Layout.Section>
+            <Banner
+              tone="warning"
+              action={{
+                content: 'Add PayPal Email',
+                onAction: () => navigate(isSupplier ? '/supplier/setup' : '/reseller/settings'),
+              }}
+            >
+              {isSupplier
+                ? 'Add your PayPal email so resellers can pay you directly with one click.'
+                : 'Add your PayPal email so suppliers can verify your payments.'}
+            </Banner>
+          </Layout.Section>
+        )}
 
         {/* Summary cards */}
         <Layout.Section>
