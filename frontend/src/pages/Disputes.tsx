@@ -126,7 +126,7 @@ export default function Disputes() {
             <BlockStack gap="400">
               {error && <Banner tone="critical">{error}</Banner>}
               <FormLayout>
-                <TextField label="Order ID" value={orderId} onChange={setOrderId} autoComplete="off" helpText="Paste the order ID from the Orders page" />
+                <TextField label="Order ID or Order Number" value={orderId} onChange={setOrderId} autoComplete="off" helpText="Enter the order number (e.g. 1005) or order ID from the Orders page" />
                 <Select label="Issue Type" options={DISPUTE_TYPES} value={disputeType} onChange={setDisputeType} />
                 <TextField label="Description" value={description} onChange={setDescription} multiline={4} autoComplete="off" helpText="Describe the issue in detail" />
               </FormLayout>

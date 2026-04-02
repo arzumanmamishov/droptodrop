@@ -49,18 +49,15 @@ func NewService(db *pgxpool.Pool, logger zerolog.Logger) *Service {
 
 // Create creates a new dispute for a routed order.
 func (s *Service) Create(ctx context.Context, shopID, role string, input CreateInput) (*Dispute, error) {
-	// Verify the shop is part of this routed order
-	var exists bool
+	// Resolve order: accept UUID or order number
+	var routedOrderID string
 	err := s.db.QueryRow(ctx, `
-		SELECT EXISTS(
-			SELECT 1 FROM routed_orders
-			WHERE id = $1 AND (reseller_shop_id = $2 OR supplier_shop_id = $2)
-		)
-	`, input.RoutedOrderID, shopID).Scan(&exists)
+		SELECT id FROM routed_orders
+		WHERE (id::text = $1 OR reseller_order_number = $1)
+		AND (reseller_shop_id = $2 OR supplier_shop_id = $2)
+		LIMIT 1
+	`, input.RoutedOrderID, shopID).Scan(&routedOrderID)
 	if err != nil {
-		return nil, fmt.Errorf("check order access: %w", err)
-	}
-	if !exists {
 		return nil, fmt.Errorf("order not found or access denied")
 	}
 
@@ -69,7 +66,7 @@ func (s *Service) Create(ctx context.Context, shopID, role string, input CreateI
 		INSERT INTO disputes (routed_order_id, reporter_shop_id, reporter_role, dispute_type, description)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, routed_order_id, reporter_shop_id, reporter_role, dispute_type, status, description, resolution, created_at, updated_at
-	`, input.RoutedOrderID, shopID, role, input.DisputeType, input.Description).Scan(
+	`, routedOrderID, shopID, role, input.DisputeType, input.Description).Scan(
 		&d.ID, &d.RoutedOrderID, &d.ReporterShopID, &d.ReporterRole,
 		&d.DisputeType, &d.Status, &d.Description, &d.Resolution,
 		&d.CreatedAt, &d.UpdatedAt,
@@ -78,7 +75,7 @@ func (s *Service) Create(ctx context.Context, shopID, role string, input CreateI
 		return nil, fmt.Errorf("create dispute: %w", err)
 	}
 
-	s.logger.Info().Str("dispute_id", d.ID).Str("order_id", input.RoutedOrderID).Msg("dispute created")
+	s.logger.Info().Str("dispute_id", d.ID).Str("order_id", routedOrderID).Msg("dispute created")
 	return d, nil
 }
 
