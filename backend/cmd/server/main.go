@@ -875,7 +875,7 @@ func main() {
 					vRows.Close()
 				}
 
-				// If product was just created, it has 1 default variant — update its price
+				// Update variant price
 				if len(product.Variants.Edges) > 0 && len(variantInfos) > 0 {
 					variantGID := product.Variants.Edges[0].Node.ID
 					variantUpdates := []map[string]interface{}{
@@ -883,27 +883,106 @@ func main() {
 					}
 					varUpdateQuery := `mutation($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
 						productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-							productVariants { id }
+							productVariants { id inventoryItem { id } }
 							userErrors { field message }
 						}
 					}`
-					var varResult interface{}
+					var varResult struct {
+						Data struct {
+							ProductVariantsBulkUpdate struct {
+								ProductVariants []struct {
+									ID            string `json:"id"`
+									InventoryItem struct {
+										ID string `json:"id"`
+									} `json:"inventoryItem"`
+								} `json:"productVariants"`
+							} `json:"productVariantsBulkUpdate"`
+						} `json:"data"`
+					}
 					client.GraphQL(ctx, varUpdateQuery, map[string]interface{}{
 						"productId": product.ID,
 						"variants":  variantUpdates,
 					}, &varResult)
+					logger.Info().Str("import_id", importID).Float64("price", variantInfos[0].ResellerPrice).Msg("variant price updated")
+
+					// Set inventory quantity
+					if len(varResult.Data.ProductVariantsBulkUpdate.ProductVariants) > 0 {
+						invItemGID := varResult.Data.ProductVariantsBulkUpdate.ProductVariants[0].InventoryItem.ID
+						if invItemGID != "" {
+							// Get location
+							locations, locErr := client.GetShopLocations(ctx)
+							if locErr == nil && len(locations) > 0 {
+								locationGID := locations[0].ID
+
+								// Get supplier inventory quantity
+								var supplierQty int
+								db.QueryRow(ctx, `
+									SELECT COALESCE(slv.inventory_quantity, 0)
+									FROM supplier_listing_variants slv
+									JOIN reseller_import_variants riv ON riv.supplier_variant_id = slv.id
+									WHERE riv.import_id = $1
+									LIMIT 1
+								`, importID).Scan(&supplierQty)
+
+								// Activate inventory at location
+								activateQuery := `mutation($inventoryItemId: ID!, $locationId: ID!) {
+									inventoryActivate(inventoryItemId: $inventoryItemId, locationId: $locationId) {
+										inventoryLevel { id }
+										userErrors { field message }
+									}
+								}`
+								var activateResult interface{}
+								client.GraphQL(ctx, activateQuery, map[string]interface{}{
+									"inventoryItemId": invItemGID,
+									"locationId":      locationGID,
+								}, &activateResult)
+
+								// Set quantity
+								invItemID, _ := shopify.ParseGID(invItemGID)
+								locationID, _ := shopify.ParseGID(locationGID)
+								if invItemID > 0 && locationID > 0 {
+									client.SetInventoryQuantity(ctx, invItemID, locationID, supplierQty)
+									logger.Info().Int("quantity", supplierQty).Msg("inventory set")
+								}
+							}
+						}
+					}
 				}
 
-				// Set images
+				// Set images — handle double-encoded JSON
 				var imgURLs []string
+				// Try as array of strings first
 				json.Unmarshal(images, &imgURLs)
+				// If that gave us one string that looks like JSON, it's double-encoded
+				if len(imgURLs) == 1 && (imgURLs[0] == "" || imgURLs[0][0] == '[') {
+					imgURLs = nil
+				}
 				if len(imgURLs) == 0 {
-					var imgObjs []struct{ URL string `json:"url"` }
+					// Try as string containing JSON array
+					var innerStr string
+					if json.Unmarshal(images, &innerStr) == nil {
+						var imgObjs []struct {
+							URL     string `json:"url"`
+							AltText string `json:"altText"`
+						}
+						json.Unmarshal([]byte(innerStr), &imgObjs)
+						for _, img := range imgObjs {
+							if img.URL != "" { imgURLs = append(imgURLs, img.URL) }
+						}
+					}
+				}
+				if len(imgURLs) == 0 {
+					// Try as array of objects directly
+					var imgObjs []struct {
+						URL     string `json:"url"`
+						AltText string `json:"altText"`
+					}
 					json.Unmarshal(images, &imgObjs)
 					for _, img := range imgObjs {
 						if img.URL != "" { imgURLs = append(imgURLs, img.URL) }
 					}
 				}
+
 				for _, imgURL := range imgURLs {
 					imgQuery := `mutation($productId: ID!, $media: [CreateMediaInput!]!) {
 						productCreateMedia(productId: $productId, media: $media) {
@@ -919,6 +998,7 @@ func main() {
 						},
 					}, &imgResult)
 				}
+				logger.Info().Int("image_count", len(imgURLs)).Msg("images uploaded")
 
 				// Create product link
 				db.Exec(ctx, `
