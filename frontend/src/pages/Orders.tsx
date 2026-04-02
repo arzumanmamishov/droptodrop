@@ -146,11 +146,12 @@ export default function Orders({ role }: OrdersProps) {
                       <InlineStack align="space-between" blockAlign="center" wrap={false}>
                         <InlineStack gap="300" blockAlign="center">
                           <div style={{
-                            width: '40px', height: '40px', borderRadius: '10px',
-                            background: cfg.bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            fontSize: '14px', fontWeight: 700, color: cfg.color, flexShrink: 0,
+                            padding: '6px 10px', borderRadius: '8px',
+                            background: cfg.bg,
+                            fontSize: '12px', fontWeight: 700, color: cfg.color, flexShrink: 0,
+                            whiteSpace: 'nowrap',
                           }}>
-                            #{order.reseller_order_number || order.id.slice(0, 4)}
+                            #{order.reseller_order_number || order.id.slice(0, 6)}
                           </div>
                           <div>
                             <Text as="span" variant="bodyMd" fontWeight="semibold">
