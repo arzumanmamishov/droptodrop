@@ -1,20 +1,10 @@
 import { useParams, useNavigate } from 'react-router-dom';
 import { useCallback } from 'react';
 import {
-  Page,
-  Layout,
-  Card,
-  BlockStack,
-  Text,
-  Badge,
-  Spinner,
-  Banner,
-  InlineStack,
-  Divider,
-  Icon,
-  Button,
+  Page, Layout, Card, BlockStack, Text, Badge, Spinner,
+  Banner, InlineStack, Divider, Icon, Button,
 } from '@shopify/polaris';
-import { StoreIcon, EmailIcon, PackageIcon } from '@shopify/polaris-icons';
+import { EmailIcon, PackageIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
 import { api } from '../utils/api';
 
@@ -32,6 +22,13 @@ export default function SupplierInfo() {
   const navigate = useNavigate();
   const { data, loading, error } = useApi<SupplierInfoData>(`/reseller/suppliers/${id}`);
 
+  const handleMessage = useCallback(async () => {
+    try {
+      await api.post('/conversations', { other_shop_id: id, subject: 'Inquiry' });
+      navigate('/messages');
+    } catch { /* */ }
+  }, [id, navigate]);
+
   if (loading) {
     return (
       <Page title="Supplier Profile">
@@ -44,23 +41,18 @@ export default function SupplierInfo() {
 
   if (error || !data) {
     return (
-      <Page title="Supplier Profile" backAction={{ content: 'Marketplace', onAction: () => navigate('/marketplace') }}>
+      <Page title="Supplier Profile" backAction={{ content: 'Back', onAction: () => navigate(-1 as unknown as string) }}>
         <Banner tone="critical">{error || 'Supplier not found'}</Banner>
       </Page>
     );
   }
 
-  const handleMessage = useCallback(async () => {
-    try {
-      await api.post('/conversations', { other_shop_id: id, subject: 'Inquiry' });
-      navigate('/messages');
-    } catch { /* */ }
-  }, [id, navigate]);
+  const name = data.company_name || 'Supplier';
 
   return (
     <Page
-      title={data.company_name || 'Supplier Profile'}
-      backAction={{ content: 'Marketplace', onAction: () => navigate('/marketplace') }}
+      title={name}
+      backAction={{ content: 'Back', onAction: () => navigate(-1 as unknown as string) }}
       primaryAction={{ content: 'Message Supplier', onAction: handleMessage }}
     >
       <Layout>
@@ -68,28 +60,45 @@ export default function SupplierInfo() {
           <Card>
             <BlockStack gap="400">
               <InlineStack gap="300" blockAlign="center">
-                <div style={{ background: '#e3f1df', borderRadius: '12px', padding: '12px', display: 'flex' }}>
-                  <Icon source={StoreIcon} tone="success" />
+                <div style={{
+                  width: '56px', height: '56px', borderRadius: '14px',
+                  background: 'linear-gradient(135deg, #1e40af, #3b82f6)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'white', fontSize: '22px', fontWeight: 700,
+                }}>
+                  {name.charAt(0).toUpperCase()}
                 </div>
                 <BlockStack gap="100">
-                  <Text as="h2" variant="headingLg">{data.company_name || 'Unnamed Supplier'}</Text>
-                  <Badge tone="success">{`${data.listing_count} products listed`}</Badge>
+                  <Text as="h2" variant="headingLg">{name}</Text>
+                  <InlineStack gap="200">
+                    <Badge tone="info">{`${data.listing_count} product${data.listing_count !== 1 ? 's' : ''}`}</Badge>
+                    {data.blind_fulfillment && <Badge tone="success">White-label</Badge>}
+                  </InlineStack>
                 </BlockStack>
               </InlineStack>
+
               <Divider />
-              <BlockStack gap="200">
+
+              <BlockStack gap="300">
+                <InlineStack gap="200" blockAlign="center">
+                  <Icon source={PackageIcon} tone="subdued" />
+                  <Text as="p" variant="bodyMd">
+                    <Text as="span" fontWeight="semibold">{data.default_processing_days} day{data.default_processing_days !== 1 ? 's' : ''}</Text> processing time
+                  </Text>
+                </InlineStack>
+
                 {data.support_email && (
                   <InlineStack gap="200" blockAlign="center">
                     <Icon source={EmailIcon} tone="subdued" />
                     <Text as="p" variant="bodyMd">{data.support_email}</Text>
                   </InlineStack>
                 )}
-                <InlineStack gap="200" blockAlign="center">
-                  <Icon source={PackageIcon} tone="subdued" />
-                  <Text as="p" variant="bodyMd">{data.default_processing_days} days processing time</Text>
-                </InlineStack>
-                {data.blind_fulfillment && (
-                  <Badge tone="info">Blind/white-label fulfillment available</Badge>
+
+                {!data.support_email && (
+                  <InlineStack gap="200" blockAlign="center">
+                    <Icon source={EmailIcon} tone="subdued" />
+                    <Text as="p" variant="bodySm" tone="subdued">No support email provided</Text>
+                  </InlineStack>
                 )}
               </BlockStack>
             </BlockStack>
@@ -110,6 +119,18 @@ export default function SupplierInfo() {
               )}
             </BlockStack>
           </Card>
+
+          <div style={{ marginTop: '16px' }}>
+            <Card>
+              <BlockStack gap="300">
+                <Text as="h2" variant="headingMd">Contact</Text>
+                <Divider />
+                <Button variant="primary" onClick={handleMessage}>
+                  Send Message
+                </Button>
+              </BlockStack>
+            </Card>
+          </div>
         </Layout.Section>
       </Layout>
     </Page>
