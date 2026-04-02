@@ -245,17 +245,46 @@ func (s *Service) UpdateListingStatus(ctx context.Context, shopID, listingID, st
 	return nil
 }
 
-// DeleteListing removes a listing and its variants.
+// DeleteListing removes a listing, its variants, and related imports.
 func (s *Service) DeleteListing(ctx context.Context, shopID, listingID string) error {
-	result, err := s.db.Exec(ctx, `
-		DELETE FROM supplier_listings WHERE id = $1 AND supplier_shop_id = $2
-	`, listingID, shopID)
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Verify ownership
+	var exists bool
+	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM supplier_listings WHERE id = $1 AND supplier_shop_id = $2)`, listingID, shopID).Scan(&exists)
+	if err != nil || !exists {
+		return fmt.Errorf("listing not found")
+	}
+
+	// Mark reseller imports as removed
+	tx.Exec(ctx, `UPDATE reseller_imports SET status = 'removed', last_sync_error = 'Supplier deleted this product' WHERE supplier_listing_id = $1 AND status != 'removed'`, listingID)
+
+	// Delete import variants
+	tx.Exec(ctx, `DELETE FROM import_variants WHERE import_id IN (SELECT id FROM reseller_imports WHERE supplier_listing_id = $1)`, listingID)
+
+	// Delete reseller imports
+	tx.Exec(ctx, `DELETE FROM reseller_imports WHERE supplier_listing_id = $1`, listingID)
+
+	// Deactivate product links
+	tx.Exec(ctx, `UPDATE product_links SET is_active = FALSE WHERE supplier_product_id IN (SELECT shopify_product_id FROM supplier_listings WHERE id = $1) AND supplier_shop_id = $2`, listingID, shopID)
+
+	// Delete listing variants
+	tx.Exec(ctx, `DELETE FROM listing_variants WHERE listing_id = $1`, listingID)
+
+	// Delete the listing
+	_, err = tx.Exec(ctx, `DELETE FROM supplier_listings WHERE id = $1 AND supplier_shop_id = $2`, listingID, shopID)
 	if err != nil {
 		return fmt.Errorf("delete listing: %w", err)
 	}
-	if result.RowsAffected() == 0 {
-		return fmt.Errorf("listing not found")
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit: %w", err)
 	}
+
 	s.audit.Log(ctx, shopID, "merchant", shopID, "listing_deleted", "supplier_listing", listingID, nil, "success", "")
 	return nil
 }
