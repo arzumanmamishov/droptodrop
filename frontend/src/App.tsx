@@ -50,9 +50,14 @@ export default function App() {
 
     // Fetch current shop
     api
-      .get<Shop>('/shop')
+      .get<Record<string, unknown>>('/shop')
       .then((data) => {
-        setShop(data);
+        if (data.needs_auth && data.auth_url) {
+          // Shop exists but no access token — redirect to OAuth
+          window.location.href = data.auth_url as string;
+          return;
+        }
+        setShop(data as unknown as Shop);
       })
       .catch(() => {
         // Not authenticated

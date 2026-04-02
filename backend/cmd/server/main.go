@@ -203,6 +203,23 @@ func main() {
 				c.JSON(http.StatusNotFound, gin.H{"error": "shop not found"})
 				return
 			}
+
+			// Check if shop has an active installation (access token)
+			var hasInstallation bool
+			db.QueryRow(c.Request.Context(), `SELECT EXISTS(SELECT 1 FROM app_installations WHERE shop_id = $1 AND is_active = TRUE)`, shopID.(string)).Scan(&hasInstallation)
+			if !hasInstallation {
+				domain := shop.ShopifyDomain
+				if d, ok := shopDomain.(string); ok && d != "" { domain = d }
+				authURL := fmt.Sprintf("/auth/shopify?shop=%s", domain)
+				c.JSON(http.StatusOK, gin.H{
+					"needs_auth": true,
+					"auth_url":   authURL,
+					"id":         shop.ID,
+					"shopify_domain": shop.ShopifyDomain,
+				})
+				return
+			}
+
 			// Register webhooks and fetch shop info from Shopify
 			go func() {
 				var encToken string
