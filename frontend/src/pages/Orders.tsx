@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Page, Layout, Card, Badge, Button, Spinner,
-  Banner, BlockStack, Text, InlineStack, Divider,
+  Banner, BlockStack, Text, InlineStack,
   Modal, TextField, EmptyState,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
@@ -138,17 +138,14 @@ export default function Orders({ role }: OrdersProps) {
 
                 return (
                   <Card key={order.id}>
-                    <div
-                      style={{ cursor: 'pointer', padding: '4px 0' }}
-                      onClick={() => navigate(`/orders/${order.id}`)}
-                    >
-                      {/* Top row: order number + status */}
+                    <div style={{ padding: '4px 0' }}>
+                      {/* Top: order number + amount */}
                       <InlineStack align="space-between" blockAlign="center" wrap={false}>
                         <InlineStack gap="300" blockAlign="center">
                           <div style={{
                             padding: '6px 10px', borderRadius: '8px',
-                            background: cfg.bg,
-                            fontSize: '12px', fontWeight: 700, color: cfg.color, flexShrink: 0,
+                            background: '#f1f5f9',
+                            fontSize: '12px', fontWeight: 700, color: '#334155', flexShrink: 0,
                             whiteSpace: 'nowrap',
                           }}>
                             #{order.reseller_order_number || order.id.slice(0, 6)}
@@ -165,56 +162,50 @@ export default function Orders({ role }: OrdersProps) {
                             </div>
                           </div>
                         </InlineStack>
+                        <div style={{ textAlign: 'right' }}>
+                          <Text as="span" variant="headingSm" fontWeight="bold">
+                            ${order.total_wholesale_amount.toFixed(2)}
+                          </Text>
+                          <div>
+                            <Text as="span" variant="bodySm" tone="subdued">{order.currency}</Text>
+                          </div>
+                        </div>
+                      </InlineStack>
 
-                        <InlineStack gap="300" blockAlign="center">
+                      {/* Middle: status + items */}
+                      <div style={{ margin: '10px 0' }}>
+                        <InlineStack gap="200" blockAlign="center" wrap>
                           <span style={{
-                            padding: '4px 12px', borderRadius: '20px',
+                            padding: '4px 14px', borderRadius: '20px',
                             fontSize: '12px', fontWeight: 600,
                             color: cfg.color, background: cfg.bg,
                           }}>
                             {cfg.label}
                           </span>
-                          <div style={{ textAlign: 'right' }}>
-                            <Text as="span" variant="headingSm" fontWeight="bold">
-                              ${order.total_wholesale_amount.toFixed(2)}
+                          {itemCount > 0 && (
+                            <Badge tone="info">{`${itemCount} item${itemCount !== 1 ? 's' : ''}`}</Badge>
+                          )}
+                          {itemSummary && (
+                            <Text as="span" variant="bodySm" tone="subdued">
+                              {itemSummary.length > 60 ? itemSummary.slice(0, 60) + '...' : itemSummary}
                             </Text>
-                            <div>
-                              <Text as="span" variant="bodySm" tone="subdued">{order.currency}</Text>
-                            </div>
-                          </div>
+                          )}
                         </InlineStack>
-                      </InlineStack>
-
-                      {/* Items summary */}
-                      {itemCount > 0 && (
-                        <>
-                          <Divider />
-                          <div style={{ marginTop: '10px' }}>
-                            <InlineStack gap="200" blockAlign="center" wrap>
-                              <Badge tone="info">{`${itemCount} item${itemCount !== 1 ? 's' : ''}`}</Badge>
-                              <Text as="span" variant="bodySm" tone="subdued">
-                                {itemSummary.length > 80 ? itemSummary.slice(0, 80) + '...' : itemSummary}
-                              </Text>
-                            </InlineStack>
-                          </div>
-                        </>
-                      )}
-
-                      {/* Details button */}
-                      <div style={{ marginTop: '8px' }}>
-                        <button
-                          onClick={() => navigate(`/orders/${order.id}`)}
-                          style={{
-                            padding: '6px 20px', fontSize: '13px', fontWeight: 600,
-                            background: '#111', color: '#fff', border: 'none', borderRadius: '8px',
-                            cursor: 'pointer', transition: 'background 0.15s',
-                          }}
-                          onMouseOver={(e) => (e.currentTarget.style.background = '#333')}
-                          onMouseOut={(e) => (e.currentTarget.style.background = '#111')}
-                        >
-                          Details
-                        </button>
                       </div>
+
+                      {/* Bottom: Details button */}
+                      <button
+                        onClick={() => navigate(`/orders/${order.id}`)}
+                        style={{
+                          padding: '6px 20px', fontSize: '13px', fontWeight: 600,
+                          background: '#111', color: '#fff', border: 'none', borderRadius: '8px',
+                          cursor: 'pointer', transition: 'background 0.15s',
+                        }}
+                        onMouseOver={(e) => (e.currentTarget.style.background = '#333')}
+                        onMouseOut={(e) => (e.currentTarget.style.background = '#111')}
+                      >
+                        Details
+                      </button>
                     </div>
                   </Card>
                 );
