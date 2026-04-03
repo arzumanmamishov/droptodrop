@@ -48,6 +48,20 @@ export default function Messages() {
     finally { setLoadingMsgs(false); }
   }, []);
 
+  // Auto-create conversation when navigating with ?to=shopId
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const toShopId = params.get('to');
+    if (toShopId && !selectedConv) {
+      api.post<{ id: string }>('/conversations', { other_shop_id: toShopId, subject: '' })
+        .then((conv) => {
+          setSelectedConv(conv.id);
+          refetchConvs();
+        })
+        .catch(() => {});
+    }
+  }, []);
+
   useEffect(() => {
     if (selectedConv) loadMessages(selectedConv);
   }, [selectedConv, loadMessages]);
