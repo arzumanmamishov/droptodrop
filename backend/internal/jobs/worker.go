@@ -488,6 +488,7 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 			w.logger.Warn().Err(err).Msg("failed to get inventory item")
 		} else if invResp.Data.ProductVariant.InventoryItem.ID != "" {
 			inventoryItemID := invResp.Data.ProductVariant.InventoryItem.ID
+			w.logger.Info().Str("inventory_item_id", inventoryItemID).Bool("tracked", invResp.Data.ProductVariant.InventoryItem.Tracked).Msg("got inventory item")
 
 			// Step 1: Enable inventory tracking if not already tracked
 			if !invResp.Data.ProductVariant.InventoryItem.Tracked {
@@ -510,6 +511,7 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 			}
 
 			// Step 2: Get the shop's primary location
+			w.logger.Info().Msg("getting shop locations for inventory")
 			locQuery := `{ locations(first: 10) { edges { node { id name } } } }`
 			var locResp struct {
 				Data struct {
@@ -523,8 +525,11 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 				} `json:"data"`
 			}
 			if err := client.GraphQL(ctx, locQuery, nil, &locResp); err != nil {
-				w.logger.Warn().Err(err).Msg("failed to get location")
-			} else if len(locResp.Data.Locations.Edges) > 0 {
+				w.logger.Error().Err(err).Msg("failed to get location")
+			} else {
+				w.logger.Info().Int("location_count", len(locResp.Data.Locations.Edges)).Msg("got locations")
+			}
+			if len(locResp.Data.Locations.Edges) > 0 {
 				// Activate inventory at ALL locations
 				activateQuery := `mutation activateInventory($inventoryItemId: ID!, $locationId: ID!) {
 					inventoryActivate(inventoryItemId: $inventoryItemId, locationId: $locationId) {
@@ -544,6 +549,7 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 				// Wait for Shopify to process activation
 				time.Sleep(1 * time.Second)
 
+				w.logger.Info().Msg("inventory activated at all locations, setting quantities")
 				// Get supplier's inventory quantity for this variant
 				supplierQty := 100 // default
 				if len(variants) > 0 {
@@ -564,6 +570,7 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 				if availableQty < 1 {
 					availableQty = 1
 				}
+				w.logger.Info().Int("supplier_qty", supplierQty).Int("stock_pct", stockPct).Int("available_qty", availableQty).Msg("calculated inventory quantity")
 
 				setInvQuery := `mutation setInventory($input: InventorySetQuantitiesInput!) {
 					inventorySetQuantities(input: $input) {
@@ -594,8 +601,14 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 				} else {
 					w.logger.Info().Int("quantity", availableQty).Int("stock_pct", stockPct).RawJSON("response", setInvResp).Msg("inventory set for imported product")
 				}
+			} else {
+				w.logger.Warn().Msg("no locations found, skipping inventory set")
 			}
+		} else {
+			w.logger.Warn().Msg("inventory item ID is empty, skipping inventory")
 		}
+	} else {
+		w.logger.Warn().Msg("no variants on product, skipping inventory")
 	}
 
 	// Start a transaction for all DB updates
