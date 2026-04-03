@@ -88,6 +88,8 @@ export interface ResellerImport {
   supplier_images: string | Array<{ url?: string; URL?: string }>;
   supplier_shop_id: string;
   supplier_company_name: string;
+  supplier_stock: number;
+  supplier_price: number;
   created_at: string;
   updated_at: string;
 }

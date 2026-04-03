@@ -161,7 +161,7 @@ export default function Imports() {
                               </button>
                             )}
 
-                            <InlineStack gap="200" blockAlign="center">
+                            <InlineStack gap="200" blockAlign="center" wrap>
                               <span style={{
                                 padding: '2px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600,
                                 color: cfg.color, background: cfg.bg,
@@ -169,8 +169,14 @@ export default function Imports() {
                                 {cfg.label}
                               </span>
                               <Text as="span" variant="bodySm" tone="subdued">
+                                Wholesale: ${imp.supplier_price?.toFixed(2) || '0.00'}
+                              </Text>
+                              <Text as="span" variant="bodySm" tone="subdued">
                                 Markup: {imp.markup_type === 'percentage' ? `${imp.markup_value}%` : `$${imp.markup_value.toFixed(2)}`}
                               </Text>
+                              <Badge tone={imp.supplier_stock > 0 ? 'success' : 'critical'}>
+                                {`${imp.supplier_stock || 0} in stock`}
+                              </Badge>
                             </InlineStack>
 
                             <InlineStack gap="300" blockAlign="center">

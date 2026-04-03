@@ -42,6 +42,8 @@ type Import struct {
 	SupplierImages        json.RawMessage     `json:"supplier_images,omitempty"`
 	SupplierShopID        string              `json:"supplier_shop_id,omitempty"`
 	SupplierCompanyName   string              `json:"supplier_company_name,omitempty"`
+	SupplierStock         int                 `json:"supplier_stock"`
+	SupplierPrice         float64             `json:"supplier_price"`
 	CreatedAt         time.Time       `json:"created_at"`
 	UpdatedAt         time.Time       `json:"updated_at"`
 }
@@ -234,7 +236,9 @@ func (s *Service) List(ctx context.Context, resellerShopID string, limit, offset
 			ri.last_sync_at, ri.last_sync_error, ri.created_at, ri.updated_at,
 			COALESCE(sl.title, '') as supplier_title, COALESCE(sl.images, '[]'::jsonb) as supplier_images,
 			COALESCE(sl.supplier_shop_id::text, '') as supplier_shop_id,
-			COALESCE(sp.company_name, s.name, s.shopify_domain, '') as supplier_company_name
+			COALESCE(sp.company_name, s.name, s.shopify_domain, '') as supplier_company_name,
+			COALESCE((SELECT SUM(slv.inventory_quantity) FROM supplier_listing_variants slv WHERE slv.listing_id = ri.supplier_listing_id), 0) as supplier_stock,
+			COALESCE((SELECT slv.wholesale_price FROM supplier_listing_variants slv WHERE slv.listing_id = ri.supplier_listing_id LIMIT 1), 0) as supplier_price
 		FROM reseller_imports ri
 		LEFT JOIN supplier_listings sl ON sl.id = ri.supplier_listing_id
 		LEFT JOIN shops s ON s.id = sl.supplier_shop_id
@@ -254,7 +258,8 @@ func (s *Service) List(ctx context.Context, resellerShopID string, limit, offset
 		if err := rows.Scan(&imp.ID, &imp.ResellerShopID, &imp.SupplierListingID, &imp.ShopifyProductID,
 			&imp.Status, &imp.MarkupType, &imp.MarkupValue, &imp.SyncImages, &imp.SyncDescription,
 			&imp.SyncTitle, &imp.LastSyncAt, &imp.LastSyncError, &imp.CreatedAt, &imp.UpdatedAt,
-			&imp.SupplierTitle, &imp.SupplierImages, &imp.SupplierShopID, &imp.SupplierCompanyName); err != nil {
+			&imp.SupplierTitle, &imp.SupplierImages, &imp.SupplierShopID, &imp.SupplierCompanyName,
+			&imp.SupplierStock, &imp.SupplierPrice); err != nil {
 			return nil, 0, fmt.Errorf("scan import: %w", err)
 		}
 		imports = append(imports, imp)
