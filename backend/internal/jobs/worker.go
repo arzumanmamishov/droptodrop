@@ -152,6 +152,12 @@ func (w *Worker) getShopifyClient(ctx context.Context, shopID string) (*shopify.
 }
 
 // =============================================================================
+// RunCreateProduct runs the create_product job synchronously. Used by the resync endpoint.
+func (w *Worker) RunCreateProduct(ctx context.Context, importID, resellerShopID string) error {
+	payload, _ := json.Marshal(map[string]string{"import_id": importID, "reseller_shop_id": resellerShopID})
+	return w.handleCreateProduct(ctx, payload)
+}
+
 // handleCreateProduct: Creates a product in the reseller's Shopify store,
 // then updates reseller_imports, reseller_import_variants, and product_links.
 // =============================================================================
