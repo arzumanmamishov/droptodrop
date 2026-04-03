@@ -484,8 +484,7 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 						edges {
 							node {
 								id
-								location { id name }
-								quantities(names: ["available"]) { name quantity }
+								location { id }
 							}
 						}
 					}
@@ -503,8 +502,7 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 								Node struct {
 									ID       string `json:"id"`
 									Location struct {
-										ID   string `json:"id"`
-										Name string `json:"name"`
+										ID string `json:"id"`
 									} `json:"location"`
 								} `json:"node"`
 							} `json:"edges"`

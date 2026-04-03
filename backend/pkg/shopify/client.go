@@ -505,7 +505,6 @@ func (c *Client) GetShopLocations(ctx context.Context) ([]LocationNode, error) {
 			edges {
 				node {
 					id
-					name
 					isActive
 					isPrimary
 				}
