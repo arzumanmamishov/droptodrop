@@ -264,7 +264,7 @@ func (s *Service) DeleteListing(ctx context.Context, shopID, listingID string) e
 	tx.Exec(ctx, `UPDATE reseller_imports SET status = 'removed', last_sync_error = 'Supplier deleted this product' WHERE supplier_listing_id = $1 AND status != 'removed'`, listingID)
 
 	// Delete import variants
-	tx.Exec(ctx, `DELETE FROM import_variants WHERE import_id IN (SELECT id FROM reseller_imports WHERE supplier_listing_id = $1)`, listingID)
+	tx.Exec(ctx, `DELETE FROM reseller_import_variants WHERE import_id IN (SELECT id FROM reseller_imports WHERE supplier_listing_id = $1)`, listingID)
 
 	// Delete reseller imports
 	tx.Exec(ctx, `DELETE FROM reseller_imports WHERE supplier_listing_id = $1`, listingID)
@@ -273,7 +273,7 @@ func (s *Service) DeleteListing(ctx context.Context, shopID, listingID string) e
 	tx.Exec(ctx, `UPDATE product_links SET is_active = FALSE WHERE supplier_product_id IN (SELECT shopify_product_id FROM supplier_listings WHERE id = $1) AND supplier_shop_id = $2`, listingID, shopID)
 
 	// Delete listing variants
-	tx.Exec(ctx, `DELETE FROM listing_variants WHERE listing_id = $1`, listingID)
+	tx.Exec(ctx, `DELETE FROM supplier_listing_variants WHERE listing_id = $1`, listingID)
 
 	// Delete the listing
 	_, err = tx.Exec(ctx, `DELETE FROM supplier_listings WHERE id = $1 AND supplier_shop_id = $2`, listingID, shopID)
