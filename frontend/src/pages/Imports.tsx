@@ -44,6 +44,9 @@ export default function Imports() {
   }, [refetch]);
 
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   const handleDelete = useCallback(async (importId: string) => {
     try {
@@ -51,6 +54,34 @@ export default function Imports() {
       refetch();
     } catch { /* */ }
   }, [refetch]);
+
+  const handleBulkDelete = useCallback(async () => {
+    setBulkDeleting(true);
+    for (const id of selectedIds) {
+      try { await api.delete(`/reseller/imports/${id}`); } catch { /* */ }
+    }
+    setSelectedIds(new Set());
+    setBulkDeleting(false);
+    setConfirmBulkDelete(false);
+    refetch();
+  }, [selectedIds, refetch]);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    const imports = data?.imports || [];
+    if (selectedIds.size === imports.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(imports.map(i => i.id)));
+    }
+  };
 
   const getImportImage = (imp: ResellerImport): string | null => {
     try {
@@ -80,6 +111,7 @@ export default function Imports() {
       title="Imported Products"
       subtitle={`${data?.total || 0} products`}
       primaryAction={{ content: 'Browse Marketplace', onAction: () => navigate('/marketplace') }}
+      secondaryActions={selectedIds.size > 0 ? [{ content: `Delete ${selectedIds.size} selected`, onAction: () => setConfirmBulkDelete(true), destructive: true }] : []}
     >
       <Layout>
         {error && <Layout.Section><Banner tone="critical">{error}</Banner></Layout.Section>}
@@ -125,6 +157,16 @@ export default function Imports() {
         </Layout.Section>
 
         <Layout.Section>
+          {imports.length > 0 && (
+            <InlineStack align="space-between" blockAlign="center">
+              <Button variant="plain" onClick={toggleSelectAll}>
+                {selectedIds.size === imports.length ? 'Deselect all' : 'Select all'}
+              </Button>
+              {selectedIds.size > 0 && (
+                <Text as="span" variant="bodySm" tone="subdued">{selectedIds.size} selected</Text>
+              )}
+            </InlineStack>
+          )}
           {imports.length > 0 ? (
             <BlockStack gap="300">
               {imports.map((imp) => {
@@ -135,8 +177,16 @@ export default function Imports() {
                   <Card key={imp.id}>
                     <div style={{ padding: '2px 0' }}>
                       <InlineStack align="space-between" blockAlign="start" wrap={false}>
-                        {/* Left: image + product info */}
+                        {/* Left: checkbox + image + product info */}
                         <InlineStack gap="400" blockAlign="start" wrap={false}>
+                          <div style={{ flexShrink: 0, paddingTop: '8px' }}>
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(imp.id)}
+                              onChange={() => toggleSelect(imp.id)}
+                              style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: '#1e40af' }}
+                            />
+                          </div>
                           <div style={{ flexShrink: 0 }}>
                             <Thumbnail source={imgUrl || ImageIcon} alt={imp.supplier_title} size="medium" />
                           </div>
@@ -247,6 +297,14 @@ export default function Imports() {
         message="Are you sure you want to delete this imported product? The product will be permanently removed from your Shopify store."
         onConfirm={() => { if (confirmDelete) { handleDelete(confirmDelete); setConfirmDelete(null); } }}
         onCancel={() => setConfirmDelete(null)}
+      />
+      <ConfirmDialog
+        open={confirmBulkDelete}
+        title="Delete Selected Imports"
+        message={`Are you sure you want to delete ${selectedIds.size} imported product(s)? They will be permanently removed from your Shopify store.`}
+        onConfirm={handleBulkDelete}
+        onCancel={() => setConfirmBulkDelete(false)}
+        loading={bulkDeleting}
       />
     </Page>
   );

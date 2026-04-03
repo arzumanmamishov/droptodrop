@@ -170,6 +170,14 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 		return fmt.Errorf("parse payload: %w", err)
 	}
 
+	// Check if product already exists (prevent duplicates)
+	var existingProductID *int64
+	w.db.QueryRow(ctx, `SELECT shopify_product_id FROM reseller_imports WHERE id = $1`, params.ImportID).Scan(&existingProductID)
+	if existingProductID != nil && *existingProductID > 0 {
+		w.logger.Info().Int64("existing_product_id", *existingProductID).Str("import_id", params.ImportID).Msg("product already exists, skipping create")
+		return nil
+	}
+
 	// Load supplier listing data via the import
 	var title, description, supplierShopID, supplierListingID string
 	var syncImages, syncDescription bool
@@ -356,9 +364,6 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 			"id":    defaultVariantGID,
 			"price": fmt.Sprintf("%.2f", resellerPrice),
 		}
-		if variants[0].SKU != "" {
-			variantInput["sku"] = variants[0].SKU
-		}
 		// Set compare_at_price if suggested retail is higher than reseller price
 		if wholesaleForCompare > resellerPrice {
 			variantInput["compareAtPrice"] = fmt.Sprintf("%.2f", wholesaleForCompare)
@@ -462,10 +467,14 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 	}
 
 	// Set inventory for the default variant so the product is available for purchase
+	// Wait for Shopify to fully process the product creation
+	time.Sleep(2 * time.Second)
+
 	if len(product.Variants.Edges) > 0 {
 		variantGID := product.Variants.Edges[0].Node.ID
+		w.logger.Info().Str("variant_gid", variantGID).Msg("starting inventory setup")
 
-		// Get the inventory item ID, tracking status, and location via REST
+		// Get the inventory item ID, tracking status, and location
 		invQuery := `query getInventory($variantId: ID!) {
 			productVariant(id: $variantId) {
 				inventoryItem {
@@ -504,9 +513,14 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 				} `json:"productVariant"`
 			} `json:"data"`
 		}
-		if err := client.GraphQL(ctx, invQuery, map[string]interface{}{"variantId": variantGID}, &invResp); err != nil {
+		var rawInvResp json.RawMessage
+		if err := client.GraphQL(ctx, invQuery, map[string]interface{}{"variantId": variantGID}, &rawInvResp); err != nil {
 			w.logger.Warn().Err(err).Msg("failed to get inventory item")
-		} else if invResp.Data.ProductVariant.InventoryItem.ID != "" {
+		} else {
+			w.logger.Info().RawJSON("inv_response", rawInvResp).Msg("inventory query raw response")
+			json.Unmarshal(rawInvResp, &invResp)
+		}
+		if invResp.Data.ProductVariant.InventoryItem.ID != "" {
 			inventoryItemID := invResp.Data.ProductVariant.InventoryItem.ID
 			w.logger.Info().Str("inventory_item_id", inventoryItemID).Bool("tracked", invResp.Data.ProductVariant.InventoryItem.Tracked).
 				Int("levels_count", len(invResp.Data.ProductVariant.InventoryItem.InventoryLevels.Edges)).Msg("got inventory item")
