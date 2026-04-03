@@ -200,14 +200,21 @@ export default function Orders({ role }: OrdersProps) {
                         </>
                       )}
 
-                      {/* Customer info row */}
-                      {(order.customer_email || order.customer_phone) && (
-                        <div style={{ marginTop: '6px' }}>
-                          <Text as="span" variant="bodySm" tone="subdued">
-                            {[order.customer_email, order.customer_phone].filter(Boolean).join(' \u00b7 ')}
-                          </Text>
-                        </div>
-                      )}
+                      {/* Details button */}
+                      <div style={{ marginTop: '8px' }}>
+                        <button
+                          onClick={() => navigate(`/orders/${order.id}`)}
+                          style={{
+                            padding: '6px 20px', fontSize: '13px', fontWeight: 600,
+                            background: '#111', color: '#fff', border: 'none', borderRadius: '8px',
+                            cursor: 'pointer', transition: 'background 0.15s',
+                          }}
+                          onMouseOver={(e) => (e.currentTarget.style.background = '#333')}
+                          onMouseOut={(e) => (e.currentTarget.style.background = '#111')}
+                        >
+                          Details
+                        </button>
+                      </div>
                     </div>
                   </Card>
                 );
