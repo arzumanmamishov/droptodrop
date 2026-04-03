@@ -465,12 +465,21 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 	if len(product.Variants.Edges) > 0 {
 		variantGID := product.Variants.Edges[0].Node.ID
 
-		// First get the inventory item ID and location
+		// Get the inventory item ID, tracking status, and location via REST
 		invQuery := `query getInventory($variantId: ID!) {
 			productVariant(id: $variantId) {
 				inventoryItem {
 					id
 					tracked
+					inventoryLevels(first: 10) {
+						edges {
+							node {
+								id
+								location { id name }
+								quantities(names: ["available"]) { name quantity }
+							}
+						}
+					}
 				}
 			}
 		}`
@@ -480,6 +489,17 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 					InventoryItem struct {
 						ID      string `json:"id"`
 						Tracked bool   `json:"tracked"`
+						InventoryLevels struct {
+							Edges []struct {
+								Node struct {
+									ID       string `json:"id"`
+									Location struct {
+										ID   string `json:"id"`
+										Name string `json:"name"`
+									} `json:"location"`
+								} `json:"node"`
+							} `json:"edges"`
+						} `json:"inventoryLevels"`
 					} `json:"inventoryItem"`
 				} `json:"productVariant"`
 			} `json:"data"`
@@ -488,7 +508,8 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 			w.logger.Warn().Err(err).Msg("failed to get inventory item")
 		} else if invResp.Data.ProductVariant.InventoryItem.ID != "" {
 			inventoryItemID := invResp.Data.ProductVariant.InventoryItem.ID
-			w.logger.Info().Str("inventory_item_id", inventoryItemID).Bool("tracked", invResp.Data.ProductVariant.InventoryItem.Tracked).Msg("got inventory item")
+			w.logger.Info().Str("inventory_item_id", inventoryItemID).Bool("tracked", invResp.Data.ProductVariant.InventoryItem.Tracked).
+				Int("levels_count", len(invResp.Data.ProductVariant.InventoryItem.InventoryLevels.Edges)).Msg("got inventory item")
 
 			// Step 1: Enable inventory tracking if not already tracked
 			if !invResp.Data.ProductVariant.InventoryItem.Tracked {
@@ -498,60 +519,75 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 						userErrors { field message }
 					}
 				}`
-				trackVars := map[string]interface{}{
-					"id":    inventoryItemID,
-					"input": map[string]interface{}{"tracked": true},
-				}
 				var trackResp json.RawMessage
-				if err := client.GraphQL(ctx, trackQuery, trackVars, &trackResp); err != nil {
+				if err := client.GraphQL(ctx, trackQuery, map[string]interface{}{
+					"id": inventoryItemID, "input": map[string]interface{}{"tracked": true},
+				}, &trackResp); err != nil {
 					w.logger.Warn().Err(err).Msg("failed to enable inventory tracking")
 				} else {
 					w.logger.Info().Msg("inventory tracking enabled")
 				}
+				time.Sleep(1 * time.Second)
 			}
 
-			// Step 2: Get the shop's primary location
-			w.logger.Info().Msg("getting shop locations for inventory")
-			locQuery := `{ locations(first: 10) { edges { node { id name } } } }`
-			var locResp struct {
-				Data struct {
-					Locations struct {
-						Edges []struct {
-							Node struct {
-								ID string `json:"id"`
-							} `json:"node"`
-						} `json:"edges"`
-					} `json:"locations"`
-				} `json:"data"`
+			// Step 2: Get locations from inventoryLevels (no read_locations scope needed)
+			var locationGIDs []string
+			for _, edge := range invResp.Data.ProductVariant.InventoryItem.InventoryLevels.Edges {
+				if edge.Node.Location.ID != "" {
+					locationGIDs = append(locationGIDs, edge.Node.Location.ID)
+				}
 			}
-			if err := client.GraphQL(ctx, locQuery, nil, &locResp); err != nil {
-				w.logger.Error().Err(err).Msg("failed to get location")
-			} else {
-				w.logger.Info().Int("location_count", len(locResp.Data.Locations.Edges)).Msg("got locations")
-			}
-			if len(locResp.Data.Locations.Edges) > 0 {
-				// Activate inventory at ALL locations
-				activateQuery := `mutation activateInventory($inventoryItemId: ID!, $locationId: ID!) {
-					inventoryActivate(inventoryItemId: $inventoryItemId, locationId: $locationId) {
-						inventoryLevel { id }
-						userErrors { field message }
-					}
-				}`
-				for _, locEdge := range locResp.Data.Locations.Edges {
-					var activateResp json.RawMessage
-					if err := client.GraphQL(ctx, activateQuery, map[string]interface{}{
-						"inventoryItemId": inventoryItemID,
-						"locationId":      locEdge.Node.ID,
-					}, &activateResp); err != nil {
-						w.logger.Warn().Err(err).Msg("inventory activate failed")
+
+			// If no inventory levels exist yet, get location via shop query
+			if len(locationGIDs) == 0 {
+				w.logger.Info().Msg("no inventory levels, trying shop primaryDomain for location")
+				shopLocQuery := `{ shop { primaryDomain { host } fulfillmentServices(first:1) { edges { node { location { id } } } } } }`
+				var shopLocResp struct {
+					Data struct {
+						Shop struct {
+							FulfillmentServices struct {
+								Edges []struct {
+									Node struct {
+										Location struct {
+											ID string `json:"id"`
+										} `json:"location"`
+									} `json:"node"`
+								} `json:"edges"`
+							} `json:"fulfillmentServices"`
+						} `json:"shop"`
+					} `json:"data"`
+				}
+				client.GraphQL(ctx, shopLocQuery, nil, &shopLocResp)
+				for _, edge := range shopLocResp.Data.Shop.FulfillmentServices.Edges {
+					if edge.Node.Location.ID != "" {
+						locationGIDs = append(locationGIDs, edge.Node.Location.ID)
 					}
 				}
-				// Wait for Shopify to process activation
-				time.Sleep(1 * time.Second)
+			}
 
-				w.logger.Info().Msg("inventory activated at all locations, setting quantities")
-				// Get supplier's inventory quantity for this variant
-				supplierQty := 100 // default
+			// Last resort: try REST API for locations
+			if len(locationGIDs) == 0 {
+				w.logger.Info().Msg("trying REST API for locations")
+				var restLocations struct {
+					Locations []struct {
+						ID int64 `json:"id"`
+					} `json:"locations"`
+				}
+				if err := client.REST(ctx, "GET", "locations.json", nil, &restLocations); err != nil {
+					w.logger.Error().Err(err).Msg("REST locations failed")
+				} else {
+					for _, loc := range restLocations.Locations {
+						locationGIDs = append(locationGIDs, fmt.Sprintf("gid://shopify/Location/%d", loc.ID))
+					}
+					w.logger.Info().Int("rest_location_count", len(restLocations.Locations)).Msg("got locations via REST")
+				}
+			}
+
+			w.logger.Info().Int("location_count", len(locationGIDs)).Msg("locations resolved")
+
+			if len(locationGIDs) > 0 {
+				// Get supplier's inventory quantity
+				supplierQty := 100
 				if len(variants) > 0 {
 					var q int
 					err := w.db.QueryRow(ctx, `SELECT COALESCE(inventory_quantity, 100) FROM supplier_listing_variants WHERE id = $1`, variants[0].SupplierVariantDBID).Scan(&q)
@@ -559,11 +595,8 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 						supplierQty = q
 					}
 				}
-
-				// Apply marketplace stock percentage
 				var stockPct int
-				err := w.db.QueryRow(ctx, `SELECT COALESCE(marketplace_stock_percent, 100) FROM supplier_listings WHERE id = $1`, supplierListingID).Scan(&stockPct)
-				if err != nil {
+				if err := w.db.QueryRow(ctx, `SELECT COALESCE(marketplace_stock_percent, 100) FROM supplier_listings WHERE id = $1`, supplierListingID).Scan(&stockPct); err != nil {
 					stockPct = 100
 				}
 				availableQty := (supplierQty * stockPct) / 100
@@ -572,21 +605,21 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 				}
 				w.logger.Info().Int("supplier_qty", supplierQty).Int("stock_pct", stockPct).Int("available_qty", availableQty).Msg("calculated inventory quantity")
 
+				// Set quantity at all locations
+				var quantities []map[string]interface{}
+				for _, locGID := range locationGIDs {
+					quantities = append(quantities, map[string]interface{}{
+						"inventoryItemId": inventoryItemID,
+						"locationId":      locGID,
+						"quantity":        availableQty,
+					})
+				}
 				setInvQuery := `mutation setInventory($input: InventorySetQuantitiesInput!) {
 					inventorySetQuantities(input: $input) {
 						inventoryAdjustmentGroup { reason }
 						userErrors { field message }
 					}
 				}`
-				// Build quantities for ALL locations
-				var quantities []map[string]interface{}
-				for _, locEdge := range locResp.Data.Locations.Edges {
-					quantities = append(quantities, map[string]interface{}{
-						"inventoryItemId": inventoryItemID,
-						"locationId":      locEdge.Node.ID,
-						"quantity":        availableQty,
-					})
-				}
 				setInvVars := map[string]interface{}{
 					"input": map[string]interface{}{
 						"name":                  "available",
@@ -597,12 +630,12 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 				}
 				var setInvResp json.RawMessage
 				if err := client.GraphQL(ctx, setInvQuery, setInvVars, &setInvResp); err != nil {
-					w.logger.Warn().Err(err).RawJSON("response", setInvResp).Msg("failed to set inventory")
+					w.logger.Error().Err(err).Msg("failed to set inventory")
 				} else {
-					w.logger.Info().Int("quantity", availableQty).Int("stock_pct", stockPct).RawJSON("response", setInvResp).Msg("inventory set for imported product")
+					w.logger.Info().Int("quantity", availableQty).RawJSON("response", setInvResp).Msg("inventory set for imported product")
 				}
 			} else {
-				w.logger.Warn().Msg("no locations found, skipping inventory set")
+				w.logger.Warn().Msg("no locations found by any method, skipping inventory set")
 			}
 		} else {
 			w.logger.Warn().Msg("inventory item ID is empty, skipping inventory")
