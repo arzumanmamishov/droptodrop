@@ -213,15 +213,42 @@ export default function OrderDetail({ role }: OrderDetailProps) {
       title={`Order ${order.reseller_order_number || order.id.slice(0, 8)}`}
       backAction={{ content: 'Orders', onAction: () => navigate('/orders') }}
       primaryAction={canFulfill ? { content: 'Add Fulfillment', onAction: () => setFulfillModal(true) } : undefined}
-      secondaryActions={canAccept ? [
-        { content: 'Accept', onAction: handleAccept },
-        { content: 'Reject', onAction: handleReject, destructive: true },
-      ] : []}
+      secondaryActions={[]}
     >
       <Layout>
         {actionError && (
           <Layout.Section>
             <Banner tone="critical" onDismiss={() => setActionError(null)}>{actionError}</Banner>
+          </Layout.Section>
+        )}
+        {canAccept && (
+          <Layout.Section>
+            <InlineStack gap="300">
+              <button
+                onClick={handleAccept}
+                style={{
+                  padding: '12px 32px', fontSize: '15px', fontWeight: 600,
+                  background: '#111', color: '#fff', border: 'none', borderRadius: '10px',
+                  cursor: 'pointer', transition: 'background 0.15s',
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.background = '#333')}
+                onMouseOut={(e) => (e.currentTarget.style.background = '#111')}
+              >
+                Accept Order
+              </button>
+              <button
+                onClick={handleReject}
+                style={{
+                  padding: '12px 32px', fontSize: '15px', fontWeight: 600,
+                  background: '#fff', color: '#111', border: '2px solid #111', borderRadius: '10px',
+                  cursor: 'pointer', transition: 'all 0.15s',
+                }}
+                onMouseOver={(e) => { e.currentTarget.style.background = '#111'; e.currentTarget.style.color = '#fff'; }}
+                onMouseOut={(e) => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = '#111'; }}
+              >
+                Reject Order
+              </button>
+            </InlineStack>
           </Layout.Section>
         )}
 
