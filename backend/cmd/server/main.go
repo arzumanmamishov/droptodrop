@@ -959,6 +959,7 @@ func main() {
 				}
 
 				// === SET INVENTORY (for both cases) ===
+				logger.Info().Int("supplier_qty", supplierQty).Str("product_gid", productGID).Msg("starting inventory sync")
 				// Get the variant's inventory item
 				getVarQuery := fmt.Sprintf(`{ product(id: "%s") { variants(first:1) { edges { node { id inventoryItem { id tracked } } } } } }`, productGID)
 				var getVarResult struct {
@@ -997,6 +998,8 @@ func main() {
 							"id": invItemGID, "input": map[string]interface{}{"tracked": true},
 						}, &trackResult)
 						logger.Info().Str("inv_item", invItemGID).Msg("inventory tracking enabled")
+						// Brief pause for Shopify to process tracking change
+						time.Sleep(1 * time.Second)
 					}
 
 					// Get location and set quantity
@@ -1005,21 +1008,29 @@ func main() {
 						locationGID := locations[0].ID
 
 						// Activate at location
-						var actResult interface{}
-						client.GraphQL(ctx, `mutation($inventoryItemId: ID!, $locationId: ID!) { inventoryActivate(inventoryItemId: $inventoryItemId, locationId: $locationId) { inventoryLevel { id } userErrors { field message } } }`, map[string]interface{}{
+						var actResult json.RawMessage
+						actErr := client.GraphQL(ctx, `mutation($inventoryItemId: ID!, $locationId: ID!) { inventoryActivate(inventoryItemId: $inventoryItemId, locationId: $locationId) { inventoryLevel { id } userErrors { field message } } }`, map[string]interface{}{
 							"inventoryItemId": invItemGID, "locationId": locationGID,
 						}, &actResult)
+						if actErr != nil {
+							logger.Error().Err(actErr).Msg("inventory activate failed")
+						} else {
+							logger.Info().RawJSON("activate_result", actResult).Msg("inventory activated")
+						}
 
 						// Set quantity
 						invItemID, _ := shopify.ParseGID(invItemGID)
 						locationID, _ := shopify.ParseGID(locationGID)
+						logger.Info().Int64("inv_item_id", invItemID).Int64("location_id", locationID).Int("qty", supplierQty).Msg("setting inventory quantity")
 						if invItemID > 0 && locationID > 0 {
 							setErr := client.SetInventoryQuantity(ctx, invItemID, locationID, supplierQty)
 							if setErr != nil {
-								logger.Error().Err(setErr).Msg("set inventory failed")
+								logger.Error().Err(setErr).Int("qty", supplierQty).Msg("set inventory failed")
 							} else {
-								logger.Info().Int("quantity", supplierQty).Msg("inventory set")
+								logger.Info().Int("quantity", supplierQty).Msg("inventory set successfully")
 							}
+						} else {
+							logger.Warn().Msg("skipped inventory set: invalid IDs")
 						}
 					}
 				}
