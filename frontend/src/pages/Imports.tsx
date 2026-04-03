@@ -188,8 +188,13 @@ export default function Imports() {
 
                         {/* Right: actions */}
                         <BlockStack gap="200" align="end">
-                          <Button size="slim" loading={syncing === imp.id} onClick={() => handleResync(imp.id)}>
-                            Re-sync
+                          <Button
+                            size="slim"
+                            variant={imp.shopify_product_id ? 'secondary' : 'primary'}
+                            loading={syncing === imp.id}
+                            onClick={() => handleResync(imp.id)}
+                          >
+                            {imp.shopify_product_id ? 'Re-sync' : 'Add to Products'}
                           </Button>
                           <Button size="slim" tone="critical" onClick={() => setConfirmDelete(imp.id)}>
                             Delete

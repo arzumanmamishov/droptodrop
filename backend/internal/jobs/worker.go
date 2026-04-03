@@ -527,17 +527,22 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 			} else if len(locResp.Data.Locations.Edges) > 0 {
 				// Activate inventory at ALL locations
 				activateQuery := `mutation activateInventory($inventoryItemId: ID!, $locationId: ID!) {
-					inventoryActivate(inventoryItemId: $inventoryItemId, available: 0, locationId: $locationId) {
+					inventoryActivate(inventoryItemId: $inventoryItemId, locationId: $locationId) {
 						inventoryLevel { id }
+						userErrors { field message }
 					}
 				}`
 				for _, locEdge := range locResp.Data.Locations.Edges {
 					var activateResp json.RawMessage
-					client.GraphQL(ctx, activateQuery, map[string]interface{}{
+					if err := client.GraphQL(ctx, activateQuery, map[string]interface{}{
 						"inventoryItemId": inventoryItemID,
 						"locationId":      locEdge.Node.ID,
-					}, &activateResp)
+					}, &activateResp); err != nil {
+						w.logger.Warn().Err(err).Msg("inventory activate failed")
+					}
 				}
+				// Wait for Shopify to process activation
+				time.Sleep(1 * time.Second)
 
 				// Get supplier's inventory quantity for this variant
 				supplierQty := 100 // default

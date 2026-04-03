@@ -755,6 +755,17 @@ func main() {
 				if supplierShopID != "" {
 					inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{ShopID: supplierShopID, Title: "Product Imported", Message: "A reseller has imported one of your products.", Type: "info", Link: strPtr("/orders")})
 				}
+
+				// Create product in Shopify immediately (inline, not queued)
+				go func() {
+					bgCtx := context.Background()
+					if err := jobWorker.RunCreateProduct(bgCtx, imp.ID, shopID.(string)); err != nil {
+						logger.Error().Err(err).Str("import_id", imp.ID).Msg("inline create_product failed")
+					} else {
+						logger.Info().Str("import_id", imp.ID).Msg("product created in Shopify via import")
+					}
+				}()
+
 				c.JSON(http.StatusCreated, imp)
 			})
 
