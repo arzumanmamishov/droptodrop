@@ -794,23 +794,19 @@ func main() {
 				importID := c.Param("id")
 				ctx := c.Request.Context()
 
-				// Check if the import exists
+				// Get import data
 				var importStatus string
-				var shopifyProductID *int64
+				var existingProductID *int64
 				var supplierListingID string
-				err := db.QueryRow(ctx, `SELECT status, shopify_product_id, supplier_listing_id FROM reseller_imports WHERE id = $1 AND reseller_shop_id = $2`, importID, sid).Scan(&importStatus, &shopifyProductID, &supplierListingID)
+				err := db.QueryRow(ctx, `SELECT status, shopify_product_id, supplier_listing_id FROM reseller_imports WHERE id = $1 AND reseller_shop_id = $2`, importID, sid).Scan(&importStatus, &existingProductID, &supplierListingID)
 				if err != nil {
 					c.JSON(http.StatusNotFound, gin.H{"error": "import not found"})
 					return
 				}
 
-				// Get reseller's Shopify client
+				// Get Shopify client
 				var shopDomain, encToken string
-				err = db.QueryRow(ctx, `
-					SELECT s.shopify_domain, ai.access_token FROM shops s
-					JOIN app_installations ai ON ai.shop_id = s.id AND ai.is_active = TRUE
-					WHERE s.id = $1
-				`, sid).Scan(&shopDomain, &encToken)
+				err = db.QueryRow(ctx, `SELECT s.shopify_domain, ai.access_token FROM shops s JOIN app_installations ai ON ai.shop_id = s.id AND ai.is_active = TRUE WHERE s.id = $1`, sid).Scan(&shopDomain, &encToken)
 				if err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": "shop credentials not found"})
 					return
@@ -826,218 +822,209 @@ func main() {
 				var title, description string
 				var images json.RawMessage
 				var supplierProductID int64
-				err = db.QueryRow(ctx, `
-					SELECT sl.title, COALESCE(sl.description,''), sl.images, sl.shopify_product_id
-					FROM supplier_listings sl WHERE sl.id = $1
-				`, supplierListingID).Scan(&title, &description, &images, &supplierProductID)
+				err = db.QueryRow(ctx, `SELECT sl.title, COALESCE(sl.description,''), sl.images, sl.shopify_product_id FROM supplier_listings sl WHERE sl.id = $1`, supplierListingID).Scan(&title, &description, &images, &supplierProductID)
 				if err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": "supplier listing not found"})
 					return
 				}
 
-				// Create product in reseller's Shopify store
-				productInput := map[string]interface{}{
-					"title":           title,
-					"descriptionHtml": description,
-				}
-				resp, err := client.CreateProduct(ctx, productInput)
-				if err != nil {
-					db.Exec(ctx, `UPDATE reseller_imports SET status = 'failed', last_sync_error = $2 WHERE id = $1`, importID, err.Error())
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create product in Shopify: " + err.Error()})
-					return
-				}
+				// Get reseller price
+				var resellerPrice float64
+				db.QueryRow(ctx, `SELECT COALESCE(riv.reseller_price, 0) FROM reseller_import_variants riv WHERE riv.import_id = $1 LIMIT 1`, importID).Scan(&resellerPrice)
 
-				product := resp.Data.ProductCreate.Product
-				resellerProductID, _ := shopify.ParseGID(product.ID)
+				// Get supplier inventory
+				var supplierQty int
+				db.QueryRow(ctx, `SELECT COALESCE(slv.inventory_quantity, 0) FROM supplier_listing_variants slv JOIN reseller_import_variants riv ON riv.supplier_variant_id = slv.id WHERE riv.import_id = $1 LIMIT 1`, importID).Scan(&supplierQty)
 
-				// Update the import record
-				db.Exec(ctx, `UPDATE reseller_imports SET shopify_product_id = $2, status = 'active', last_sync_at = NOW(), last_sync_error = NULL WHERE id = $1`, importID, resellerProductID)
-
-				// Update variant prices using productVariantsBulkUpdate
-				type variantInfo struct {
-					ImportVariantID string
-					ResellerPrice   float64
-					ShopifyVarID    int64
-				}
-				vRows, _ := db.Query(ctx, `
-					SELECT riv.id, riv.reseller_price, slv.shopify_variant_id
-					FROM reseller_import_variants riv
-					JOIN supplier_listing_variants slv ON slv.id = riv.supplier_variant_id
-					WHERE riv.import_id = $1
-				`, importID)
-				var variantInfos []variantInfo
-				if vRows != nil {
-					for vRows.Next() {
-						var vi variantInfo
-						vRows.Scan(&vi.ImportVariantID, &vi.ResellerPrice, &vi.ShopifyVarID)
-						variantInfos = append(variantInfos, vi)
+				// Check if product still exists in Shopify
+				productExists := false
+				var productGID string
+				var variantGID string
+				if existingProductID != nil && *existingProductID > 0 {
+					checkQuery := `{ product(id: "gid://shopify/Product/%d") { id variants(first:1) { edges { node { id inventoryItem { id tracked } } } } } }`
+					var checkResult struct {
+						Data struct {
+							Product *struct {
+								ID       string `json:"id"`
+								Variants struct {
+									Edges []struct {
+										Node struct {
+											ID            string `json:"id"`
+											InventoryItem struct {
+												ID      string `json:"id"`
+												Tracked bool   `json:"tracked"`
+											} `json:"inventoryItem"`
+										} `json:"node"`
+									} `json:"edges"`
+								} `json:"variants"`
+							} `json:"product"`
+						} `json:"data"`
 					}
-					vRows.Close()
+					qErr := client.GraphQL(ctx, fmt.Sprintf(checkQuery, *existingProductID), nil, &checkResult)
+					if qErr == nil && checkResult.Data.Product != nil {
+						productExists = true
+						productGID = checkResult.Data.Product.ID
+						if len(checkResult.Data.Product.Variants.Edges) > 0 {
+							variantGID = checkResult.Data.Product.Variants.Edges[0].Node.ID
+						}
+					}
 				}
 
-				// Update variant price
-				if len(product.Variants.Edges) > 0 && len(variantInfos) > 0 {
-					variantGID := product.Variants.Edges[0].Node.ID
-					variantUpdates := []map[string]interface{}{
-						{"id": variantGID, "price": fmt.Sprintf("%.2f", variantInfos[0].ResellerPrice)},
-					}
-					varUpdateQuery := `mutation($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-						productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-							productVariants { id inventoryItem { id } }
+				if productExists {
+					// === PRODUCT EXISTS: update title, description, price ===
+					updateQuery := `mutation($input: ProductInput!) {
+						productUpdate(input: $input) {
+							product { id }
 							userErrors { field message }
 						}
 					}`
-					var varResult struct {
-						Data struct {
-							ProductVariantsBulkUpdate struct {
-								ProductVariants []struct {
-									ID            string `json:"id"`
-									InventoryItem struct {
-										ID string `json:"id"`
-									} `json:"inventoryItem"`
-								} `json:"productVariants"`
-								UserErrors []struct {
-									Field   []string `json:"field"`
-									Message string   `json:"message"`
-								} `json:"userErrors"`
-							} `json:"productVariantsBulkUpdate"`
-						} `json:"data"`
-					}
-					varErr := client.GraphQL(ctx, varUpdateQuery, map[string]interface{}{
-						"productId": product.ID,
-						"variants":  variantUpdates,
-					}, &varResult)
-					if varErr != nil {
-						logger.Error().Err(varErr).Msg("variant update failed")
-					} else {
-						logger.Info().Str("import_id", importID).Float64("price", variantInfos[0].ResellerPrice).Msg("variant price updated")
-						for _, ue := range varResult.Data.ProductVariantsBulkUpdate.UserErrors {
-							logger.Error().Str("field", fmt.Sprintf("%v", ue.Field)).Str("message", ue.Message).Msg("variant update user error")
-						}
+					var updateResult interface{}
+					client.GraphQL(ctx, updateQuery, map[string]interface{}{
+						"input": map[string]interface{}{"id": productGID, "title": title, "descriptionHtml": description},
+					}, &updateResult)
+
+					// Update variant price
+					if variantGID != "" && resellerPrice > 0 {
+						varUpdateQuery := `mutation($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+							productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+								productVariants { id inventoryItem { id } }
+								userErrors { field message }
+							}
+						}`
+						var varResult interface{}
+						client.GraphQL(ctx, varUpdateQuery, map[string]interface{}{
+							"productId": productGID,
+							"variants":  []map[string]interface{}{{"id": variantGID, "price": fmt.Sprintf("%.2f", resellerPrice)}},
+						}, &varResult)
 					}
 
-					// Set inventory quantity
-					pvs := varResult.Data.ProductVariantsBulkUpdate.ProductVariants
-					logger.Info().Int("product_variants_count", len(pvs)).Msg("variant update response")
+					db.Exec(ctx, `UPDATE reseller_imports SET status = 'active', last_sync_at = NOW(), last_sync_error = NULL WHERE id = $1`, importID)
+					logger.Info().Str("import_id", importID).Msg("existing product updated")
+				} else {
+					// === PRODUCT DELETED: create new one ===
+					resp, createErr := client.CreateProduct(ctx, map[string]interface{}{"title": title, "descriptionHtml": description})
+					if createErr != nil {
+						db.Exec(ctx, `UPDATE reseller_imports SET status = 'failed', last_sync_error = $2 WHERE id = $1`, importID, createErr.Error())
+						c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create product: " + createErr.Error()})
+						return
+					}
 
-					if len(pvs) > 0 {
-						invItemGID := pvs[0].InventoryItem.ID
-						logger.Info().Str("inventory_item_gid", invItemGID).Msg("got inventory item")
+					product := resp.Data.ProductCreate.Product
+					resellerProductID, _ := shopify.ParseGID(product.ID)
+					productGID = product.ID
+					if len(product.Variants.Edges) > 0 {
+						variantGID = product.Variants.Edges[0].Node.ID
+					}
 
-						if invItemGID != "" {
-							// Get location
-							locations, locErr := client.GetShopLocations(ctx)
-							if locErr != nil {
-								logger.Error().Err(locErr).Msg("failed to get locations")
-							} else if len(locations) > 0 {
-								locationGID := locations[0].ID
-								logger.Info().Str("location_gid", locationGID).Msg("got shop location")
+					db.Exec(ctx, `UPDATE reseller_imports SET shopify_product_id = $2, status = 'active', last_sync_at = NOW(), last_sync_error = NULL WHERE id = $1`, importID, resellerProductID)
 
-								// Get supplier inventory quantity
-								var supplierQty int
-								db.QueryRow(ctx, `
-									SELECT COALESCE(slv.inventory_quantity, 0)
-									FROM supplier_listing_variants slv
-									JOIN reseller_import_variants riv ON riv.supplier_variant_id = slv.id
-									WHERE riv.import_id = $1
-									LIMIT 1
-								`, importID).Scan(&supplierQty)
-								logger.Info().Int("supplier_qty", supplierQty).Msg("supplier inventory")
+					// Update variant price
+					if variantGID != "" && resellerPrice > 0 {
+						varUpdateQuery := `mutation($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+							productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+								productVariants { id inventoryItem { id } }
+								userErrors { field message }
+							}
+						}`
+						var varResult interface{}
+						client.GraphQL(ctx, varUpdateQuery, map[string]interface{}{
+							"productId": productGID,
+							"variants":  []map[string]interface{}{{"id": variantGID, "price": fmt.Sprintf("%.2f", resellerPrice)}},
+						}, &varResult)
+					}
 
-								// Activate inventory at location
-								activateQuery := `mutation($inventoryItemId: ID!, $locationId: ID!) {
-									inventoryActivate(inventoryItemId: $inventoryItemId, locationId: $locationId) {
-										inventoryLevel { id quantities(names: ["available"]) { name quantity } }
-										userErrors { field message }
-									}
-								}`
-								var activateResult json.RawMessage
-								actErr := client.GraphQL(ctx, activateQuery, map[string]interface{}{
-									"inventoryItemId": invItemGID,
-									"locationId":      locationGID,
-								}, &activateResult)
-								if actErr != nil {
-									logger.Error().Err(actErr).Msg("inventory activate failed")
-								} else {
-									logger.Info().RawJSON("activate_result", activateResult).Msg("inventory activated")
-								}
+					// Upload images
+					var imgURLs []string
+					var innerStr string
+					if json.Unmarshal(images, &innerStr) == nil && len(innerStr) > 0 && innerStr[0] == '[' {
+						var imgObjs []struct{ URL string `json:"url"` }
+						json.Unmarshal([]byte(innerStr), &imgObjs)
+						for _, img := range imgObjs { if img.URL != "" { imgURLs = append(imgURLs, img.URL) } }
+					}
+					if len(imgURLs) == 0 {
+						var imgObjs []struct{ URL string `json:"url"` }
+						json.Unmarshal(images, &imgObjs)
+						for _, img := range imgObjs { if img.URL != "" { imgURLs = append(imgURLs, img.URL) } }
+					}
+					for _, imgURL := range imgURLs {
+						var imgResult interface{}
+						client.GraphQL(ctx, `mutation($productId: ID!, $media: [CreateMediaInput!]!) { productCreateMedia(productId: $productId, media: $media) { media { id } mediaUserErrors { field message } } }`, map[string]interface{}{
+							"productId": productGID, "media": []map[string]interface{}{{"originalSource": imgURL, "mediaContentType": "IMAGE"}},
+						}, &imgResult)
+					}
 
-								// Set quantity using inventorySetQuantities
-								invItemID, _ := shopify.ParseGID(invItemGID)
-								locationID, _ := shopify.ParseGID(locationGID)
-								if invItemID > 0 && locationID > 0 && supplierQty > 0 {
-									setErr := client.SetInventoryQuantity(ctx, invItemID, locationID, supplierQty)
-									if setErr != nil {
-										logger.Error().Err(setErr).Msg("set inventory quantity failed")
-									} else {
-										logger.Info().Int("quantity", supplierQty).Msg("inventory set successfully")
-									}
-								}
+					// Create product link
+					db.Exec(ctx, `INSERT INTO product_links (supplier_shop_id, reseller_shop_id, supplier_product_id, reseller_product_id, supplier_listing_id, is_active) VALUES ((SELECT supplier_shop_id FROM supplier_listings WHERE id = $1), $2, $3, $4, $1, TRUE) ON CONFLICT DO NOTHING`, supplierListingID, sid, supplierProductID, resellerProductID)
+					logger.Info().Str("import_id", importID).Int64("shopify_product_id", resellerProductID).Msg("new product created")
+				}
+
+				// === SET INVENTORY (for both cases) ===
+				// Get the variant's inventory item
+				getVarQuery := fmt.Sprintf(`{ product(id: "%s") { variants(first:1) { edges { node { id inventoryItem { id tracked } } } } } }`, productGID)
+				var getVarResult struct {
+					Data struct {
+						Product struct {
+							Variants struct {
+								Edges []struct {
+									Node struct {
+										ID            string `json:"id"`
+										InventoryItem struct {
+											ID      string `json:"id"`
+											Tracked bool   `json:"tracked"`
+										} `json:"inventoryItem"`
+									} `json:"node"`
+								} `json:"edges"`
+							} `json:"variants"`
+						} `json:"product"`
+					} `json:"data"`
+				}
+				client.GraphQL(ctx, getVarQuery, nil, &getVarResult)
+
+				if len(getVarResult.Data.Product.Variants.Edges) > 0 {
+					invNode := getVarResult.Data.Product.Variants.Edges[0].Node.InventoryItem
+					invItemGID := invNode.ID
+
+					// Enable tracking if not tracked
+					if !invNode.Tracked {
+						trackQuery := `mutation($id: ID!, $input: InventoryItemInput!) {
+							inventoryItemUpdate(id: $id, input: $input) {
+								inventoryItem { id tracked }
+								userErrors { field message }
+							}
+						}`
+						var trackResult interface{}
+						client.GraphQL(ctx, trackQuery, map[string]interface{}{
+							"id": invItemGID, "input": map[string]interface{}{"tracked": true},
+						}, &trackResult)
+						logger.Info().Str("inv_item", invItemGID).Msg("inventory tracking enabled")
+					}
+
+					// Get location and set quantity
+					locations, locErr := client.GetShopLocations(ctx)
+					if locErr == nil && len(locations) > 0 {
+						locationGID := locations[0].ID
+
+						// Activate at location
+						var actResult interface{}
+						client.GraphQL(ctx, `mutation($inventoryItemId: ID!, $locationId: ID!) { inventoryActivate(inventoryItemId: $inventoryItemId, locationId: $locationId) { inventoryLevel { id } userErrors { field message } } }`, map[string]interface{}{
+							"inventoryItemId": invItemGID, "locationId": locationGID,
+						}, &actResult)
+
+						// Set quantity
+						invItemID, _ := shopify.ParseGID(invItemGID)
+						locationID, _ := shopify.ParseGID(locationGID)
+						if invItemID > 0 && locationID > 0 {
+							setErr := client.SetInventoryQuantity(ctx, invItemID, locationID, supplierQty)
+							if setErr != nil {
+								logger.Error().Err(setErr).Msg("set inventory failed")
+							} else {
+								logger.Info().Int("quantity", supplierQty).Msg("inventory set")
 							}
 						}
 					}
 				}
 
-				// Set images — handle double-encoded JSON
-				var imgURLs []string
-				// Try as array of strings first
-				json.Unmarshal(images, &imgURLs)
-				// If that gave us one string that looks like JSON, it's double-encoded
-				if len(imgURLs) == 1 && (imgURLs[0] == "" || imgURLs[0][0] == '[') {
-					imgURLs = nil
-				}
-				if len(imgURLs) == 0 {
-					// Try as string containing JSON array
-					var innerStr string
-					if json.Unmarshal(images, &innerStr) == nil {
-						var imgObjs []struct {
-							URL     string `json:"url"`
-							AltText string `json:"altText"`
-						}
-						json.Unmarshal([]byte(innerStr), &imgObjs)
-						for _, img := range imgObjs {
-							if img.URL != "" { imgURLs = append(imgURLs, img.URL) }
-						}
-					}
-				}
-				if len(imgURLs) == 0 {
-					// Try as array of objects directly
-					var imgObjs []struct {
-						URL     string `json:"url"`
-						AltText string `json:"altText"`
-					}
-					json.Unmarshal(images, &imgObjs)
-					for _, img := range imgObjs {
-						if img.URL != "" { imgURLs = append(imgURLs, img.URL) }
-					}
-				}
-
-				for _, imgURL := range imgURLs {
-					imgQuery := `mutation($productId: ID!, $media: [CreateMediaInput!]!) {
-						productCreateMedia(productId: $productId, media: $media) {
-							media { id }
-							mediaUserErrors { field message }
-						}
-					}`
-					var imgResult interface{}
-					client.GraphQL(ctx, imgQuery, map[string]interface{}{
-						"productId": product.ID,
-						"media": []map[string]interface{}{
-							{"originalSource": imgURL, "mediaContentType": "IMAGE"},
-						},
-					}, &imgResult)
-				}
-				logger.Info().Int("image_count", len(imgURLs)).Msg("images uploaded")
-
-				// Create product link
-				db.Exec(ctx, `
-					INSERT INTO product_links (supplier_shop_id, reseller_shop_id, supplier_product_id, reseller_product_id, supplier_listing_id, is_active)
-					VALUES ((SELECT supplier_shop_id FROM supplier_listings WHERE id = $1), $2, $3, $4, $1, TRUE)
-					ON CONFLICT DO NOTHING
-				`, supplierListingID, sid, supplierProductID, resellerProductID)
-
-				logger.Info().Str("import_id", importID).Int64("shopify_product_id", resellerProductID).Msg("product re-synced to Shopify")
-				c.JSON(http.StatusOK, gin.H{"status": "ok", "shopify_product_id": resellerProductID})
+				c.JSON(http.StatusOK, gin.H{"status": "ok"})
 			})
 
 			reseller.DELETE("/imports/:id", func(c *gin.Context) {

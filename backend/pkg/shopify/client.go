@@ -465,8 +465,9 @@ func (c *Client) SetInventoryQuantity(ctx context.Context, inventoryItemID int64
 
 	variables := map[string]interface{}{
 		"input": map[string]interface{}{
-			"name":   "available",
-			"reason": "correction",
+			"name":                  "available",
+			"reason":                "correction",
+			"ignoreCompareQuantity": true,
 			"quantities": []map[string]interface{}{
 				{
 					"inventoryItemId": itemGID,
