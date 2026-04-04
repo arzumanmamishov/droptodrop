@@ -1,25 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
-  Page,
-  Layout,
-  Card,
-  DataTable,
-  Badge,
-  Button,
-  Spinner,
-  Banner,
-  BlockStack,
-  Text,
-  TextField,
-  FormLayout,
-  Modal,
-  InlineStack,
-  Icon,
-  Divider,
-  Box,
+  Page, Layout, Card, DataTable, Badge, Button, Spinner,
+  Banner, BlockStack, Text, TextField, FormLayout, Modal,
+  InlineStack, Divider,
 } from '@shopify/polaris';
-import { CheckIcon, XIcon, PackageIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
 import { api } from '../utils/api';
 import { RoutedOrder, FulfillmentEvent } from '../types';
@@ -33,56 +18,17 @@ interface OrderDetailProps {
   role: string;
 }
 
-const ORDER_STEPS = ['pending', 'accepted', 'processing', 'fulfilled'];
+const statusConfig: Record<string, { color: string; bg: string; label: string }> = {
+  pending:    { color: '#92400e', bg: '#fef3c7', label: 'Pending' },
+  accepted:   { color: '#1e40af', bg: '#dbeafe', label: 'Accepted' },
+  processing: { color: '#6d28d9', bg: '#ede9fe', label: 'Processing' },
+  fulfilled:  { color: '#166534', bg: '#dcfce7', label: 'Fulfilled' },
+  rejected:   { color: '#991b1b', bg: '#fee2e2', label: 'Rejected' },
+  cancelled:  { color: '#991b1b', bg: '#fee2e2', label: 'Cancelled' },
+  unfulfilled:{ color: '#92400e', bg: '#fef3c7', label: 'Unfulfilled' },
+};
 
-function StatusTimeline({ currentStatus }: { currentStatus: string }) {
-  const currentIndex = ORDER_STEPS.indexOf(currentStatus);
-  const isRejected = currentStatus === 'rejected' || currentStatus === 'cancelled';
-
-  return (
-    <InlineStack gap="100" align="center" blockAlign="center">
-      {ORDER_STEPS.map((step, i) => {
-        const isCompleted = !isRejected && i <= currentIndex;
-        const isCurrent = !isRejected && i === currentIndex;
-        return (
-          <InlineStack key={step} gap="100" blockAlign="center">
-            <div style={{
-              width: '32px', height: '32px', borderRadius: '50%',
-              background: isCompleted ? '#e3f1df' : (isRejected && i === 0 ? '#fde8e8' : '#f6f6f7'),
-              border: isCurrent ? '2px solid #008060' : '2px solid transparent',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}>
-              {isRejected && i === 0 ? (
-                <Icon source={XIcon} tone="critical" />
-              ) : isCompleted ? (
-                <Icon source={CheckIcon} tone="success" />
-              ) : (
-                <Text as="span" variant="bodySm" tone="subdued">{i + 1}</Text>
-              )}
-            </div>
-            <Text as="span" variant="bodySm" tone={isCompleted ? undefined : 'subdued'} fontWeight={isCurrent ? 'semibold' : undefined}>
-              {step.charAt(0).toUpperCase() + step.slice(1)}
-            </Text>
-            {i < ORDER_STEPS.length - 1 && (
-              <div style={{ width: '40px', height: '2px', background: isCompleted && i < currentIndex ? '#008060' : '#e1e1e1' }} />
-            )}
-          </InlineStack>
-        );
-      })}
-      {isRejected && (
-        <InlineStack gap="100" blockAlign="center">
-          <div style={{
-            width: '32px', height: '32px', borderRadius: '50%', background: '#fde8e8',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <Icon source={XIcon} tone="critical" />
-          </div>
-          <Text as="span" variant="bodySm" tone="critical" fontWeight="semibold">{currentStatus}</Text>
-        </InlineStack>
-      )}
-    </InlineStack>
-  );
-}
+const STEPS = ['pending', 'accepted', 'processing', 'fulfilled'];
 
 function OrderCommentsSection({ orderId }: { orderId: string }) {
   const [comments, setComments] = useState<Array<{ id: string; shop_role: string; content: string; created_at: string }>>([]);
@@ -109,21 +55,34 @@ function OrderCommentsSection({ orderId }: { orderId: string }) {
 
   return (
     <BlockStack gap="300">
-      {comments.map(c => (
-        <BlockStack key={c.id} gap="050">
-          <InlineStack gap="200" blockAlign="center">
-            <Badge tone={c.shop_role === 'supplier' ? 'success' : 'info'}>{c.shop_role}</Badge>
-            <Text as="span" variant="bodySm" tone="subdued">{new Date(c.created_at).toLocaleString()}</Text>
-          </InlineStack>
-          <Text as="p" variant="bodyMd">{c.content}</Text>
-        </BlockStack>
-      ))}
-      <InlineStack gap="200" blockAlign="end">
+      {comments.length > 0 ? comments.map(c => (
+        <div key={c.id} style={{
+          padding: '10px 14px', borderRadius: '10px',
+          background: c.shop_role === 'supplier' ? '#f0f9ff' : '#f8fafc',
+          border: '1px solid #e2e8f0',
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+            <span style={{
+              fontSize: '11px', fontWeight: 600, textTransform: 'uppercase',
+              color: c.shop_role === 'supplier' ? '#1e40af' : '#059669',
+            }}>
+              {c.shop_role}
+            </span>
+            <span style={{ fontSize: '11px', color: '#94a3b8' }}>
+              {new Date(c.created_at).toLocaleString()}
+            </span>
+          </div>
+          <p style={{ margin: 0, fontSize: '14px', color: '#1e293b' }}>{c.content}</p>
+        </div>
+      )) : (
+        <Text as="p" variant="bodySm" tone="subdued">No comments yet</Text>
+      )}
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end' }}>
         <div style={{ flex: 1 }}>
-          <TextField label="" labelHidden value={newComment} onChange={setNewComment} placeholder="Add a comment..." autoComplete="off" />
+          <TextField label="" labelHidden value={newComment} onChange={setNewComment} placeholder="Write a comment..." autoComplete="off" />
         </div>
         <Button onClick={handleSend} loading={sending} disabled={!newComment.trim()}>Send</Button>
-      </InlineStack>
+      </div>
     </BlockStack>
   );
 }
@@ -141,165 +100,154 @@ export default function OrderDetail({ role }: OrderDetailProps) {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const handleAccept = useCallback(async () => {
-    try {
-      await api.post(`/supplier/orders/${id}/accept`);
-      refetch();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed');
-    }
+    try { await api.post(`/supplier/orders/${id}/accept`); refetch(); }
+    catch (err) { setActionError(err instanceof Error ? err.message : 'Failed'); }
   }, [id, refetch]);
 
   const handleReject = useCallback(async () => {
-    try {
-      await api.post(`/supplier/orders/${id}/reject`, { reason: 'Rejected by supplier' });
-      refetch();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Failed');
-    }
+    try { await api.post(`/supplier/orders/${id}/reject`, { reason: 'Rejected by supplier' }); refetch(); }
+    catch (err) { setActionError(err instanceof Error ? err.message : 'Failed'); }
   }, [id, refetch]);
 
   const handleFulfill = useCallback(async () => {
-    setFulfilling(true);
-    setActionError(null);
+    setFulfilling(true); setActionError(null);
     try {
-      await api.post(`/supplier/orders/${id}/fulfill`, {
-        routed_order_id: id,
-        tracking_number: trackingNumber,
-        tracking_url: trackingUrl,
-        tracking_company: trackingCompany,
-      });
-      setFulfillModal(false);
-      refetch();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : 'Fulfillment failed');
-    } finally {
-      setFulfilling(false);
-    }
+      await api.post(`/supplier/orders/${id}/fulfill`, { routed_order_id: id, tracking_number: trackingNumber, tracking_url: trackingUrl, tracking_company: trackingCompany });
+      setFulfillModal(false); refetch();
+    } catch (err) { setActionError(err instanceof Error ? err.message : 'Fulfillment failed'); }
+    finally { setFulfilling(false); }
   }, [id, trackingNumber, trackingUrl, trackingCompany, refetch]);
 
-  if (loading) {
-    return (
-      <Page title="Order Detail">
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}>
-          <Spinner size="large" />
-        </div>
-      </Page>
-    );
-  }
-
-  if (error || !data) {
-    return (
-      <Page title="Order Detail">
-        <Banner tone="critical">{error || 'Order not found'}</Banner>
-      </Page>
-    );
-  }
+  if (loading) return <Page title="Order Detail"><div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><Spinner size="large" /></div></Page>;
+  if (error || !data) return <Page title="Order Detail"><Banner tone="critical">{error || 'Order not found'}</Banner></Page>;
 
   const { order, fulfillments } = data;
   const isSupplier = role === 'supplier';
   const canAccept = isSupplier && order.status === 'pending';
   const canFulfill = isSupplier && (order.status === 'accepted' || order.status === 'processing');
-
-  const statusBadge = (status: string) => {
-    const toneMap: Record<string, 'success' | 'attention' | 'critical' | 'info'> = {
-      pending: 'attention', accepted: 'info', fulfilled: 'success',
-      rejected: 'critical', unfulfilled: 'attention',
-    };
-    return <Badge tone={toneMap[status]}>{status}</Badge>;
-  };
+  const cfg = statusConfig[order.status] || statusConfig['pending'];
+  const currentStep = STEPS.indexOf(order.status);
+  const isRejected = order.status === 'rejected' || order.status === 'cancelled';
 
   return (
     <Page
       title={`Order ${order.reseller_order_number || order.id.slice(0, 8)}`}
       backAction={{ content: 'Orders', onAction: () => navigate('/orders') }}
       primaryAction={canFulfill ? { content: 'Add Fulfillment', onAction: () => setFulfillModal(true) } : undefined}
-      secondaryActions={[]}
     >
       <Layout>
-        {actionError && (
-          <Layout.Section>
-            <Banner tone="critical" onDismiss={() => setActionError(null)}>{actionError}</Banner>
-          </Layout.Section>
-        )}
+        {actionError && <Layout.Section><Banner tone="critical" onDismiss={() => setActionError(null)}>{actionError}</Banner></Layout.Section>}
+
+        {/* Hero card: status + key info */}
+        <Layout.Section>
+          <div style={{
+            background: 'linear-gradient(135deg, #0f172a 0%, #1e3a8a 100%)',
+            borderRadius: '14px', padding: '28px 32px', color: '#fff',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '20px' }}>
+              {/* Left: order info */}
+              <div>
+                <div style={{ fontSize: '12px', color: 'rgba(255,255,255,0.5)', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>
+                  Order
+                </div>
+                <div style={{ fontSize: '28px', fontWeight: 700, marginBottom: '8px' }}>
+                  #{order.reseller_order_number || order.id.slice(0, 8)}
+                </div>
+                <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>Amount</div>
+                    <div style={{ fontSize: '20px', fontWeight: 600 }}>${order.total_wholesale_amount.toFixed(2)} <span style={{ fontSize: '13px', opacity: 0.6 }}>{order.currency}</span></div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>Date</div>
+                    <div style={{ fontSize: '14px' }}>{new Date(order.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>Items</div>
+                    <div style={{ fontSize: '14px' }}>{order.items?.length || 0} product{(order.items?.length || 0) !== 1 ? 's' : ''}</div>
+                  </div>
+                </div>
+              </div>
+              {/* Right: status */}
+              <div style={{ textAlign: 'right' }}>
+                <span style={{
+                  padding: '6px 18px', borderRadius: '24px', fontSize: '13px', fontWeight: 700,
+                  color: cfg.color, background: cfg.bg,
+                }}>
+                  {cfg.label}
+                </span>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            {!isRejected && (
+              <div style={{ marginTop: '24px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                  {STEPS.map((step, i) => (
+                    <div key={step} style={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+                      <div style={{
+                        width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
+                        background: i <= currentStep ? '#3b82f6' : 'rgba(255,255,255,0.15)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '12px', fontWeight: 700, color: i <= currentStep ? '#fff' : 'rgba(255,255,255,0.4)',
+                        border: i === currentStep ? '2px solid #93c5fd' : 'none',
+                      }}>
+                        {i <= currentStep ? '✓' : i + 1}
+                      </div>
+                      {i < STEPS.length - 1 && (
+                        <div style={{
+                          flex: 1, height: '3px', margin: '0 4px',
+                          background: i < currentStep ? '#3b82f6' : 'rgba(255,255,255,0.15)',
+                          borderRadius: '2px',
+                        }} />
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
+                  {STEPS.map((step, i) => (
+                    <span key={step} style={{
+                      fontSize: '11px', textAlign: 'center', flex: 1,
+                      color: i <= currentStep ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.35)',
+                      fontWeight: i === currentStep ? 600 : 400,
+                    }}>
+                      {step.charAt(0).toUpperCase() + step.slice(1)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </Layout.Section>
+
+        {/* Accept / Reject buttons */}
         {canAccept && (
           <Layout.Section>
             <InlineStack gap="300">
-              <button
-                onClick={handleAccept}
-                style={{
-                  padding: '12px 32px', fontSize: '15px', fontWeight: 600,
-                  background: '#111', color: '#fff', border: 'none', borderRadius: '10px',
-                  cursor: 'pointer', transition: 'background 0.15s',
-                }}
-                onMouseOver={(e) => (e.currentTarget.style.background = '#333')}
-                onMouseOut={(e) => (e.currentTarget.style.background = '#111')}
-              >
-                Accept Order
-              </button>
-              <button
-                onClick={handleReject}
-                style={{
-                  padding: '12px 32px', fontSize: '15px', fontWeight: 600,
-                  background: '#fff', color: '#111', border: '2px solid #111', borderRadius: '10px',
-                  cursor: 'pointer', transition: 'all 0.15s',
-                }}
-                onMouseOver={(e) => { e.currentTarget.style.background = '#111'; e.currentTarget.style.color = '#fff'; }}
-                onMouseOut={(e) => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.color = '#111'; }}
-              >
-                Reject Order
-              </button>
+              <button onClick={handleAccept} style={{
+                padding: '12px 32px', fontSize: '15px', fontWeight: 600,
+                background: '#111', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer',
+              }}>Accept Order</button>
+              <button onClick={handleReject} style={{
+                padding: '12px 32px', fontSize: '15px', fontWeight: 600,
+                background: '#fff', color: '#111', border: '2px solid #111', borderRadius: '10px', cursor: 'pointer',
+              }}>Reject Order</button>
             </InlineStack>
           </Layout.Section>
         )}
 
-        <Layout.Section>
-          <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">Order Progress</Text>
-              <Divider />
-              <Box padding="400">
-                <StatusTimeline currentStatus={order.status} />
-              </Box>
-            </BlockStack>
-          </Card>
-        </Layout.Section>
-
+        {/* Shipping + Customer */}
         <Layout.Section variant="oneHalf">
           <Card>
             <BlockStack gap="300">
-              <InlineStack gap="200" blockAlign="center">
-                <Icon source={PackageIcon} tone="subdued" />
-                <Text as="h2" variant="headingMd">Order Info</Text>
-              </InlineStack>
-              <Divider />
-              <InlineStack gap="800" wrap>
-                <BlockStack gap="100">
-                  <Text as="span" variant="bodySm" tone="subdued">Status</Text>
-                  {statusBadge(order.status)}
-                </BlockStack>
-                <BlockStack gap="100">
-                  <Text as="span" variant="bodySm" tone="subdued">Total</Text>
-                  <Text as="span" variant="headingSm">${order.total_wholesale_amount.toFixed(2)} {order.currency}</Text>
-                </BlockStack>
-                <BlockStack gap="100">
-                  <Text as="span" variant="bodySm" tone="subdued">Date</Text>
-                  <Text as="span" variant="bodyMd">{new Date(order.created_at).toLocaleString()}</Text>
-                </BlockStack>
-              </InlineStack>
-            </BlockStack>
-          </Card>
-        </Layout.Section>
-
-        <Layout.Section variant="oneHalf">
-          <Card>
-            <BlockStack gap="300">
-              <Text as="h2" variant="headingMd">Shipping</Text>
+              <Text as="h2" variant="headingMd">Shipping Address</Text>
               <Divider />
               <Text as="p" variant="bodyMd" fontWeight="semibold">{order.customer_shipping_name || 'N/A'}</Text>
               {order.customer_shipping_address && (
                 <Text as="p" variant="bodySm" tone="subdued">
                   {[
                     order.customer_shipping_address.address1,
+                    order.customer_shipping_address.address2,
                     order.customer_shipping_address.city,
                     order.customer_shipping_address.province,
                     order.customer_shipping_address.zip,
@@ -313,24 +261,70 @@ export default function OrderDetail({ role }: OrderDetailProps) {
           </Card>
         </Layout.Section>
 
+        <Layout.Section variant="oneHalf">
+          <Card>
+            <BlockStack gap="300">
+              <Text as="h2" variant="headingMd">Order Summary</Text>
+              <Divider />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div>
+                  <Text as="span" variant="bodySm" tone="subdued">Subtotal</Text>
+                  <div style={{ fontSize: '16px', fontWeight: 600 }}>${order.total_wholesale_amount.toFixed(2)}</div>
+                </div>
+                <div>
+                  <Text as="span" variant="bodySm" tone="subdued">Currency</Text>
+                  <div style={{ fontSize: '16px', fontWeight: 600 }}>{order.currency}</div>
+                </div>
+                <div>
+                  <Text as="span" variant="bodySm" tone="subdued">Items</Text>
+                  <div style={{ fontSize: '16px', fontWeight: 600 }}>{order.items?.length || 0}</div>
+                </div>
+                <div>
+                  <Text as="span" variant="bodySm" tone="subdued">Created</Text>
+                  <div style={{ fontSize: '13px', fontWeight: 500 }}>{new Date(order.created_at).toLocaleDateString()}</div>
+                </div>
+              </div>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+
+        {/* Line Items */}
         <Layout.Section>
           <Card>
-            <BlockStack gap="400">
-              <Text as="h2" variant="headingMd">Line Items</Text>
+            <BlockStack gap="300">
+              <Text as="h2" variant="headingMd">Products</Text>
               <Divider />
               {order.items && order.items.length > 0 ? (
-                <DataTable
-                  columnContentTypes={['text', 'text', 'numeric', 'numeric', 'text', 'numeric']}
-                  headings={['Product', 'SKU', 'Qty', 'Unit Price', 'Status', 'Fulfilled']}
-                  rows={order.items.map((item) => [
-                    item.title,
-                    item.sku || '-',
-                    item.quantity,
-                    `$${item.wholesale_unit_price.toFixed(2)}`,
-                    statusBadge(item.fulfillment_status),
-                    item.fulfilled_quantity,
-                  ])}
-                />
+                <BlockStack gap="200">
+                  {order.items.map((item) => {
+                    const itemCfg = statusConfig[item.fulfillment_status] || statusConfig['unfulfilled'];
+                    return (
+                      <div key={item.id} style={{
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        padding: '12px 14px', borderRadius: '10px', background: '#f8fafc',
+                        border: '1px solid #f1f5f9',
+                      }}>
+                        <div>
+                          <div style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b' }}>{item.title}</div>
+                          <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
+                            {item.sku ? `SKU: ${item.sku} \u00b7 ` : ''}Qty: {item.quantity}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span style={{
+                            padding: '2px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600,
+                            color: itemCfg.color, background: itemCfg.bg,
+                          }}>
+                            {item.fulfillment_status || 'unfulfilled'}
+                          </span>
+                          <div style={{ fontSize: '15px', fontWeight: 700, color: '#1e293b' }}>
+                            ${(item.wholesale_unit_price * item.quantity).toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </BlockStack>
               ) : (
                 <Text as="p" tone="subdued">No line items</Text>
               )}
@@ -338,21 +332,20 @@ export default function OrderDetail({ role }: OrderDetailProps) {
           </Card>
         </Layout.Section>
 
+        {/* Fulfillment History */}
         {fulfillments && fulfillments.length > 0 && (
           <Layout.Section>
             <Card>
-              <BlockStack gap="400">
+              <BlockStack gap="300">
                 <Text as="h2" variant="headingMd">Fulfillment History</Text>
                 <Divider />
                 <DataTable
                   columnContentTypes={['text', 'text', 'text', 'text', 'text']}
                   headings={['Tracking', 'Carrier', 'Status', 'Synced', 'Date']}
                   rows={fulfillments.map((f) => [
-                    f.tracking_url ? (
-                      <a href={f.tracking_url} target="_blank" rel="noopener noreferrer" key={f.id}>{f.tracking_number}</a>
-                    ) : f.tracking_number,
+                    f.tracking_url ? <a href={f.tracking_url} target="_blank" rel="noopener noreferrer" key={f.id}>{f.tracking_number}</a> : f.tracking_number,
                     f.tracking_company || '-',
-                    statusBadge(f.status),
+                    <Badge key={`st-${f.id}`} tone={f.status === 'fulfilled' ? 'success' : 'attention'}>{f.status}</Badge>,
                     f.synced_to_reseller ? <Badge key={`s-${f.id}`} tone="success">Synced</Badge> : <Badge key={`s-${f.id}`}>Pending</Badge>,
                     new Date(f.created_at).toLocaleString(),
                   ])}
@@ -361,12 +354,12 @@ export default function OrderDetail({ role }: OrderDetailProps) {
             </Card>
           </Layout.Section>
         )}
+
+        {/* Comments */}
         <Layout.Section>
           <Card>
-            <BlockStack gap="400">
-              <InlineStack align="space-between" blockAlign="center">
-                <Text as="h2" variant="headingMd">Comments</Text>
-              </InlineStack>
+            <BlockStack gap="300">
+              <Text as="h2" variant="headingMd">Comments</Text>
               <Divider />
               <OrderCommentsSection orderId={id!} />
             </BlockStack>
@@ -374,17 +367,12 @@ export default function OrderDetail({ role }: OrderDetailProps) {
         </Layout.Section>
 
         <Layout.Section>
-          <InlineStack gap="200">
-            <Button onClick={() => navigate(`/disputes`)} tone="critical">Report Issue</Button>
-          </InlineStack>
+          <Button onClick={() => navigate('/disputes')} tone="critical">Report Issue</Button>
         </Layout.Section>
       </Layout>
 
       {fulfillModal && (
-        <Modal
-          open={true}
-          onClose={() => setFulfillModal(false)}
-          title="Add Fulfillment"
+        <Modal open onClose={() => setFulfillModal(false)} title="Add Fulfillment"
           primaryAction={{ content: 'Submit Fulfillment', onAction: handleFulfill, loading: fulfilling }}
           secondaryActions={[{ content: 'Cancel', onAction: () => setFulfillModal(false) }]}
         >
