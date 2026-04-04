@@ -14,6 +14,7 @@ import (
 	"github.com/rs/zerolog"
 
 	"github.com/droptodrop/droptodrop/internal/audit"
+	"github.com/droptodrop/droptodrop/internal/jobs"
 	"github.com/droptodrop/droptodrop/internal/orders"
 	"github.com/droptodrop/droptodrop/internal/queue"
 	"github.com/droptodrop/droptodrop/internal/shops"
@@ -26,18 +27,20 @@ type Handler struct {
 	queue     *queue.Client
 	shopsSvc  *shops.Service
 	ordersSvc *orders.Service
+	jobWorker *jobs.Worker
 	secret    string
 	logger    zerolog.Logger
 	audit     *audit.Service
 }
 
 // NewHandler creates a webhook handler.
-func NewHandler(db *pgxpool.Pool, q *queue.Client, shopsSvc *shops.Service, ordersSvc *orders.Service, secret string, logger zerolog.Logger, auditSvc *audit.Service) *Handler {
+func NewHandler(db *pgxpool.Pool, q *queue.Client, shopsSvc *shops.Service, ordersSvc *orders.Service, jobWorker *jobs.Worker, secret string, logger zerolog.Logger, auditSvc *audit.Service) *Handler {
 	return &Handler{
 		db:        db,
 		queue:     q,
 		shopsSvc:  shopsSvc,
 		ordersSvc: ordersSvc,
+		jobWorker: jobWorker,
 		secret:    secret,
 		logger:    logger,
 		audit:     auditSvc,
@@ -177,8 +180,37 @@ func (h *Handler) OrdersCreate(c *gin.Context) {
 		bgCtx := context.Background()
 		if err := h.ordersSvc.RouteOrder(bgCtx, shopID, payload); err != nil {
 			h.logger.Error().Err(err).Msg("order routing failed")
-		} else {
-			h.logger.Info().Str("shop_id", shopID).Msg("order routed successfully")
+			return
+		}
+		h.logger.Info().Str("shop_id", shopID).Msg("order routed successfully")
+
+		// Run post-routing tasks: create supplier Shopify order, notifications, charge
+		if h.jobWorker != nil {
+			// Find routed orders just created for this reseller
+			rows, err := h.db.Query(bgCtx, `
+				SELECT id, supplier_shop_id, total_wholesale_amount FROM routed_orders
+				WHERE reseller_shop_id = $1 AND status = 'pending' AND supplier_notified_at IS NULL
+				ORDER BY created_at DESC LIMIT 5
+			`, shopID)
+			if err == nil {
+				defer rows.Close()
+				for rows.Next() {
+					var routedID, supplierID string
+					var wholesale float64
+					rows.Scan(&routedID, &supplierID, &wholesale)
+
+					// Create draft order in supplier's Shopify store
+					if err := h.jobWorker.CreateSupplierShopifyOrder(bgCtx, routedID); err != nil {
+						h.logger.Error().Err(err).Str("order", routedID).Msg("failed to create supplier Shopify order")
+					}
+
+					// Send notification to supplier
+					h.jobWorker.RunSupplierNotification(bgCtx, routedID, supplierID)
+
+					// Auto-charge reseller
+					h.jobWorker.RunChargeOrder(bgCtx, routedID, shopID, supplierID, wholesale)
+				}
+			}
 		}
 	}()
 

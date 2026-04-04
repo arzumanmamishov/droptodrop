@@ -86,7 +86,7 @@ func main() {
 	// Initialize handlers
 	authHandler := authpkg.NewHandler(db, cfg.Shopify, cfg.Session, cfg.Security.EncryptionKey, logger, auditSvc)
 	healthHandler := health.NewHandler(db, redisClient)
-	webhookHandler := webhooks.NewHandler(db, redisClient, shopsSvc, ordersSvc, cfg.Shopify.APISecret, logger, auditSvc)
+	webhookHandler := webhooks.NewHandler(db, redisClient, shopsSvc, ordersSvc, jobWorker, cfg.Shopify.APISecret, logger, auditSvc)
 	complianceHandler := compliance.NewHandler(db, cfg.Shopify.APISecret, logger, auditSvc)
 	billingHandler := billing.NewHandler(db, logger)
 	trustSvc := trust.NewService(db, logger)
@@ -1489,11 +1489,34 @@ func main() {
 				return
 			}
 
-			err = ordersSvc.RouteOrder(c.Request.Context(), shopID.(string), orderResp.Order)
+			sid := shopID.(string)
+			err = ordersSvc.RouteOrder(c.Request.Context(), sid, orderResp.Order)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
+
+			// Run post-routing tasks inline
+			go func() {
+				bgCtx := context.Background()
+				rows, qErr := db.Query(bgCtx, `
+					SELECT id, supplier_shop_id, total_wholesale_amount FROM routed_orders
+					WHERE reseller_shop_id = $1 AND status = 'pending' AND supplier_notified_at IS NULL
+					ORDER BY created_at DESC LIMIT 5
+				`, sid)
+				if qErr == nil {
+					defer rows.Close()
+					for rows.Next() {
+						var routedID, supplierID string
+						var wholesale float64
+						rows.Scan(&routedID, &supplierID, &wholesale)
+						jobWorker.CreateSupplierShopifyOrder(bgCtx, routedID)
+						jobWorker.RunSupplierNotification(bgCtx, routedID, supplierID)
+						jobWorker.RunChargeOrder(bgCtx, routedID, sid, supplierID, wholesale)
+					}
+				}
+			}()
+
 			c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Order routed! Check supplier's Orders page."})
 		})
 

@@ -1251,6 +1251,142 @@ func (w *Worker) handleRouteOrder(ctx context.Context, payload json.RawMessage) 
 // =============================================================================
 // handleSupplierNotification: Notifies a supplier of a new incoming order.
 // =============================================================================
+// RunSupplierNotification runs the supplier notification job synchronously.
+func (w *Worker) RunSupplierNotification(ctx context.Context, routedOrderID, supplierShopID string) error {
+	payload, _ := json.Marshal(map[string]string{"routed_order_id": routedOrderID, "supplier_shop_id": supplierShopID})
+	return w.handleSupplierNotification(ctx, payload)
+}
+
+// RunChargeOrder runs the charge_order job synchronously.
+func (w *Worker) RunChargeOrder(ctx context.Context, routedOrderID, resellerShopID, supplierShopID string, wholesaleAmount float64) error {
+	payload, _ := json.Marshal(map[string]string{
+		"routed_order_id": routedOrderID, "reseller_shop_id": resellerShopID,
+		"supplier_shop_id": supplierShopID, "wholesale_amount": fmt.Sprintf("%.2f", wholesaleAmount),
+	})
+	return w.handleChargeOrder(ctx, payload)
+}
+
+// CreateSupplierShopifyOrder creates a draft order in the supplier's Shopify store.
+func (w *Worker) CreateSupplierShopifyOrder(ctx context.Context, routedOrderID string) error {
+	// Get routed order data
+	var supplierShopID, customerName, customerEmail, customerPhone, currency string
+	var totalAmount float64
+	var addressJSON []byte
+	err := w.db.QueryRow(ctx, `
+		SELECT supplier_shop_id, customer_shipping_name, customer_email, customer_phone,
+			customer_shipping_address, total_wholesale_amount, currency
+		FROM routed_orders WHERE id = $1
+	`, routedOrderID).Scan(&supplierShopID, &customerName, &customerEmail, &customerPhone,
+		&addressJSON, &totalAmount, &currency)
+	if err != nil {
+		return fmt.Errorf("get routed order: %w", err)
+	}
+
+	// Get line items
+	rows, err := w.db.Query(ctx, `SELECT title, sku, quantity, wholesale_unit_price FROM routed_order_items WHERE routed_order_id = $1`, routedOrderID)
+	if err != nil {
+		return fmt.Errorf("get items: %w", err)
+	}
+	defer rows.Close()
+
+	type lineItem struct {
+		Title    string
+		SKU      string
+		Quantity int
+		Price    float64
+	}
+	var items []lineItem
+	for rows.Next() {
+		var li lineItem
+		rows.Scan(&li.Title, &li.SKU, &li.Quantity, &li.Price)
+		items = append(items, li)
+	}
+
+	if len(items) == 0 {
+		return nil
+	}
+
+	// Get Shopify client for supplier
+	client, _, err := w.getShopifyClient(ctx, supplierShopID)
+	if err != nil {
+		w.logger.Warn().Err(err).Str("supplier", supplierShopID).Msg("cannot create supplier order: no credentials")
+		return nil // Don't fail — supplier might not have app installed
+	}
+
+	// Parse shipping address
+	var addr map[string]string
+	json.Unmarshal(addressJSON, &addr)
+
+	// Build draft order line items
+	var draftLineItems []map[string]interface{}
+	for _, item := range items {
+		draftLineItems = append(draftLineItems, map[string]interface{}{
+			"title":    item.Title,
+			"quantity": item.Quantity,
+			"originalUnitPrice": fmt.Sprintf("%.2f", item.Price),
+		})
+	}
+
+	// Create draft order via GraphQL
+	draftQuery := `mutation draftOrderCreate($input: DraftOrderInput!) {
+		draftOrderCreate(input: $input) {
+			draftOrder { id name }
+			userErrors { field message }
+		}
+	}`
+
+	shippingAddr := map[string]interface{}{
+		"firstName": customerName,
+		"address1":  addr["address1"],
+		"city":      addr["city"],
+		"province":  addr["province"],
+		"zip":       addr["zip"],
+		"country":   addr["country_code"],
+	}
+
+	draftInput := map[string]interface{}{
+		"lineItems":      draftLineItems,
+		"shippingAddress": shippingAddr,
+		"note":           fmt.Sprintf("DropToDrop order %s", routedOrderID[:8]),
+	}
+	if customerEmail != "" {
+		draftInput["email"] = customerEmail
+	}
+
+	var draftResult struct {
+		Data struct {
+			DraftOrderCreate struct {
+				DraftOrder *struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+				} `json:"draftOrder"`
+				UserErrors []struct {
+					Field   []string `json:"field"`
+					Message string   `json:"message"`
+				} `json:"userErrors"`
+			} `json:"draftOrderCreate"`
+		} `json:"data"`
+	}
+
+	if err := client.GraphQL(ctx, draftQuery, map[string]interface{}{"input": draftInput}, &draftResult); err != nil {
+		w.logger.Error().Err(err).Msg("failed to create draft order in supplier store")
+		return nil
+	}
+
+	if draftResult.Data.DraftOrderCreate.DraftOrder != nil {
+		w.logger.Info().
+			Str("draft_order_id", draftResult.Data.DraftOrderCreate.DraftOrder.ID).
+			Str("draft_order_name", draftResult.Data.DraftOrderCreate.DraftOrder.Name).
+			Str("routed_order_id", routedOrderID).
+			Msg("draft order created in supplier's Shopify store")
+	}
+	for _, ue := range draftResult.Data.DraftOrderCreate.UserErrors {
+		w.logger.Error().Str("field", fmt.Sprintf("%v", ue.Field)).Str("message", ue.Message).Msg("draft order user error")
+	}
+
+	return nil
+}
+
 func (w *Worker) handleSupplierNotification(ctx context.Context, payload json.RawMessage) error {
 	var params struct {
 		RoutedOrderID  string `json:"routed_order_id"`
