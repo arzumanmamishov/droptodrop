@@ -106,6 +106,7 @@ export interface RoutedOrderItem {
   wholesale_unit_price: number;
   fulfillment_status: string;
   fulfilled_quantity: number;
+  image_url?: string;
 }
 
 export interface RoutedOrder {

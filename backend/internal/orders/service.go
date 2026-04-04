@@ -48,6 +48,7 @@ type RoutedOrderItem struct {
 	WholesaleUnitPrice float64 `json:"wholesale_unit_price"`
 	FulfillmentStatus  string  `json:"fulfillment_status"`
 	FulfilledQuantity  int     `json:"fulfilled_quantity"`
+	ImageURL           string  `json:"image_url,omitempty"`
 }
 
 // Service handles order routing operations.
@@ -345,6 +346,45 @@ func (s *Service) ListRoutedOrders(ctx context.Context, shopID, role, status str
 			&o.CreatedAt, &o.UpdatedAt); err != nil {
 			return nil, 0, fmt.Errorf("scan order: %w", err)
 		}
+
+		// Load items with product images
+		itemRows, err := s.db.Query(ctx, `
+			SELECT roi.id, roi.routed_order_id, roi.reseller_line_item_id, roi.supplier_variant_id,
+				roi.reseller_variant_id, COALESCE(roi.title,''), COALESCE(roi.sku,''),
+				roi.quantity, roi.wholesale_unit_price, roi.fulfillment_status, roi.fulfilled_quantity,
+				COALESCE(sl.images, '[]'::jsonb)
+			FROM routed_order_items roi
+			LEFT JOIN product_links pl ON pl.supplier_variant_id = roi.supplier_variant_id AND pl.supplier_shop_id = $1
+			LEFT JOIN supplier_listings sl ON sl.id = pl.supplier_listing_id
+			WHERE roi.routed_order_id = $2
+			ORDER BY roi.created_at
+		`, o.SupplierShopID, o.ID)
+		if err == nil {
+			for itemRows.Next() {
+				var item RoutedOrderItem
+				var imagesRaw json.RawMessage
+				if err := itemRows.Scan(&item.ID, &item.RoutedOrderID, &item.ResellerLineItemID,
+					&item.SupplierVariantID, &item.ResellerVariantID, &item.Title, &item.SKU,
+					&item.Quantity, &item.WholesaleUnitPrice, &item.FulfillmentStatus, &item.FulfilledQuantity,
+					&imagesRaw); err == nil {
+					// Extract first image URL
+					var innerStr string
+					if json.Unmarshal(imagesRaw, &innerStr) == nil && len(innerStr) > 0 {
+						var imgs []struct{ URL string `json:"url"` }
+						json.Unmarshal([]byte(innerStr), &imgs)
+						if len(imgs) > 0 { item.ImageURL = imgs[0].URL }
+					}
+					if item.ImageURL == "" {
+						var imgs []struct{ URL string `json:"url"` }
+						json.Unmarshal(imagesRaw, &imgs)
+						if len(imgs) > 0 { item.ImageURL = imgs[0].URL }
+					}
+					o.Items = append(o.Items, item)
+				}
+			}
+			itemRows.Close()
+		}
+
 		orders = append(orders, o)
 	}
 
