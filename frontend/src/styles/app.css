@@ -21,6 +21,11 @@
   --dt-danger-bg: #fee2e2;
 }
 
+/* Page bottom padding */
+.Polaris-Page {
+  padding-bottom: 50px !important;
+}
+
 /* Override Polaris frame background */
 .Polaris-Frame__Content {
   background: var(--dt-bg) !important;
