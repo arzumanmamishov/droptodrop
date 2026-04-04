@@ -73,7 +73,7 @@ func Load() (*Config, error) {
 		Shopify: ShopifyConfig{
 			APIKey:      requireEnv("SHOPIFY_API_KEY"),
 			APISecret:   requireEnv("SHOPIFY_API_SECRET"),
-			Scopes:      getEnv("SHOPIFY_SCOPES", "read_products,write_products,read_orders,write_orders,read_fulfillments,write_fulfillments,read_inventory,write_inventory,read_shipping,read_locations"),
+			Scopes:      getEnv("SHOPIFY_SCOPES", "read_products,write_products,read_orders,write_orders,read_fulfillments,write_fulfillments,read_inventory,write_inventory,read_shipping,read_locations,write_draft_orders"),
 			AppURL:      requireEnv("SHOPIFY_APP_URL"),
 			RedirectURI: requireEnv("SHOPIFY_REDIRECT_URI"),
 		},
