@@ -1307,81 +1307,73 @@ func (w *Worker) CreateSupplierShopifyOrder(ctx context.Context, routedOrderID s
 	}
 
 	// Get Shopify client for supplier
-	client, _, err := w.getShopifyClient(ctx, supplierShopID)
+	client, domain, err := w.getShopifyClient(ctx, supplierShopID)
 	if err != nil {
 		w.logger.Warn().Err(err).Str("supplier", supplierShopID).Msg("cannot create supplier order: no credentials")
-		return nil // Don't fail — supplier might not have app installed
+		return nil
 	}
 
 	// Parse shipping address
 	var addr map[string]string
 	json.Unmarshal(addressJSON, &addr)
 
-	// Build draft order line items
-	var draftLineItems []map[string]interface{}
+	// Build REST API order line items
+	var restLineItems []map[string]interface{}
 	for _, item := range items {
-		draftLineItems = append(draftLineItems, map[string]interface{}{
+		restLineItems = append(restLineItems, map[string]interface{}{
 			"title":    item.Title,
 			"quantity": item.Quantity,
-			"originalUnitPrice": fmt.Sprintf("%.2f", item.Price),
+			"price":    fmt.Sprintf("%.2f", item.Price),
 		})
 	}
 
-	// Create draft order via GraphQL
-	draftQuery := `mutation draftOrderCreate($input: DraftOrderInput!) {
-		draftOrderCreate(input: $input) {
-			draftOrder { id name }
-			userErrors { field message }
-		}
-	}`
-
-	shippingAddr := map[string]interface{}{
-		"firstName": customerName,
-		"address1":  addr["address1"],
-		"city":      addr["city"],
-		"province":  addr["province"],
-		"zip":       addr["zip"],
-		"country":   addr["country_code"],
+	// Create order via REST API (uses write_orders scope, no draft_orders needed)
+	orderBody := map[string]interface{}{
+		"order": map[string]interface{}{
+			"line_items": restLineItems,
+			"shipping_address": map[string]interface{}{
+				"first_name": addr["first_name"],
+				"last_name":  addr["last_name"],
+				"name":       customerName,
+				"address1":   addr["address1"],
+				"address2":   addr["address2"],
+				"city":       addr["city"],
+				"province":   addr["province"],
+				"zip":        addr["zip"],
+				"country":    addr["country_code"],
+				"phone":      customerPhone,
+			},
+			"email":              customerEmail,
+			"note":               fmt.Sprintf("DropToDrop order %s", routedOrderID[:8]),
+			"financial_status":   "pending",
+			"fulfillment_status": nil,
+			"tags":               "droptodrop",
+			"inventory_behaviour": "decrement_obeying_policy",
+		},
 	}
 
-	draftInput := map[string]interface{}{
-		"lineItems":      draftLineItems,
-		"shippingAddress": shippingAddr,
-		"note":           fmt.Sprintf("DropToDrop order %s", routedOrderID[:8]),
-	}
-	if customerEmail != "" {
-		draftInput["email"] = customerEmail
-	}
-
-	var draftResult struct {
-		Data struct {
-			DraftOrderCreate struct {
-				DraftOrder *struct {
-					ID   string `json:"id"`
-					Name string `json:"name"`
-				} `json:"draftOrder"`
-				UserErrors []struct {
-					Field   []string `json:"field"`
-					Message string   `json:"message"`
-				} `json:"userErrors"`
-			} `json:"draftOrderCreate"`
-		} `json:"data"`
+	var orderResult struct {
+		Order *struct {
+			ID          int64  `json:"id"`
+			Name        string `json:"name"`
+			OrderNumber int64  `json:"order_number"`
+		} `json:"order"`
+		Errors interface{} `json:"errors"`
 	}
 
-	if err := client.GraphQL(ctx, draftQuery, map[string]interface{}{"input": draftInput}, &draftResult); err != nil {
-		w.logger.Error().Err(err).Msg("failed to create draft order in supplier store")
+	if err := client.REST(ctx, "POST", "orders.json", orderBody, &orderResult); err != nil {
+		w.logger.Error().Err(err).Str("domain", domain).Msg("failed to create order in supplier store")
 		return nil
 	}
 
-	if draftResult.Data.DraftOrderCreate.DraftOrder != nil {
+	if orderResult.Order != nil {
 		w.logger.Info().
-			Str("draft_order_id", draftResult.Data.DraftOrderCreate.DraftOrder.ID).
-			Str("draft_order_name", draftResult.Data.DraftOrderCreate.DraftOrder.Name).
+			Int64("shopify_order_id", orderResult.Order.ID).
+			Str("order_name", orderResult.Order.Name).
 			Str("routed_order_id", routedOrderID).
-			Msg("draft order created in supplier's Shopify store")
-	}
-	for _, ue := range draftResult.Data.DraftOrderCreate.UserErrors {
-		w.logger.Error().Str("field", fmt.Sprintf("%v", ue.Field)).Str("message", ue.Message).Msg("draft order user error")
+			Msg("order created in supplier's Shopify store")
+	} else {
+		w.logger.Error().Interface("errors", orderResult.Errors).Msg("supplier order creation returned errors")
 	}
 
 	return nil
