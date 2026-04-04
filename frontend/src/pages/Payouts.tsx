@@ -1,8 +1,8 @@
 import { useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Page, Layout, Card, BlockStack, Text, Badge, Spinner,
   Banner, InlineStack, Divider, EmptyState, Button,
+  Modal, TextField, FormLayout,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
 import { api } from '../utils/api';
@@ -36,15 +36,30 @@ interface PayoutsResponse {
 interface Props { role: string; }
 
 export default function Payouts({ role }: Props) {
-  const navigate = useNavigate();
   const [page, setPage] = useState(0);
   const limit = 20;
   const { data, loading, refetch } = useApi<PayoutsResponse>(`/payouts?limit=${limit}&offset=${page * limit}`);
   const [confirmAction, setConfirmAction] = useState<{ order: PayoutOrder; action: string } | null>(null);
   const [acting, setActing] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
+  const [paypalModal, setPaypalModal] = useState(false);
+  const [paypalEmail, setPaypalEmail] = useState('');
+  const [savingPaypal, setSavingPaypal] = useState(false);
 
   const isSupplier = role === 'supplier';
+
+  const handleSavePaypal = useCallback(async () => {
+    if (!paypalEmail.trim()) return;
+    setSavingPaypal(true);
+    try {
+      const endpoint = isSupplier ? '/supplier/profile' : '/reseller/profile';
+      await api.put(endpoint, { paypal_email: paypalEmail.trim() });
+      setPaypalModal(false);
+      setSuccess('PayPal email saved successfully.');
+      refetch();
+    } catch { /* */ }
+    finally { setSavingPaypal(false); }
+  }, [paypalEmail, isSupplier, refetch]);
 
   const handleAction = useCallback(async () => {
     if (!confirmAction) return;
@@ -103,7 +118,7 @@ export default function Payouts({ role }: Props) {
               tone="warning"
               action={{
                 content: 'Add PayPal Email',
-                onAction: () => navigate(isSupplier ? '/supplier/setup' : '/reseller/settings'),
+                onAction: () => setPaypalModal(true),
               }}
             >
               {isSupplier
@@ -245,7 +260,18 @@ export default function Payouts({ role }: Props) {
                                   Pay ${amt.toFixed(2)}
                                 </a>
                               ) : (
-                                <Badge tone="warning">No PayPal set</Badge>
+                                <button
+                                  onClick={() => setPaypalModal(true)}
+                                  style={{
+                                    padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
+                                    background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d',
+                                    cursor: 'pointer', transition: 'background 0.15s',
+                                  }}
+                                  onMouseOver={(e) => (e.currentTarget.style.background = '#fde68a')}
+                                  onMouseOut={(e) => (e.currentTarget.style.background = '#fef3c7')}
+                                >
+                                  + Add PayPal
+                                </button>
                               )}
                               <Button size="slim" variant="secondary" onClick={() => setConfirmAction({ order: p, action: 'send-payment' })}>
                                 {p.pay_status === 'disputed' ? 'Retry — Mark Paid' : 'Mark as Paid'}
@@ -327,6 +353,32 @@ export default function Payouts({ role }: Props) {
         onConfirm={handleAction}
         onCancel={() => setConfirmAction(null)}
       />
+
+      {paypalModal && (
+        <Modal
+          open
+          onClose={() => setPaypalModal(false)}
+          title="Add PayPal Email"
+          primaryAction={{ content: 'Save', onAction: handleSavePaypal, loading: savingPaypal, disabled: !paypalEmail.trim() }}
+          secondaryActions={[{ content: 'Cancel', onAction: () => setPaypalModal(false) }]}
+        >
+          <Modal.Section>
+            <FormLayout>
+              <TextField
+                label="PayPal Email"
+                type="email"
+                value={paypalEmail}
+                onChange={setPaypalEmail}
+                autoComplete="email"
+                placeholder="your@email.com"
+                helpText={isSupplier
+                  ? 'Resellers will use this email to send you payments via PayPal.'
+                  : 'This email will be shared with suppliers for payment verification.'}
+              />
+            </FormLayout>
+          </Modal.Section>
+        </Modal>
+      )}
     </Page>
   );
 }
