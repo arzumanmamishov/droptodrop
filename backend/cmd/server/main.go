@@ -1025,14 +1025,23 @@ func main() {
 			db.QueryRow(ctx, `SELECT COUNT(*) FROM notifications WHERE shop_id = $1 AND is_read = FALSE`, sid).Scan(&notifCount)
 			counts["notifications"] = notifCount
 
-			// Payouts needing action
+			// Payouts needing action — match what the Payouts page shows
 			var payoutCount int
 			if r == "supplier" {
-				// Supplier: payments awaiting confirmation
-				db.QueryRow(ctx, `SELECT COUNT(*) FROM payout_records WHERE supplier_shop_id = $1 AND status = 'payment_sent'`, sid).Scan(&payoutCount)
+				// Supplier: payments sent but not yet confirmed
+				db.QueryRow(ctx, `
+					SELECT COUNT(*) FROM routed_orders ro
+					JOIN payout_records pr ON pr.routed_order_id = ro.id
+					WHERE ro.supplier_shop_id = $1 AND pr.status = 'payment_sent'
+				`, sid).Scan(&payoutCount)
 			} else {
-				// Reseller: unpaid/disputed orders
-				db.QueryRow(ctx, `SELECT COUNT(*) FROM payout_records WHERE reseller_shop_id = $1 AND status IN ('pending','disputed')`, sid).Scan(&payoutCount)
+				// Reseller: orders with unpaid/disputed payouts
+				db.QueryRow(ctx, `
+					SELECT COUNT(*) FROM routed_orders ro
+					JOIN payout_records pr ON pr.routed_order_id = ro.id
+					WHERE ro.reseller_shop_id = $1 AND pr.status IN ('pending','disputed')
+					AND ro.status IN ('pending','accepted','processing','fulfilled')
+				`, sid).Scan(&payoutCount)
 			}
 			counts["payouts"] = payoutCount
 
