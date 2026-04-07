@@ -30,6 +30,8 @@ type RoutedOrder struct {
 	TotalWholesaleAmount   float64           `json:"total_wholesale_amount"`
 	Currency               string            `json:"currency"`
 	Notes                  string            `json:"notes"`
+	ResellerShopName       string            `json:"reseller_shop_name,omitempty"`
+	SupplierShopName       string            `json:"supplier_shop_name,omitempty"`
 	Items                  []RoutedOrderItem `json:"items,omitempty"`
 	CreatedAt              time.Time         `json:"created_at"`
 	UpdatedAt              time.Time         `json:"updated_at"`
@@ -312,11 +314,16 @@ func (s *Service) ListRoutedOrders(ctx context.Context, shopID, role, status str
 
 	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM routed_orders WHERE %s = $1`, shopColumn)
 	listQuery := fmt.Sprintf(`
-		SELECT id, reseller_shop_id, supplier_shop_id, reseller_order_id, COALESCE(reseller_order_number,''),
-			status, COALESCE(customer_shipping_name,''), customer_shipping_address,
-			COALESCE(customer_email,''), COALESCE(customer_phone,''),
-			COALESCE(total_wholesale_amount,0), COALESCE(currency,'USD'), COALESCE(notes,''), created_at, updated_at
-		FROM routed_orders WHERE %s = $1`, shopColumn)
+		SELECT ro.id, ro.reseller_shop_id, ro.supplier_shop_id, ro.reseller_order_id, COALESCE(ro.reseller_order_number,''),
+			ro.status, COALESCE(ro.customer_shipping_name,''), ro.customer_shipping_address,
+			COALESCE(ro.customer_email,''), COALESCE(ro.customer_phone,''),
+			COALESCE(ro.total_wholesale_amount,0), COALESCE(ro.currency,'USD'), COALESCE(ro.notes,''), ro.created_at, ro.updated_at,
+			COALESCE(rs.name, rs.shopify_domain, '') as reseller_name,
+			COALESCE(ss.name, ss.shopify_domain, '') as supplier_name
+		FROM routed_orders ro
+		LEFT JOIN shops rs ON rs.id = ro.reseller_shop_id
+		LEFT JOIN shops ss ON ss.id = ro.supplier_shop_id
+		WHERE ro.%s = $1`, shopColumn)
 
 	args := []interface{}{shopID}
 	if status != "" {
@@ -343,7 +350,7 @@ func (s *Service) ListRoutedOrders(ctx context.Context, shopID, role, status str
 		if err := rows.Scan(&o.ID, &o.ResellerShopID, &o.SupplierShopID, &o.ResellerOrderID,
 			&o.ResellerOrderNumber, &o.Status, &o.CustomerShippingName, &o.CustomerShippingAddr,
 			&o.CustomerEmail, &o.CustomerPhone, &o.TotalWholesaleAmount, &o.Currency, &o.Notes,
-			&o.CreatedAt, &o.UpdatedAt); err != nil {
+			&o.CreatedAt, &o.UpdatedAt, &o.ResellerShopName, &o.SupplierShopName); err != nil {
 			return nil, 0, fmt.Errorf("scan order: %w", err)
 		}
 

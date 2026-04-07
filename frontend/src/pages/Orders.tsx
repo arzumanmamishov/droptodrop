@@ -167,6 +167,8 @@ export default function Orders({ role }: OrdersProps) {
                             </div>
                             <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
                               {new Date(order.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                              {role === 'supplier' && order.reseller_shop_name ? ` · from ${order.reseller_shop_name}` : ''}
+                              {role === 'reseller' && order.supplier_shop_name ? ` · via ${order.supplier_shop_name}` : ''}
                               {order.customer_shipping_name ? ` · ${order.customer_shipping_name}` : ''}
                             </div>
                           </div>

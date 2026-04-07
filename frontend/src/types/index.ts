@@ -123,6 +123,8 @@ export interface RoutedOrder {
   total_wholesale_amount: number;
   currency: string;
   notes: string;
+  reseller_shop_name?: string;
+  supplier_shop_name?: string;
   items: RoutedOrderItem[];
   created_at: string;
   updated_at: string;
