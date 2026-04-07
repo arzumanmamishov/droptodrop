@@ -9,6 +9,7 @@ import { useApi } from '../hooks/useApi';
 import { useToast } from '../hooks/useToast';
 import { api } from '../utils/api';
 import { RoutedOrder, FulfillmentEvent } from '../types';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 interface OrderDetailResponse {
   order: RoutedOrder;
@@ -100,6 +101,8 @@ export default function OrderDetail({ role }: OrderDetailProps) {
   const [trackingCompany, setTrackingCompany] = useState('');
   const [fulfilling, setFulfilling] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [confirmAccept, setConfirmAccept] = useState(false);
+  const [confirmReject, setConfirmReject] = useState(false);
 
   const handleAccept = useCallback(async () => {
     try { await api.post(`/supplier/orders/${id}/accept`); toast.success('Order accepted'); refetch(); }
@@ -231,11 +234,11 @@ export default function OrderDetail({ role }: OrderDetailProps) {
         {canAccept && (
           <Layout.Section>
             <InlineStack gap="300">
-              <button onClick={handleAccept} style={{
+              <button onClick={() => setConfirmAccept(true)} style={{
                 padding: '12px 32px', fontSize: '15px', fontWeight: 600,
                 background: '#111', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer',
               }}>Accept Order</button>
-              <button onClick={handleReject} style={{
+              <button onClick={() => setConfirmReject(true)} style={{
                 padding: '12px 32px', fontSize: '15px', fontWeight: 600,
                 background: '#fff', color: '#111', border: '2px solid #111', borderRadius: '10px', cursor: 'pointer',
               }}>Reject Order</button>
@@ -392,6 +395,25 @@ export default function OrderDetail({ role }: OrderDetailProps) {
           </Modal.Section>
         </Modal>
       )}
+
+      <ConfirmDialog
+        open={confirmAccept}
+        title="Accept Order"
+        message={`Are you sure you want to accept order #${order?.reseller_order_number || order?.id?.slice(0, 8) || ''}? You will be responsible for fulfilling this order.`}
+        confirmLabel="Yes, Accept"
+        onConfirm={() => { setConfirmAccept(false); handleAccept(); }}
+        onCancel={() => setConfirmAccept(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmReject}
+        title="Reject Order"
+        message={`Are you sure you want to reject order #${order?.reseller_order_number || order?.id?.slice(0, 8) || ''}? The reserved stock will be restored.`}
+        confirmLabel="Yes, Reject"
+        destructive
+        onConfirm={() => { setConfirmReject(false); handleReject(); }}
+        onCancel={() => setConfirmReject(false)}
+      />
     </Page>
   );
 }
