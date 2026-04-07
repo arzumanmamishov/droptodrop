@@ -599,14 +599,6 @@ func main() {
 					inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{ShopID: resellerID, Title: "Order Accepted", Message: "Your order has been accepted by the supplier.", Type: "success", Link: strPtr("/orders/" + orderID)})
 				}
 
-				// Create order in supplier's Shopify store and decrement inventory
-				go func() {
-					bgCtx := context.Background()
-					if err := jobWorker.CreateSupplierShopifyOrder(bgCtx, orderID); err != nil {
-						logger.Error().Err(err).Str("order", orderID).Msg("failed to create supplier Shopify order on accept")
-					}
-				}()
-
 				c.JSON(http.StatusOK, gin.H{"status": "ok"})
 			})
 
@@ -1521,7 +1513,6 @@ func main() {
 						var routedID, supplierID string
 						var wholesale float64
 						rows.Scan(&routedID, &supplierID, &wholesale)
-						jobWorker.CreateSupplierShopifyOrder(bgCtx, routedID)
 						jobWorker.RunSupplierNotification(bgCtx, routedID, supplierID)
 						jobWorker.RunChargeOrder(bgCtx, routedID, sid, supplierID, wholesale)
 					}

@@ -199,11 +199,6 @@ func (h *Handler) OrdersCreate(c *gin.Context) {
 					var wholesale float64
 					rows.Scan(&routedID, &supplierID, &wholesale)
 
-					// Create draft order in supplier's Shopify store
-					if err := h.jobWorker.CreateSupplierShopifyOrder(bgCtx, routedID); err != nil {
-						h.logger.Error().Err(err).Str("order", routedID).Msg("failed to create supplier Shopify order")
-					}
-
 					// Send notification to supplier
 					h.jobWorker.RunSupplierNotification(bgCtx, routedID, supplierID)
 
