@@ -8,6 +8,7 @@ import {
 } from '@shopify/polaris';
 import { CheckIcon, ClockIcon, AlertCircleIcon, ImageIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
+import { useToast } from '../hooks/useToast';
 import { api } from '../utils/api';
 import { ResellerImport } from '../types';
 
@@ -26,6 +27,7 @@ const statusConfig: Record<string, { color: string; bg: string; label: string }>
 
 export default function Imports() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [page, setPage] = useState(0);
   const [syncing, setSyncing] = useState<string | null>(null);
   const limit = 20;
@@ -38,8 +40,9 @@ export default function Imports() {
     setSyncing(importId);
     try {
       await api.post(`/reseller/imports/${importId}/resync`);
+      toast.success('Product resynced');
       refetch();
-    } catch { /* */ }
+    } catch { toast.error('Failed to resync product'); }
     finally { setSyncing(null); }
   }, [refetch]);
 
@@ -51,20 +54,22 @@ export default function Imports() {
   const handleDelete = useCallback(async (importId: string) => {
     try {
       await api.delete(`/reseller/imports/${importId}`);
+      toast.success('Product deleted');
       refetch();
-    } catch { /* */ }
-  }, [refetch]);
+    } catch { toast.error('Failed to delete product'); }
+  }, [refetch, toast]);
 
   const handleBulkDelete = useCallback(async () => {
     setBulkDeleting(true);
     for (const id of selectedIds) {
-      try { await api.delete(`/reseller/imports/${id}`); } catch { /* */ }
+      try { await api.delete(`/reseller/imports/${id}`); } catch { toast.error('Failed to delete product'); }
     }
+    toast.success(`${selectedIds.size} product(s) deleted`);
     setSelectedIds(new Set());
     setBulkDeleting(false);
     setConfirmBulkDelete(false);
     refetch();
-  }, [selectedIds, refetch]);
+  }, [selectedIds, refetch, toast]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {

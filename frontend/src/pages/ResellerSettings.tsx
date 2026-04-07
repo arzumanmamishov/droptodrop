@@ -3,12 +3,14 @@ import {
   Page, Layout, Card, FormLayout, TextField, Banner, BlockStack, Spinner,
 } from '@shopify/polaris';
 import { api } from '../utils/api';
+import { useToast } from '../hooks/useToast';
 
 interface ResellerProfile {
   paypal_email: string;
 }
 
 export default function ResellerSettings() {
+  const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,13 +32,15 @@ export default function ResellerSettings() {
     setSuccess(false);
     try {
       await api.put('/reseller/profile', { paypal_email: paypalEmail });
+      toast.success('Settings saved');
       setSuccess(true);
     } catch (err) {
+      toast.error('Failed to save settings');
       setError(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSaving(false);
     }
-  }, [paypalEmail]);
+  }, [paypalEmail, toast]);
 
   if (loading) {
     return (

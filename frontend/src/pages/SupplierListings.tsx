@@ -7,6 +7,7 @@ import {
 } from '@shopify/polaris';
 import { ImageIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
+import { useToast } from '../hooks/useToast';
 import { api } from '../utils/api';
 import { SupplierListing } from '../types';
 import { getCategoryLabel } from '../constants/categories';
@@ -20,6 +21,7 @@ interface ListingsResponse {
 
 export default function SupplierListings() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -34,16 +36,18 @@ export default function SupplierListings() {
   const handleStatusChange = useCallback(async (id: string, status: string) => {
     try {
       await api.put(`/supplier/listings/${id}/status`, { status });
+      toast.success(`Listing ${status === 'active' ? 'published' : 'paused'}`);
       refetch();
-    } catch { /* */ }
-  }, [refetch]);
+    } catch { toast.error('Failed to update listing status'); }
+  }, [refetch, toast]);
 
   const handleDelete = useCallback(async (id: string) => {
     try {
       await api.delete(`/supplier/listings/${id}`);
+      toast.success('Listing deleted');
       refetch();
-    } catch { /* */ }
-  }, [refetch]);
+    } catch { toast.error('Failed to delete listing'); }
+  }, [refetch, toast]);
 
   const handleBulkAction = useCallback(async (action: 'active' | 'paused' | 'delete') => {
     setBulkLoading(true);
@@ -54,12 +58,14 @@ export default function SupplierListings() {
         } else {
           await api.put(`/supplier/listings/${id}/status`, { status: action });
         }
-      } catch { /* */ }
+      } catch { toast.error(`Failed to ${action} listing`); }
     }
+    const actionLabel = action === 'delete' ? 'deleted' : action === 'active' ? 'published' : 'paused';
+    toast.success(`${selectedIds.size} listing(s) ${actionLabel}`);
     setSelectedIds(new Set());
     setBulkLoading(false);
     refetch();
-  }, [selectedIds, refetch]);
+  }, [selectedIds, refetch, toast]);
 
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {

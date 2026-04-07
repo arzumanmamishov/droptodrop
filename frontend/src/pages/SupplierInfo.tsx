@@ -6,6 +6,7 @@ import {
 } from '@shopify/polaris';
 import { EmailIcon, PackageIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
+import { useToast } from '../hooks/useToast';
 import { api } from '../utils/api';
 
 interface SupplierInfoData {
@@ -20,6 +21,7 @@ interface SupplierInfoData {
 export default function SupplierInfo() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const toast = useToast();
   const { data, loading, error } = useApi<SupplierInfoData>(`/reseller/suppliers/${id}`);
 
   const handleMessage = useCallback(async () => {
@@ -27,10 +29,10 @@ export default function SupplierInfo() {
       const conv = await api.post<{ id: string }>('/conversations', { other_shop_id: id, subject: 'Inquiry' });
       navigate(`/messages?conv=${conv.id}`);
     } catch (err) {
-      console.error('Failed to create conversation:', err);
+      toast.error('Failed to start conversation');
       navigate('/messages');
     }
-  }, [id, navigate]);
+  }, [id, navigate, toast]);
 
   if (loading) {
     return (

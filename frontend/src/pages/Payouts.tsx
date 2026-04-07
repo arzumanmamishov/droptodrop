@@ -5,6 +5,7 @@ import {
   Modal, TextField, FormLayout,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
+import { useToast } from '../hooks/useToast';
 import { api } from '../utils/api';
 import ConfirmDialog from '../components/ConfirmDialog';
 
@@ -39,6 +40,7 @@ export default function Payouts({ role }: Props) {
   const [page, setPage] = useState(0);
   const limit = 20;
   const { data, loading, refetch } = useApi<PayoutsResponse>(`/payouts?limit=${limit}&offset=${page * limit}`);
+  const toast = useToast();
   const [confirmAction, setConfirmAction] = useState<{ order: PayoutOrder; action: string } | null>(null);
   const [acting, setActing] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
@@ -56,10 +58,11 @@ export default function Payouts({ role }: Props) {
       await api.put(endpoint, { paypal_email: paypalEmail.trim() });
       setPaypalModal(false);
       setSuccess('PayPal email saved successfully.');
+      toast.success('PayPal email saved');
       refetch();
-    } catch { /* */ }
+    } catch { toast.error('Failed to save PayPal email'); }
     finally { setSavingPaypal(false); }
-  }, [paypalEmail, isSupplier, refetch]);
+  }, [paypalEmail, isSupplier, refetch, toast]);
 
   const handleAction = useCallback(async () => {
     if (!confirmAction) return;
@@ -73,11 +76,12 @@ export default function Payouts({ role }: Props) {
         'dispute-payment': 'Payment disputed. Reseller notified.',
       };
       setSuccess(messages[action] || 'Done');
+      toast.success(messages[action] || 'Done');
       setConfirmAction(null);
       refetch();
-    } catch { /* */ }
+    } catch { toast.error('Failed to process payment action'); }
     finally { setActing(false); }
-  }, [confirmAction, refetch]);
+  }, [confirmAction, refetch, toast]);
 
   if (loading) {
     return <Page title="Payouts"><div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><Spinner size="large" /></div></Page>;

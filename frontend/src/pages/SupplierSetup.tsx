@@ -12,9 +12,11 @@ import {
   Spinner,
 } from '@shopify/polaris';
 import { api } from '../utils/api';
+import { useToast } from '../hooks/useToast';
 import { SupplierProfile } from '../types';
 
 export default function SupplierSetup() {
+  const toast = useToast();
   const [, setProfile] = useState<SupplierProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -63,13 +65,15 @@ export default function SupplierSetup() {
         return_policy_url: returnPolicyUrl,
         paypal_email: paypalEmail,
       });
+      toast.success('Profile saved');
       setSuccess(true);
     } catch (err) {
+      toast.error('Failed to save profile');
       setError(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSaving(false);
     }
-  }, [isEnabled, processingDays, blindFulfillment, approvalMode, companyName, supportEmail, returnPolicyUrl, paypalEmail]);
+  }, [isEnabled, processingDays, blindFulfillment, approvalMode, companyName, supportEmail, returnPolicyUrl, paypalEmail, toast]);
 
   if (loading) {
     return (

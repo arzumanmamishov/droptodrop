@@ -6,6 +6,7 @@ import {
   InlineStack, Divider,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
+import { useToast } from '../hooks/useToast';
 import { api } from '../utils/api';
 import { RoutedOrder, FulfillmentEvent } from '../types';
 
@@ -90,6 +91,7 @@ function OrderCommentsSection({ orderId }: { orderId: string }) {
 export default function OrderDetail({ role }: OrderDetailProps) {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const toast = useToast();
   const { data, loading, error, refetch } = useApi<OrderDetailResponse>(`/orders/${id}`);
 
   const [fulfillModal, setFulfillModal] = useState(false);
@@ -100,21 +102,22 @@ export default function OrderDetail({ role }: OrderDetailProps) {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const handleAccept = useCallback(async () => {
-    try { await api.post(`/supplier/orders/${id}/accept`); refetch(); }
-    catch (err) { setActionError(err instanceof Error ? err.message : 'Failed'); }
-  }, [id, refetch]);
+    try { await api.post(`/supplier/orders/${id}/accept`); toast.success('Order accepted'); refetch(); }
+    catch (err) { toast.error('Failed to accept order'); setActionError(err instanceof Error ? err.message : 'Failed'); }
+  }, [id, refetch, toast]);
 
   const handleReject = useCallback(async () => {
-    try { await api.post(`/supplier/orders/${id}/reject`, { reason: 'Rejected by supplier' }); refetch(); }
-    catch (err) { setActionError(err instanceof Error ? err.message : 'Failed'); }
-  }, [id, refetch]);
+    try { await api.post(`/supplier/orders/${id}/reject`, { reason: 'Rejected by supplier' }); toast.success('Order rejected'); refetch(); }
+    catch (err) { toast.error('Failed to reject order'); setActionError(err instanceof Error ? err.message : 'Failed'); }
+  }, [id, refetch, toast]);
 
   const handleFulfill = useCallback(async () => {
     setFulfilling(true); setActionError(null);
     try {
       await api.post(`/supplier/orders/${id}/fulfill`, { routed_order_id: id, tracking_number: trackingNumber, tracking_url: trackingUrl, tracking_company: trackingCompany });
+      toast.success('Order fulfilled');
       setFulfillModal(false); refetch();
-    } catch (err) { setActionError(err instanceof Error ? err.message : 'Fulfillment failed'); }
+    } catch (err) { toast.error('Failed to fulfill order'); setActionError(err instanceof Error ? err.message : 'Fulfillment failed'); }
     finally { setFulfilling(false); }
   }, [id, trackingNumber, trackingUrl, trackingCompany, refetch]);
 

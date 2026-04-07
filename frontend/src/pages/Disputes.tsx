@@ -6,6 +6,7 @@ import {
   EmptyState,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
+import { useToast } from '../hooks/useToast';
 import { api } from '../utils/api';
 
 interface Dispute {
@@ -36,6 +37,7 @@ const DISPUTE_TYPES = [
 
 export default function Disputes() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [createModal, setCreateModal] = useState(false);
   const [orderId, setOrderId] = useState('');
   const [disputeType, setDisputeType] = useState('quality_issue');
@@ -58,12 +60,14 @@ export default function Disputes() {
         dispute_type: disputeType,
         description,
       });
+      toast.success('Dispute created');
       setSuccess(true);
       setCreateModal(false);
       setOrderId('');
       setDescription('');
       refetch();
     } catch (err) {
+      toast.error('Failed to create dispute');
       setError(err instanceof Error ? err.message : 'Failed to create dispute');
     } finally {
       setCreating(false);

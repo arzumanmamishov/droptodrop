@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Page, Spinner, Text } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
+import { useToast } from '../hooks/useToast';
 import { api } from '../utils/api';
 
 interface Conversation {
@@ -26,6 +27,7 @@ interface Message {
 
 export default function Messages() {
   const { data: convData, loading: convsLoading, refetch: refetchConvs } = useApi<{ conversations: Conversation[] }>('/conversations');
+  const toast = useToast();
   const [selectedConv, setSelectedConv] = useState<string | null>(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('conv');
@@ -74,9 +76,9 @@ export default function Messages() {
       setNewMessage('');
       loadMessages(selectedConv);
       refetchConvs();
-    } catch { /* */ }
+    } catch { toast.error('Failed to send message'); }
     finally { setSending(false); }
-  }, [selectedConv, newMessage, loadMessages, refetchConvs]);
+  }, [selectedConv, newMessage, loadMessages, refetchConvs, toast]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
