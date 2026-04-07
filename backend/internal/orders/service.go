@@ -460,9 +460,15 @@ func (s *Service) AcceptOrder(ctx context.Context, orderID, supplierShopID strin
 	return nil
 }
 
-// RejectOrder marks a routed order as rejected by the supplier.
+// RejectOrder marks a routed order as rejected by the supplier and restores inventory.
 func (s *Service) RejectOrder(ctx context.Context, orderID, supplierShopID, reason string) error {
-	result, err := s.db.Exec(ctx, `
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	result, err := tx.Exec(ctx, `
 		UPDATE routed_orders SET status = 'rejected', rejected_at = NOW(), notes = $3
 		WHERE id = $1 AND supplier_shop_id = $2 AND status = 'pending'
 	`, orderID, supplierShopID, reason)
@@ -471,6 +477,28 @@ func (s *Service) RejectOrder(ctx context.Context, orderID, supplierShopID, reas
 	}
 	if result.RowsAffected() == 0 {
 		return fmt.Errorf("order not found or not in pending state")
+	}
+
+	// Restore inventory — add back the reserved quantities
+	rows, err := tx.Query(ctx, `
+		SELECT supplier_variant_id, quantity FROM routed_order_items WHERE routed_order_id = $1
+	`, orderID)
+	if err == nil {
+		for rows.Next() {
+			var variantID int64
+			var qty int
+			rows.Scan(&variantID, &qty)
+			tx.Exec(ctx, `
+				UPDATE supplier_listing_variants
+				SET inventory_quantity = inventory_quantity + $1
+				WHERE shopify_variant_id = $2
+			`, qty, variantID)
+		}
+		rows.Close()
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit: %w", err)
 	}
 
 	s.audit.Log(ctx, supplierShopID, "merchant", supplierShopID, "order_rejected", "routed_order", orderID,
