@@ -354,11 +354,11 @@ func (s *Service) ListRoutedOrders(ctx context.Context, shopID, role, status str
 				roi.quantity, roi.wholesale_unit_price, roi.fulfillment_status, roi.fulfilled_quantity,
 				COALESCE(sl.images, '[]'::jsonb)
 			FROM routed_order_items roi
-			LEFT JOIN product_links pl ON pl.supplier_variant_id = roi.supplier_variant_id AND pl.supplier_shop_id = $1
-			LEFT JOIN supplier_listings sl ON sl.id = pl.supplier_listing_id
-			WHERE roi.routed_order_id = $2
+			LEFT JOIN supplier_listing_variants slv ON slv.shopify_variant_id = roi.supplier_variant_id
+			LEFT JOIN supplier_listings sl ON sl.id = slv.listing_id
+			WHERE roi.routed_order_id = $1
 			ORDER BY roi.created_at
-		`, o.SupplierShopID, o.ID)
+		`, o.ID)
 		if err == nil {
 			for itemRows.Next() {
 				var item RoutedOrderItem
