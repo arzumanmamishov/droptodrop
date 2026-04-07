@@ -586,16 +586,27 @@ func main() {
 
 			supplier.POST("/orders/:id/accept", func(c *gin.Context) {
 				shopID, _ := c.Get("shop_id")
-				if err := ordersSvc.AcceptOrder(c.Request.Context(), c.Param("id"), shopID.(string)); err != nil {
+				sid := shopID.(string)
+				orderID := c.Param("id")
+				if err := ordersSvc.AcceptOrder(c.Request.Context(), orderID, sid); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
 				// Notify reseller
 				var resellerID string
-				db.QueryRow(c.Request.Context(), `SELECT reseller_shop_id FROM routed_orders WHERE id = $1`, c.Param("id")).Scan(&resellerID)
+				db.QueryRow(c.Request.Context(), `SELECT reseller_shop_id FROM routed_orders WHERE id = $1`, orderID).Scan(&resellerID)
 				if resellerID != "" {
-					inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{ShopID: resellerID, Title: "Order Accepted", Message: "Your order has been accepted by the supplier.", Type: "success", Link: strPtr("/orders/" + c.Param("id"))})
+					inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{ShopID: resellerID, Title: "Order Accepted", Message: "Your order has been accepted by the supplier.", Type: "success", Link: strPtr("/orders/" + orderID)})
 				}
+
+				// Create order in supplier's Shopify store and decrement inventory
+				go func() {
+					bgCtx := context.Background()
+					if err := jobWorker.CreateSupplierShopifyOrder(bgCtx, orderID); err != nil {
+						logger.Error().Err(err).Str("order", orderID).Msg("failed to create supplier Shopify order on accept")
+					}
+				}()
+
 				c.JSON(http.StatusOK, gin.H{"status": "ok"})
 			})
 
