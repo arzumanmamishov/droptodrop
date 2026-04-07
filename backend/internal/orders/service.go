@@ -328,7 +328,7 @@ func (s *Service) ListRoutedOrders(ctx context.Context, shopID, role, status str
 	args := []interface{}{shopID}
 	if status != "" {
 		countQuery += ` AND status = $2`
-		listQuery += ` AND status = $2`
+		listQuery += ` AND ro.status = $2`
 		args = append(args, status)
 	}
 
