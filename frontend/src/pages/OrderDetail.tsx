@@ -159,6 +159,10 @@ export default function OrderDetail({ role }: OrderDetailProps) {
                     <div style={{ fontSize: '20px', fontWeight: 600 }}>${order.total_wholesale_amount.toFixed(2)} <span style={{ fontSize: '13px', opacity: 0.6 }}>{order.currency}</span></div>
                   </div>
                   <div>
+                    <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>{isSupplier ? 'Reseller' : 'Supplier'}</div>
+                    <div style={{ fontSize: '14px', fontWeight: 500 }}>{isSupplier ? (order.reseller_shop_name || '-') : (order.supplier_shop_name || '-')}</div>
+                  </div>
+                  <div>
                     <div style={{ fontSize: '11px', color: 'rgba(255,255,255,0.5)' }}>Date</div>
                     <div style={{ fontSize: '14px' }}>{new Date(order.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</div>
                   </div>
