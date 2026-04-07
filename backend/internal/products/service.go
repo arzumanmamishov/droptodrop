@@ -199,6 +199,25 @@ func (s *Service) ListSupplierListings(ctx context.Context, shopID string, statu
 			&l.ShippingCountries, &l.BlindFulfillment, &l.CreatedAt, &l.UpdatedAt); err != nil {
 			return nil, 0, fmt.Errorf("scan listing: %w", err)
 		}
+
+		// Load variants with inventory
+		vRows, vErr := s.db.Query(ctx, `
+			SELECT id, listing_id, shopify_variant_id, COALESCE(title,''), COALESCE(sku,''),
+				wholesale_price, COALESCE(suggested_retail_price,0), inventory_quantity,
+				COALESCE(weight,0), COALESCE(weight_unit,'kg'), is_active
+			FROM supplier_listing_variants WHERE listing_id = $1 ORDER BY created_at
+		`, l.ID)
+		if vErr == nil {
+			for vRows.Next() {
+				var v ListingVariant
+				vRows.Scan(&v.ID, &v.ListingID, &v.ShopifyVariantID, &v.Title, &v.SKU,
+					&v.WholesalePrice, &v.SuggestedRetailPrice, &v.InventoryQuantity,
+					&v.Weight, &v.WeightUnit, &v.IsActive)
+				l.Variants = append(l.Variants, v)
+			}
+			vRows.Close()
+		}
+
 		listings = append(listings, l)
 	}
 
