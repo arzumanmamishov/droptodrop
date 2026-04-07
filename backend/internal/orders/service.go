@@ -470,13 +470,13 @@ func (s *Service) RejectOrder(ctx context.Context, orderID, supplierShopID, reas
 
 	result, err := tx.Exec(ctx, `
 		UPDATE routed_orders SET status = 'rejected', rejected_at = NOW(), notes = $3
-		WHERE id = $1 AND supplier_shop_id = $2 AND status = 'pending'
+		WHERE id = $1 AND supplier_shop_id = $2 AND status IN ('pending', 'accepted')
 	`, orderID, supplierShopID, reason)
 	if err != nil {
 		return fmt.Errorf("reject order: %w", err)
 	}
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("order not found or not in pending state")
+		return fmt.Errorf("order not found or not in pending/accepted state")
 	}
 
 	// Restore inventory — add back the reserved quantities
@@ -488,11 +488,16 @@ func (s *Service) RejectOrder(ctx context.Context, orderID, supplierShopID, reas
 			var variantID int64
 			var qty int
 			rows.Scan(&variantID, &qty)
-			tx.Exec(ctx, `
+			_, updateErr := tx.Exec(ctx, `
 				UPDATE supplier_listing_variants
 				SET inventory_quantity = inventory_quantity + $1
 				WHERE shopify_variant_id = $2
 			`, qty, variantID)
+			if updateErr != nil {
+				s.logger.Error().Err(updateErr).Int64("variant", variantID).Int("qty", qty).Msg("failed to restore inventory")
+			} else {
+				s.logger.Info().Int64("variant", variantID).Int("qty", qty).Msg("inventory restored on reject")
+			}
 		}
 		rows.Close()
 	}
