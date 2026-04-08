@@ -24,9 +24,11 @@ interface NotifResponse {
 
 export default function Notifications() {
   const limit = 30;
+  const [page, setPage] = useState(0);
   const { data, loading, refetch } = useApi<NotifResponse>(
-    `/notifications?limit=${limit}&offset=0`,
+    `/notifications?limit=${limit}&offset=${page * limit}`,
   );
+  const totalPages = Math.ceil((data?.total || 0) / limit);
   const [markingAll, setMarkingAll] = useState(false);
 
   const handleMarkRead = useCallback(async (id: string) => {
@@ -110,6 +112,15 @@ export default function Notifications() {
             </Card>
           )}
         </Layout.Section>
+        {totalPages > 1 && (
+          <Layout.Section>
+            <InlineStack align="center" gap="200">
+              <Button disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Previous</Button>
+              <Text as="span" variant="bodySm">Page {page + 1} of {totalPages}</Text>
+              <Button disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>Next</Button>
+            </InlineStack>
+          </Layout.Section>
+        )}
       </Layout>
     </Page>
   );

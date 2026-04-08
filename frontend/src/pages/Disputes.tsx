@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Page, Layout, Card, DataTable, Badge, Button, Spinner, Banner,
   BlockStack, Modal, FormLayout, TextField, Select,
-  EmptyState,
+  EmptyState, Text, InlineStack,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
 import { useToast } from '../hooks/useToast';
@@ -45,11 +45,14 @@ export default function Disputes() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [page, setPage] = useState(0);
 
   const limit = 20;
   const { data, loading, refetch } = useApi<DisputesResponse>(
-    `/disputes?limit=${limit}&offset=0`,
+    `/disputes?limit=${limit}&offset=${page * limit}`,
   );
+
+  const totalPages = Math.ceil((data?.total || 0) / limit);
 
   const handleCreate = useCallback(async () => {
     setCreating(true);
@@ -120,6 +123,15 @@ export default function Disputes() {
             </BlockStack>
           </Card>
         </Layout.Section>
+        {totalPages > 1 && (
+          <Layout.Section>
+            <InlineStack align="center" gap="200">
+              <Button disabled={page === 0} onClick={() => setPage((p) => p - 1)}>Previous</Button>
+              <Text as="span" variant="bodySm">Page {page + 1} of {totalPages}</Text>
+              <Button disabled={page >= totalPages - 1} onClick={() => setPage((p) => p + 1)}>Next</Button>
+            </InlineStack>
+          </Layout.Section>
+        )}
       </Layout>
 
       {createModal && (
