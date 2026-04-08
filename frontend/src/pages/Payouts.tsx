@@ -2,7 +2,6 @@ import { useState, useCallback } from 'react';
 import {
   Page, Layout, Card, BlockStack, Text, Badge, Spinner,
   Banner, InlineStack, Divider, EmptyState, Button,
-  Modal, TextField, FormLayout,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
 import { useToast } from '../hooks/useToast';
@@ -44,25 +43,7 @@ export default function Payouts({ role }: Props) {
   const [confirmAction, setConfirmAction] = useState<{ order: PayoutOrder; action: string } | null>(null);
   const [acting, setActing] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
-  const [paypalModal, setPaypalModal] = useState(false);
-  const [paypalEmail, setPaypalEmail] = useState('');
-  const [savingPaypal, setSavingPaypal] = useState(false);
-
   const isSupplier = role === 'supplier';
-
-  const handleSavePaypal = useCallback(async () => {
-    if (!paypalEmail.trim()) return;
-    setSavingPaypal(true);
-    try {
-      const endpoint = isSupplier ? '/supplier/profile' : '/reseller/profile';
-      await api.put(endpoint, { paypal_email: paypalEmail.trim() });
-      setPaypalModal(false);
-      setSuccess('PayPal email saved successfully.');
-      toast.success('PayPal email saved');
-      refetch();
-    } catch { toast.error('Failed to save PayPal email'); }
-    finally { setSavingPaypal(false); }
-  }, [paypalEmail, isSupplier, refetch, toast]);
 
   const handleAction = useCallback(async () => {
     if (!confirmAction) return;
@@ -121,13 +102,13 @@ export default function Payouts({ role }: Props) {
             <Banner
               tone="warning"
               action={{
-                content: 'Add PayPal Email',
-                onAction: () => setPaypalModal(true),
+                content: 'Go to Settings',
+                onAction: () => { window.location.href = isSupplier ? '#/supplier/setup' : '#/reseller/settings'; },
               }}
             >
               {isSupplier
-                ? 'Add your PayPal email so resellers can pay you directly with one click.'
-                : 'Add your PayPal email so suppliers can verify your payments.'}
+                ? 'Add your PayPal email in Settings so resellers can pay you directly.'
+                : 'Add your PayPal email in Settings so suppliers can verify your payments.'}
             </Banner>
           </Layout.Section>
         )}
@@ -264,18 +245,12 @@ export default function Payouts({ role }: Props) {
                                   Pay ${amt.toFixed(2)}
                                 </a>
                               ) : (
-                                <button
-                                  onClick={() => setPaypalModal(true)}
-                                  style={{
-                                    padding: '8px 16px', borderRadius: '8px', fontSize: '13px', fontWeight: 600,
-                                    background: '#fef3c7', color: '#92400e', border: '1px solid #fcd34d',
-                                    cursor: 'pointer', transition: 'background 0.15s',
-                                  }}
-                                  onMouseOver={(e) => (e.currentTarget.style.background = '#fde68a')}
-                                  onMouseOut={(e) => (e.currentTarget.style.background = '#fef3c7')}
-                                >
-                                  + Add PayPal
-                                </button>
+                                <span style={{
+                                  padding: '6px 12px', borderRadius: '8px', fontSize: '12px', fontWeight: 500,
+                                  background: '#fef3c7', color: '#92400e',
+                                }}>
+                                  Supplier has no PayPal
+                                </span>
                               )}
                               <Button size="slim" variant="secondary" onClick={() => setConfirmAction({ order: p, action: 'send-payment' })}>
                                 {p.pay_status === 'disputed' ? 'Retry — Mark Paid' : 'Mark as Paid'}
@@ -358,31 +333,6 @@ export default function Payouts({ role }: Props) {
         onCancel={() => setConfirmAction(null)}
       />
 
-      {paypalModal && (
-        <Modal
-          open
-          onClose={() => setPaypalModal(false)}
-          title="Add PayPal Email"
-          primaryAction={{ content: 'Save', onAction: handleSavePaypal, loading: savingPaypal, disabled: !paypalEmail.trim() }}
-          secondaryActions={[{ content: 'Cancel', onAction: () => setPaypalModal(false) }]}
-        >
-          <Modal.Section>
-            <FormLayout>
-              <TextField
-                label="PayPal Email"
-                type="email"
-                value={paypalEmail}
-                onChange={setPaypalEmail}
-                autoComplete="email"
-                placeholder="your@email.com"
-                helpText={isSupplier
-                  ? 'Resellers will use this email to send you payments via PayPal.'
-                  : 'This email will be shared with suppliers for payment verification.'}
-              />
-            </FormLayout>
-          </Modal.Section>
-        </Modal>
-      )}
     </Page>
   );
 }
