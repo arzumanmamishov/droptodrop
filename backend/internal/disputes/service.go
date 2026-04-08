@@ -49,14 +49,15 @@ func NewService(db *pgxpool.Pool, logger zerolog.Logger) *Service {
 
 // Create creates a new dispute for a routed order.
 func (s *Service) Create(ctx context.Context, shopID, role string, input CreateInput) (*Dispute, error) {
-	// Resolve order: accept UUID or order number
+	// Resolve order: accept UUID, order number with or without #
+	orderInput := input.RoutedOrderID
 	var routedOrderID string
 	err := s.db.QueryRow(ctx, `
 		SELECT id FROM routed_orders
-		WHERE (id::text = $1 OR reseller_order_number = $1)
+		WHERE (id::text = $1 OR reseller_order_number = $1 OR reseller_order_number = '#' || $1 OR reseller_order_number = $1)
 		AND (reseller_shop_id = $2 OR supplier_shop_id = $2)
 		LIMIT 1
-	`, input.RoutedOrderID, shopID).Scan(&routedOrderID)
+	`, orderInput, shopID).Scan(&routedOrderID)
 	if err != nil {
 		return nil, fmt.Errorf("order not found or access denied")
 	}

@@ -59,7 +59,7 @@ export default function Disputes() {
     setError(null);
     try {
       await api.post('/disputes', {
-        routed_order_id: orderId,
+        routed_order_id: orderId.replace('#', '').trim(),
         dispute_type: disputeType,
         description,
       });
