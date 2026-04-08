@@ -1251,6 +1251,96 @@ func (w *Worker) handleRouteOrder(ctx context.Context, payload json.RawMessage) 
 // =============================================================================
 // handleSupplierNotification: Notifies a supplier of a new incoming order.
 // =============================================================================
+// SyncImportPrice updates the reseller's Shopify product price from the latest wholesale price.
+func (w *Worker) SyncImportPrice(ctx context.Context, importID, resellerShopID string) error {
+	// Get Shopify client for reseller
+	client, _, err := w.getShopifyClient(ctx, resellerShopID)
+	if err != nil {
+		return fmt.Errorf("get reseller client: %w", err)
+	}
+
+	// Get the import's Shopify product ID and variant data
+	var shopifyProductID *int64
+	w.db.QueryRow(ctx, `SELECT shopify_product_id FROM reseller_imports WHERE id = $1`, importID).Scan(&shopifyProductID)
+	if shopifyProductID == nil || *shopifyProductID == 0 {
+		return nil // No Shopify product to update
+	}
+
+	// Get updated reseller prices
+	rows, err := w.db.Query(ctx, `
+		SELECT riv.shopify_variant_id, riv.reseller_price
+		FROM reseller_import_variants riv
+		WHERE riv.import_id = $1 AND riv.shopify_variant_id IS NOT NULL
+	`, importID)
+	if err != nil {
+		return fmt.Errorf("get variants: %w", err)
+	}
+	defer rows.Close()
+
+	var variantUpdates []map[string]interface{}
+	for rows.Next() {
+		var shopifyVarID int64
+		var price float64
+		rows.Scan(&shopifyVarID, &price)
+		if shopifyVarID > 0 && price > 0 {
+			variantUpdates = append(variantUpdates, map[string]interface{}{
+				"id":    fmt.Sprintf("gid://shopify/ProductVariant/%d", shopifyVarID),
+				"price": fmt.Sprintf("%.2f", price),
+			})
+		}
+	}
+
+	if len(variantUpdates) == 0 {
+		// No shopify_variant_id stored — try updating the default variant
+		productGID := fmt.Sprintf("gid://shopify/Product/%d", *shopifyProductID)
+		var getResult struct {
+			Data struct {
+				Product struct {
+					Variants struct {
+						Edges []struct {
+							Node struct{ ID string `json:"id"` } `json:"node"`
+						} `json:"edges"`
+					} `json:"variants"`
+				} `json:"product"`
+			} `json:"data"`
+		}
+		client.GraphQL(ctx, fmt.Sprintf(`{ product(id: "%s") { variants(first:1) { edges { node { id } } } } }`, productGID), nil, &getResult)
+		if len(getResult.Data.Product.Variants.Edges) > 0 {
+			var price float64
+			w.db.QueryRow(ctx, `SELECT reseller_price FROM reseller_import_variants WHERE import_id = $1 LIMIT 1`, importID).Scan(&price)
+			if price > 0 {
+				variantUpdates = append(variantUpdates, map[string]interface{}{
+					"id":    getResult.Data.Product.Variants.Edges[0].Node.ID,
+					"price": fmt.Sprintf("%.2f", price),
+				})
+			}
+		}
+	}
+
+	if len(variantUpdates) == 0 {
+		return nil
+	}
+
+	// Update prices in Shopify
+	productGID := fmt.Sprintf("gid://shopify/Product/%d", *shopifyProductID)
+	updateQuery := `mutation($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+		productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+			productVariants { id price }
+			userErrors { field message }
+		}
+	}`
+	var result json.RawMessage
+	if err := client.GraphQL(ctx, updateQuery, map[string]interface{}{
+		"productId": productGID,
+		"variants":  variantUpdates,
+	}, &result); err != nil {
+		return fmt.Errorf("update shopify prices: %w", err)
+	}
+
+	w.logger.Info().Str("import_id", importID).Int("variants_updated", len(variantUpdates)).Msg("reseller Shopify prices synced")
+	return nil
+}
+
 // RunSupplierNotification runs the supplier notification job synchronously.
 func (w *Worker) RunSupplierNotification(ctx context.Context, routedOrderID, supplierShopID string) error {
 	payload, _ := json.Marshal(map[string]string{"routed_order_id": routedOrderID, "supplier_shop_id": supplierShopID})

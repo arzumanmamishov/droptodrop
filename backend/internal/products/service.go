@@ -463,6 +463,7 @@ func (s *Service) UpdateListing(ctx context.Context, shopID, listingID string, i
 		return fmt.Errorf("listing not found")
 	}
 
+	priceChanged := false
 	for variantID, price := range input.VariantPrices {
 		_, err := tx.Exec(ctx, `
 			UPDATE supplier_listing_variants SET wholesale_price = $1
@@ -470,6 +471,38 @@ func (s *Service) UpdateListing(ctx context.Context, shopID, listingID string, i
 		`, price, variantID, listingID)
 		if err != nil {
 			return fmt.Errorf("update variant price: %w", err)
+		}
+		priceChanged = true
+	}
+
+	// If prices changed, update all reseller import variant prices
+	if priceChanged {
+		rows, err := tx.Query(ctx, `
+			SELECT riv.id, riv.reseller_price, slv.wholesale_price, ri.markup_type, ri.markup_value
+			FROM reseller_import_variants riv
+			JOIN supplier_listing_variants slv ON slv.id = riv.supplier_variant_id
+			JOIN reseller_imports ri ON ri.id = riv.import_id
+			WHERE ri.supplier_listing_id = $1 AND ri.status = 'active'
+		`, listingID)
+		if err == nil {
+			type updateItem struct {
+				ID    string
+				Price float64
+			}
+			var updates []updateItem
+			for rows.Next() {
+				var rivID, markupType string
+				var oldPrice, wholesale, markupValue float64
+				rows.Scan(&rivID, &oldPrice, &wholesale, &markupType, &markupValue)
+				newPrice := calculateResellerPrice(wholesale, markupType, markupValue)
+				updates = append(updates, updateItem{ID: rivID, Price: newPrice})
+			}
+			rows.Close()
+
+			for _, u := range updates {
+				tx.Exec(ctx, `UPDATE reseller_import_variants SET reseller_price = $1 WHERE id = $2`, u.Price, u.ID)
+			}
+			s.logger.Info().Int("reseller_variants_updated", len(updates)).Str("listing_id", listingID).Msg("reseller prices updated from supplier price change")
 		}
 	}
 
@@ -480,8 +513,20 @@ func (s *Service) UpdateListing(ctx context.Context, shopID, listingID string, i
 	s.audit.Log(ctx, shopID, "merchant", shopID, "listing_updated", "supplier_listing", listingID, map[string]interface{}{
 		"title":    input.Title,
 		"category": input.Category,
+		"price_changed": priceChanged,
 	}, "success", "")
 	return nil
+}
+
+func calculateResellerPrice(wholesale float64, markupType string, markupValue float64) float64 {
+	switch markupType {
+	case "fixed":
+		return wholesale + markupValue
+	case "percentage":
+		return wholesale * (1 + markupValue/100)
+	default:
+		return wholesale * 1.3
+	}
 }
 
 // MarketplaceFilters holds filtering options for marketplace search.

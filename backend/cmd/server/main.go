@@ -426,15 +426,44 @@ func main() {
 
 			supplier.PUT("/listings/:id", func(c *gin.Context) {
 				shopID, _ := c.Get("shop_id")
+				listingID := c.Param("id")
 				var input products.UpdateListingInput
 				if err := c.ShouldBindJSON(&input); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
-				if err := productsSvc.UpdateListing(c.Request.Context(), shopID.(string), c.Param("id"), input); err != nil {
+				if err := productsSvc.UpdateListing(c.Request.Context(), shopID.(string), listingID, input); err != nil {
 					c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 					return
 				}
+
+				// If prices changed, sync to resellers' Shopify stores in background
+				if len(input.VariantPrices) > 0 {
+					go func() {
+						bgCtx := context.Background()
+						// Find all active reseller imports for this listing
+						rows, err := db.Query(bgCtx, `
+							SELECT ri.id, ri.reseller_shop_id FROM reseller_imports ri
+							WHERE ri.supplier_listing_id = $1 AND ri.status = 'active' AND ri.shopify_product_id IS NOT NULL
+						`, listingID)
+						if err != nil {
+							logger.Error().Err(err).Msg("failed to find reseller imports for price sync")
+							return
+						}
+						defer rows.Close()
+						for rows.Next() {
+							var importID, resellerShopID string
+							rows.Scan(&importID, &resellerShopID)
+							// Sync updated price to reseller's Shopify product
+							if err := jobWorker.SyncImportPrice(bgCtx, importID, resellerShopID); err != nil {
+								logger.Error().Err(err).Str("import_id", importID).Msg("failed to sync price to reseller")
+							} else {
+								logger.Info().Str("import_id", importID).Msg("price synced to reseller Shopify store")
+							}
+						}
+					}()
+				}
+
 				c.JSON(http.StatusOK, gin.H{"status": "ok"})
 			})
 
