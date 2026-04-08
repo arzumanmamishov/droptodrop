@@ -5,6 +5,7 @@ import {
   Modal, TextField,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
+import { useToast } from '../hooks/useToast';
 import { api } from '../utils/api';
 
 interface Reseller {
@@ -17,6 +18,7 @@ interface Reseller {
 }
 
 export default function Resellers() {
+  const toast = useToast();
   const { data, loading, error, refetch } = useApi<{ resellers: Reseller[] }>('/supplier/resellers');
   const [actionModal, setActionModal] = useState<Reseller | null>(null);
   const [newStatus, setNewStatus] = useState('paused');
@@ -35,9 +37,9 @@ export default function Resellers() {
       setActionModal(null);
       setReason('');
       refetch();
-    } catch { /* */ }
+    } catch { toast.error('Failed to update reseller status'); }
     finally { setSaving(false); }
-  }, [actionModal, newStatus, reason, refetch]);
+  }, [actionModal, newStatus, reason, refetch, toast]);
 
   if (loading) {
     return <Page title="My Resellers"><div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><Spinner size="large" /></div></Page>;

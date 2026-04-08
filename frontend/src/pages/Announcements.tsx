@@ -7,6 +7,7 @@ import {
 } from '@shopify/polaris';
 import { MegaphoneIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
+import { useToast } from '../hooks/useToast';
 import { api } from '../utils/api';
 
 interface Announcement {
@@ -25,6 +26,7 @@ interface Props {
 }
 
 export default function Announcements({ role }: Props) {
+  const toast = useToast();
   const { data, loading, refetch } = useApi<{ announcements: Announcement[] }>('/announcements');
   const [createModal, setCreateModal] = useState(false);
   const [title, setTitle] = useState('');
@@ -60,15 +62,15 @@ export default function Announcements({ role }: Props) {
     try {
       await api.delete(`/announcements/${id}`);
       refetch();
-    } catch { /* */ }
-  }, [refetch]);
+    } catch { toast.error('Failed to delete announcement'); }
+  }, [refetch, toast]);
 
   const handleMarkRead = useCallback(async (id: string) => {
     try {
       await api.post(`/announcements/${id}/read`);
       refetch();
-    } catch { /* */ }
-  }, [refetch]);
+    } catch { toast.error('Failed to mark announcement as read'); }
+  }, [refetch, toast]);
 
   if (loading) {
     return <Page title="Announcements"><div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><Spinner size="large" /></div></Page>;

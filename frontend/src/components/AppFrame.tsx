@@ -88,6 +88,7 @@ export default function AppFrame({ shop, children }: AppFrameProps) {
     { url: '/marketplace', label: 'Marketplace', icon: StoreIcon, selected: location.pathname === '/marketplace' },
     { url: '/orders', label: 'Orders', icon: OrderIcon, selected: location.pathname.startsWith('/orders'), badge: badge(counts.orders) },
     { url: '/imports', label: 'Imports', icon: ImportIcon, selected: location.pathname === '/imports' },
+    { url: '/bulk-import', label: 'Bulk Import', icon: ImportIcon, selected: location.pathname === '/bulk-import' },
     { url: '/payouts', label: 'Payouts', icon: CashDollarIcon, selected: location.pathname === '/payouts', badge: badge(counts.payouts) },
     { url: '/messages', label: 'Messages', icon: ChatIcon, selected: location.pathname === '/messages', badge: badge(counts.messages) },
     { url: '/notifications', label: 'Notifications', icon: NotificationIcon, selected: location.pathname === '/notifications', badge: badge(counts.notifications) },

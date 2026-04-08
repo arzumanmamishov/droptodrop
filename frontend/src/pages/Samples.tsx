@@ -4,6 +4,7 @@ import {
   InlineStack, EmptyState, DataTable, Button,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
+import { useToast } from '../hooks/useToast';
 import { api } from '../utils/api';
 
 interface SampleOrder {
@@ -14,6 +15,7 @@ interface SampleOrder {
 interface Props { role: string; }
 
 export default function Samples({ role }: Props) {
+  const toast = useToast();
   const isSupplier = role === 'supplier';
   const { data, loading, refetch } = useApi<{ samples: SampleOrder[] }>('/samples');
   const [updating, setUpdating] = useState<string | null>(null);
@@ -23,9 +25,9 @@ export default function Samples({ role }: Props) {
     try {
       await api.put(`/samples/${id}`, { status, tracking: '' });
       refetch();
-    } catch { /* */ }
+    } catch { toast.error('Failed to update sample order'); }
     finally { setUpdating(null); }
-  }, [refetch]);
+  }, [refetch, toast]);
 
   if (loading) return <Page title="Samples"><div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><Spinner size="large" /></div></Page>;
 

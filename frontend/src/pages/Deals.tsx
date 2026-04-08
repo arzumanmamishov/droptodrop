@@ -6,6 +6,7 @@ import {
 } from '@shopify/polaris';
 import { DiscountIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
+import { useToast } from '../hooks/useToast';
 import { api } from '../utils/api';
 
 interface Deal {
@@ -16,6 +17,7 @@ interface Deal {
 interface Props { role: string; }
 
 export default function Deals({ role }: Props) {
+  const toast = useToast();
   const isSupplier = role === 'supplier';
   const { data, loading, refetch } = useApi<{ deals: Deal[] }>('/deals');
   const [createModal, setCreateModal] = useState(false);
@@ -42,9 +44,9 @@ export default function Deals({ role }: Props) {
       setCreateModal(false);
       setTitle(''); setDiscountValue('10');
       refetch();
-    } catch { /* */ }
+    } catch { toast.error('Failed to create deal'); }
     finally { setCreating(false); }
-  }, [title, discountType, discountValue, daysValid, maxUses, refetch]);
+  }, [title, discountType, discountValue, daysValid, maxUses, refetch, toast]);
 
   if (loading) return <Page title="Deals"><div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><Spinner size="large" /></div></Page>;
 

@@ -5,6 +5,7 @@ import {
 } from '@shopify/polaris';
 import { NotificationIcon, CheckIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
+import { useToast } from '../hooks/useToast';
 import { api } from '../utils/api';
 
 interface Notification {
@@ -23,6 +24,7 @@ interface NotifResponse {
 }
 
 export default function Notifications() {
+  const toast = useToast();
   const limit = 30;
   const [page, setPage] = useState(0);
   const { data, loading, refetch } = useApi<NotifResponse>(
@@ -35,17 +37,17 @@ export default function Notifications() {
     try {
       await api.post(`/notifications/read/${id}`);
       refetch();
-    } catch { /* */ }
-  }, [refetch]);
+    } catch { toast.error('Failed to mark notification as read'); }
+  }, [refetch, toast]);
 
   const handleMarkAllRead = useCallback(async () => {
     setMarkingAll(true);
     try {
       await api.post('/notifications/read-all');
       refetch();
-    } catch { /* */ }
+    } catch { toast.error('Failed to mark all notifications as read'); }
     finally { setMarkingAll(false); }
-  }, [refetch]);
+  }, [refetch, toast]);
 
   if (loading) {
     return <Page title="Notifications"><div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><Spinner size="large" /></div></Page>;

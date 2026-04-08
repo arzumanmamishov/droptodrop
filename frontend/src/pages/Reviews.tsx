@@ -5,6 +5,7 @@ import {
   EmptyState, ProgressBar,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
+import { useToast } from '../hooks/useToast';
 import { api } from '../utils/api';
 
 interface Review {
@@ -18,6 +19,7 @@ interface ReviewSummary {
 interface Props { role: string; shopId: string; }
 
 export default function Reviews({ role, shopId }: Props) {
+  const toast = useToast();
   const isSupplier = role === 'supplier';
   const endpoint = isSupplier ? `/reviews/${shopId}` : null;
   const { data, loading, refetch } = useApi<{ reviews: Review[]; summary: ReviewSummary }>(endpoint || '/reviews/none');
@@ -38,9 +40,9 @@ export default function Reviews({ role, shopId }: Props) {
       setWriteModal(false);
       setTitle(''); setComment('');
       refetch();
-    } catch { /* */ }
+    } catch { toast.error('Failed to submit review'); }
     finally { setSubmitting(false); }
-  }, [supplierID, rating, title, comment, refetch]);
+  }, [supplierID, rating, title, comment, refetch, toast]);
 
   if (loading) return <Page title="Reviews"><div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><Spinner size="large" /></div></Page>;
 

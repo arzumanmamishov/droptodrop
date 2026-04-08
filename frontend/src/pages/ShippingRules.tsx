@@ -5,6 +5,7 @@ import {
   EmptyState, DataTable,
 } from '@shopify/polaris';
 import { useApi } from '../hooks/useApi';
+import { useToast } from '../hooks/useToast';
 import { api } from '../utils/api';
 
 interface ShippingRule {
@@ -14,6 +15,7 @@ interface ShippingRule {
 }
 
 export default function ShippingRules() {
+  const toast = useToast();
   const { data, loading, refetch } = useApi<{ rules: ShippingRule[] }>('/shipping-rules');
   const [addModal, setAddModal] = useState(false);
   const [country, setCountry] = useState('');
@@ -38,9 +40,9 @@ export default function ShippingRules() {
       setAddModal(false);
       setCountry(''); setRate('5.00'); setFreeThreshold('');
       refetch();
-    } catch { /* */ }
+    } catch { toast.error('Failed to save shipping rule'); }
     finally { setSaving(false); }
-  }, [country, rate, freeThreshold, daysMin, daysMax, refetch]);
+  }, [country, rate, freeThreshold, daysMin, daysMax, refetch, toast]);
 
   if (loading) return <Page title="Shipping Rules"><div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><Spinner size="large" /></div></Page>;
 
