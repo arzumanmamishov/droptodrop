@@ -1251,48 +1251,60 @@ func (w *Worker) handleRouteOrder(ctx context.Context, payload json.RawMessage) 
 // =============================================================================
 // handleSupplierNotification: Notifies a supplier of a new incoming order.
 // =============================================================================
-// SyncImportPrice updates the reseller's Shopify product price from the latest wholesale price.
-func (w *Worker) SyncImportPrice(ctx context.Context, importID, resellerShopID string) error {
-	// Get Shopify client for reseller
+// SyncImportToShopify syncs all data (price, title, description, inventory) to the reseller's Shopify product.
+func (w *Worker) SyncImportToShopify(ctx context.Context, importID, resellerShopID string) error {
 	client, _, err := w.getShopifyClient(ctx, resellerShopID)
 	if err != nil {
 		return fmt.Errorf("get reseller client: %w", err)
 	}
 
-	// Get the import's Shopify product ID and variant data
+	// Get import + listing data
 	var shopifyProductID *int64
-	w.db.QueryRow(ctx, `SELECT shopify_product_id FROM reseller_imports WHERE id = $1`, importID).Scan(&shopifyProductID)
-	if shopifyProductID == nil || *shopifyProductID == 0 {
-		return nil // No Shopify product to update
+	var supplierListingID string
+	var markupType string
+	var markupValue float64
+	err = w.db.QueryRow(ctx, `
+		SELECT ri.shopify_product_id, ri.supplier_listing_id, ri.markup_type, ri.markup_value
+		FROM reseller_imports ri
+		WHERE ri.id = $1
+	`, importID).Scan(&shopifyProductID, &supplierListingID, &markupType, &markupValue)
+	if err != nil || shopifyProductID == nil || *shopifyProductID == 0 {
+		return nil
 	}
 
-	// Get updated reseller prices
+	productGID := fmt.Sprintf("gid://shopify/Product/%d", *shopifyProductID)
+
+	// 1. Get variant data and update prices
 	rows, err := w.db.Query(ctx, `
-		SELECT riv.shopify_variant_id, riv.reseller_price
+		SELECT slv.wholesale_price, slv.inventory_quantity, riv.shopify_variant_id
 		FROM reseller_import_variants riv
-		WHERE riv.import_id = $1 AND riv.shopify_variant_id IS NOT NULL
+		JOIN supplier_listing_variants slv ON slv.id = riv.supplier_variant_id
+		WHERE riv.import_id = $1
 	`, importID)
 	if err != nil {
 		return fmt.Errorf("get variants: %w", err)
 	}
-	defer rows.Close()
 
-	var variantUpdates []map[string]interface{}
-	for rows.Next() {
-		var shopifyVarID int64
-		var price float64
-		rows.Scan(&shopifyVarID, &price)
-		if shopifyVarID > 0 && price > 0 {
-			variantUpdates = append(variantUpdates, map[string]interface{}{
-				"id":    fmt.Sprintf("gid://shopify/ProductVariant/%d", shopifyVarID),
-				"price": fmt.Sprintf("%.2f", price),
-			})
-		}
+	type varData struct {
+		Wholesale  float64
+		Quantity   int
+		ShopifyID  int64
 	}
+	var variants []varData
+	for rows.Next() {
+		var v varData
+		rows.Scan(&v.Wholesale, &v.Quantity, &v.ShopifyID)
+		variants = append(variants, v)
+	}
+	rows.Close()
 
-	if len(variantUpdates) == 0 {
-		// No shopify_variant_id stored — try updating the default variant
-		productGID := fmt.Sprintf("gid://shopify/Product/%d", *shopifyProductID)
+	// Get the product's Shopify variant if we don't have IDs stored
+	var variantGIDs []string
+	if len(variants) > 0 && variants[0].ShopifyID > 0 {
+		for _, v := range variants {
+			variantGIDs = append(variantGIDs, fmt.Sprintf("gid://shopify/ProductVariant/%d", v.ShopifyID))
+		}
+	} else {
 		var getResult struct {
 			Data struct {
 				Product struct {
@@ -1304,41 +1316,106 @@ func (w *Worker) SyncImportPrice(ctx context.Context, importID, resellerShopID s
 				} `json:"product"`
 			} `json:"data"`
 		}
-		client.GraphQL(ctx, fmt.Sprintf(`{ product(id: "%s") { variants(first:1) { edges { node { id } } } } }`, productGID), nil, &getResult)
-		if len(getResult.Data.Product.Variants.Edges) > 0 {
-			var price float64
-			w.db.QueryRow(ctx, `SELECT reseller_price FROM reseller_import_variants WHERE import_id = $1 LIMIT 1`, importID).Scan(&price)
-			if price > 0 {
+		client.GraphQL(ctx, fmt.Sprintf(`{ product(id: "%s") { variants(first:10) { edges { node { id } } } } }`, productGID), nil, &getResult)
+		for _, e := range getResult.Data.Product.Variants.Edges {
+			variantGIDs = append(variantGIDs, e.Node.ID)
+		}
+	}
+
+	// Update variant prices
+	if len(variantGIDs) > 0 && len(variants) > 0 {
+		var variantUpdates []map[string]interface{}
+		for i, gid := range variantGIDs {
+			if i < len(variants) {
+				resellerPrice := calculateResellerPriceWorker(variants[i].Wholesale, markupType, markupValue)
 				variantUpdates = append(variantUpdates, map[string]interface{}{
-					"id":    getResult.Data.Product.Variants.Edges[0].Node.ID,
-					"price": fmt.Sprintf("%.2f", price),
+					"id":    gid,
+					"price": fmt.Sprintf("%.2f", resellerPrice),
 				})
+				// Update DB too
+				w.db.Exec(ctx, `UPDATE reseller_import_variants SET reseller_price = $1 WHERE import_id = $2 AND supplier_variant_id = (SELECT id FROM supplier_listing_variants WHERE shopify_variant_id = $3 LIMIT 1)`, resellerPrice, importID, variants[i].ShopifyID)
+			}
+		}
+		if len(variantUpdates) > 0 {
+			var priceResult interface{}
+			client.GraphQL(ctx, `mutation($productId: ID!, $variants: [ProductVariantsBulkInput!]!) { productVariantsBulkUpdate(productId: $productId, variants: $variants) { productVariants { id price } userErrors { field message } } }`, map[string]interface{}{
+				"productId": productGID, "variants": variantUpdates,
+			}, &priceResult)
+		}
+	}
+
+	// 3. Update inventory
+	if len(variantGIDs) > 0 && len(variants) > 0 {
+		// Get inventory item for first variant
+		var invResp struct {
+			Data struct {
+				ProductVariant struct {
+					InventoryItem struct {
+						ID string `json:"id"`
+						InventoryLevels struct {
+							Edges []struct {
+								Node struct {
+									Location struct{ ID string `json:"id"` } `json:"location"`
+								} `json:"node"`
+							} `json:"edges"`
+						} `json:"inventoryLevels"`
+					} `json:"inventoryItem"`
+				} `json:"productVariant"`
+			} `json:"data"`
+		}
+		client.GraphQL(ctx, `query($id: ID!) { productVariant(id: $id) { inventoryItem { id inventoryLevels(first:5) { edges { node { location { id } } } } } } }`, map[string]interface{}{"id": variantGIDs[0]}, &invResp)
+
+		invItemGID := invResp.Data.ProductVariant.InventoryItem.ID
+		if invItemGID != "" {
+			// Get marketplace stock percent
+			var stockPct int
+			w.db.QueryRow(ctx, `SELECT COALESCE(marketplace_stock_percent, 100) FROM supplier_listings WHERE id = $1`, supplierListingID).Scan(&stockPct)
+			supplierQty := variants[0].Quantity
+			availableQty := (supplierQty * stockPct) / 100
+			if availableQty < 0 { availableQty = 0 }
+
+			// Get location from inventory levels
+			var locationGIDs []string
+			for _, e := range invResp.Data.ProductVariant.InventoryItem.InventoryLevels.Edges {
+				if e.Node.Location.ID != "" {
+					locationGIDs = append(locationGIDs, e.Node.Location.ID)
+				}
+			}
+			if len(locationGIDs) == 0 {
+				// Fallback: REST API
+				var restLocs struct{ Locations []struct{ ID int64 `json:"id"` } `json:"locations"` }
+				client.REST(ctx, "GET", "locations.json", nil, &restLocs)
+				for _, l := range restLocs.Locations {
+					locationGIDs = append(locationGIDs, fmt.Sprintf("gid://shopify/Location/%d", l.ID))
+				}
+			}
+
+			if len(locationGIDs) > 0 {
+				invItemID, _ := shopify.ParseGID(invItemGID)
+				locationID, _ := shopify.ParseGID(locationGIDs[0])
+				if invItemID > 0 && locationID > 0 {
+					client.SetInventoryQuantity(ctx, invItemID, locationID, availableQty)
+				}
 			}
 		}
 	}
 
-	if len(variantUpdates) == 0 {
-		return nil
-	}
+	// Update last_sync_at
+	w.db.Exec(ctx, `UPDATE reseller_imports SET last_sync_at = NOW(), last_sync_error = NULL WHERE id = $1`, importID)
 
-	// Update prices in Shopify
-	productGID := fmt.Sprintf("gid://shopify/Product/%d", *shopifyProductID)
-	updateQuery := `mutation($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
-		productVariantsBulkUpdate(productId: $productId, variants: $variants) {
-			productVariants { id price }
-			userErrors { field message }
-		}
-	}`
-	var result json.RawMessage
-	if err := client.GraphQL(ctx, updateQuery, map[string]interface{}{
-		"productId": productGID,
-		"variants":  variantUpdates,
-	}, &result); err != nil {
-		return fmt.Errorf("update shopify prices: %w", err)
-	}
-
-	w.logger.Info().Str("import_id", importID).Int("variants_updated", len(variantUpdates)).Msg("reseller Shopify prices synced")
+	w.logger.Info().Str("import_id", importID).Msg("full sync to reseller Shopify complete")
 	return nil
+}
+
+func calculateResellerPriceWorker(wholesale float64, markupType string, markupValue float64) float64 {
+	switch markupType {
+	case "fixed":
+		return wholesale + markupValue
+	case "percentage":
+		return wholesale * (1 + markupValue/100)
+	default:
+		return wholesale * 1.3
+	}
 }
 
 // RunSupplierNotification runs the supplier notification job synchronously.
