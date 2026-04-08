@@ -234,7 +234,18 @@ export default function SupplierListings() {
                                 <Button size="slim" onClick={() => handleStatusChange(listing.id, 'active')}>Resume</Button>
                               )}
                             </InlineStack>
-                            <Button size="slim" tone="critical" onClick={() => setConfirmDelete(listing.id)}>Delete</Button>
+                            <button
+                              onClick={() => setConfirmDelete(listing.id)}
+                              style={{
+                                padding: '4px 14px', fontSize: '13px', fontWeight: 600,
+                                background: '#fee2e2', color: '#dc2626', border: '1px solid #fca5a5',
+                                borderRadius: '8px', cursor: 'pointer', transition: 'all 0.15s',
+                              }}
+                              onMouseOver={(e) => { e.currentTarget.style.background = '#dc2626'; e.currentTarget.style.color = '#fff'; }}
+                              onMouseOut={(e) => { e.currentTarget.style.background = '#fee2e2'; e.currentTarget.style.color = '#dc2626'; }}
+                            >
+                              Delete
+                            </button>
                           </BlockStack>
                         </InlineStack>
                       </div>
