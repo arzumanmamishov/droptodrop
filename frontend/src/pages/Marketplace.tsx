@@ -7,7 +7,9 @@ import {
 } from '@shopify/polaris';
 import { ImageIcon, DeliveryIcon } from '@shopify/polaris-icons';
 import { useApi } from '../hooks/useApi';
+import { useToast } from '../hooks/useToast';
 import { api } from '../utils/api';
+import ConfirmDialog from '../components/ConfirmDialog';
 import { SupplierListing } from '../types';
 import { PRODUCT_CATEGORIES, getCategoryLabel } from '../constants/categories';
 
@@ -62,20 +64,17 @@ export default function Marketplace() {
     } catch { /* */ }
   }, [navigate]);
 
-  const [sampleSuccess, setSampleSuccess] = useState(false);
-  const [sampleError, setSampleError] = useState<string | null>(null);
+  const toast = useToast();
+  const [confirmSample, setConfirmSample] = useState<string | null>(null);
 
   const requestSample = useCallback(async (listingId: string) => {
-    setSampleError(null);
     try {
       await api.post('/samples', { listing_id: listingId, quantity: 1, notes: 'Sample request from marketplace' });
-      setSampleSuccess(true);
-      setTimeout(() => setSampleSuccess(false), 3000);
+      toast.success('Sample requested');
     } catch (err) {
-      setSampleError(err instanceof Error ? err.message : 'Failed to request sample');
-      setTimeout(() => setSampleError(null), 3000);
+      toast.error(err instanceof Error ? err.message : 'Failed to request sample');
     }
-  }, []);
+  }, [toast]);
 
   const categoryTabs = PRODUCT_CATEGORIES.map((cat) => ({ id: cat.value, content: cat.label }));
 
@@ -102,16 +101,6 @@ export default function Marketplace() {
             <Banner tone="success" onDismiss={() => setImportSuccess(false)}>
               Product imported! Go to <strong>Shopify Admin → Products</strong> → click the product → <strong>Publishing</strong> → enable <strong>"Online Store"</strong> to make it visible on your website.
             </Banner>
-          </Layout.Section>
-        )}
-        {sampleSuccess && (
-          <Layout.Section>
-            <Banner tone="success" onDismiss={() => setSampleSuccess(false)}>Sample requested! Check the Samples page.</Banner>
-          </Layout.Section>
-        )}
-        {sampleError && (
-          <Layout.Section>
-            <Banner tone="critical" onDismiss={() => setSampleError(null)}>{sampleError}</Banner>
           </Layout.Section>
         )}
 
@@ -257,7 +246,7 @@ export default function Marketplace() {
                             Message
                           </div>
                           <div
-                            onClick={() => requestSample(listing.id)}
+                            onClick={() => setConfirmSample(listing.id)}
                             style={{
                               flex: 1, textAlign: 'center', padding: '8px 4px', borderRadius: '8px',
                               background: '#fef3cd', color: '#8a6d00', cursor: 'pointer', fontSize: '12px', fontWeight: 500,
@@ -469,6 +458,15 @@ export default function Marketplace() {
           </Modal.Section>
         </Modal>
       )}
+
+      <ConfirmDialog
+        open={confirmSample !== null}
+        title="Request Sample"
+        message="Are you sure you want to request a sample of this product from the supplier?"
+        confirmLabel="Yes, Request Sample"
+        onConfirm={() => { if (confirmSample) { requestSample(confirmSample); setConfirmSample(null); } }}
+        onCancel={() => setConfirmSample(null)}
+      />
     </Page>
   );
 }
