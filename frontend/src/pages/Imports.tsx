@@ -116,7 +116,10 @@ export default function Imports() {
       title="Imported Products"
       subtitle={`${data?.total || 0} products`}
       primaryAction={{ content: 'Browse Marketplace', onAction: () => navigate('/marketplace') }}
-      secondaryActions={selectedIds.size > 0 ? [{ content: `Delete ${selectedIds.size} selected`, onAction: () => setConfirmBulkDelete(true), destructive: true }] : []}
+      secondaryActions={[
+        ...(selectedIds.size > 0 ? [{ content: `Delete ${selectedIds.size} selected`, onAction: () => setConfirmBulkDelete(true), destructive: true }] : []),
+        { content: 'Bulk Import', onAction: () => navigate('/bulk-import') },
+      ]}
     >
       <Layout>
         {error && <Layout.Section><Banner tone="critical">{error}</Banner></Layout.Section>}
