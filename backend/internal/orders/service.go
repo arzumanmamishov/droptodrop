@@ -479,27 +479,34 @@ func (s *Service) RejectOrder(ctx context.Context, orderID, supplierShopID, reas
 		return fmt.Errorf("order not found or not in pending/accepted state")
 	}
 
-	// Restore inventory — add back the reserved quantities
+	// Restore inventory — collect items first, then update (avoid conn busy)
+	type restoreItem struct {
+		VariantID int64
+		Qty       int
+	}
+	var restoreItems []restoreItem
 	rows, err := tx.Query(ctx, `
 		SELECT supplier_variant_id, quantity FROM routed_order_items WHERE routed_order_id = $1
 	`, orderID)
 	if err == nil {
 		for rows.Next() {
-			var variantID int64
-			var qty int
-			rows.Scan(&variantID, &qty)
-			_, updateErr := tx.Exec(ctx, `
-				UPDATE supplier_listing_variants
-				SET inventory_quantity = inventory_quantity + $1
-				WHERE shopify_variant_id = $2
-			`, qty, variantID)
-			if updateErr != nil {
-				s.logger.Error().Err(updateErr).Int64("variant", variantID).Int("qty", qty).Msg("failed to restore inventory")
-			} else {
-				s.logger.Info().Int64("variant", variantID).Int("qty", qty).Msg("inventory restored on reject")
-			}
+			var ri restoreItem
+			rows.Scan(&ri.VariantID, &ri.Qty)
+			restoreItems = append(restoreItems, ri)
 		}
 		rows.Close()
+	}
+	for _, ri := range restoreItems {
+		_, updateErr := tx.Exec(ctx, `
+			UPDATE supplier_listing_variants
+			SET inventory_quantity = inventory_quantity + $1
+			WHERE shopify_variant_id = $2
+		`, ri.Qty, ri.VariantID)
+		if updateErr != nil {
+			s.logger.Error().Err(updateErr).Int64("variant", ri.VariantID).Int("qty", ri.Qty).Msg("failed to restore inventory")
+		} else {
+			s.logger.Info().Int64("variant", ri.VariantID).Int("qty", ri.Qty).Msg("inventory restored on reject")
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
