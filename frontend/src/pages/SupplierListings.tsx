@@ -188,23 +188,24 @@ export default function SupplierListings() {
                               </InlineStack>
                               {/* Stock info */}
                               {(() => {
-                                const currentStock = listing.variants?.reduce((s, v) => s + v.inventory_quantity, 0) || 0;
+                                const totalStock = listing.variants?.reduce((s, v) => s + v.inventory_quantity, 0) || 0;
                                 const allocationPct = listing.marketplace_stock_percent || 100;
+                                const marketplaceStock = Math.floor((totalStock * allocationPct) / 100);
                                 const price = listing.variants?.[0]?.wholesale_price;
                                 return (
                                   <InlineStack gap="300" wrap>
                                     <span style={{
                                       padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
-                                      background: currentStock > 0 ? '#dcfce7' : '#fee2e2',
-                                      color: currentStock > 0 ? '#166534' : '#991b1b',
+                                      background: '#f1f5f9', color: '#475569',
                                     }}>
-                                      Stock: {currentStock}
+                                      Total Stock: {totalStock}
                                     </span>
                                     <span style={{
                                       padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
-                                      background: '#dbeafe', color: '#1e40af',
+                                      background: marketplaceStock > 0 ? '#dcfce7' : '#fee2e2',
+                                      color: marketplaceStock > 0 ? '#166534' : '#991b1b',
                                     }}>
-                                      Allocation: {allocationPct}%
+                                      Marketplace: {marketplaceStock} ({allocationPct}%)
                                     </span>
                                     {price != null && (
                                       <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 500 }}>
