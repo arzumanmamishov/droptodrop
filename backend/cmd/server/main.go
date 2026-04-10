@@ -125,6 +125,221 @@ func main() {
 		c.String(http.StatusOK, termsOfServiceHTML)
 	})
 
+	// ===== Standalone Admin Panel =====
+	adminPassword := os.Getenv("ADMIN_PASSWORD")
+	if adminPassword == "" {
+		adminPassword = "droptodrop2026"
+	}
+
+	r.POST("/admin-panel/login", func(c *gin.Context) {
+		var body struct{ Password string `json:"password"` }
+		c.ShouldBindJSON(&body)
+		if body.Password != adminPassword {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "wrong password"})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"token": adminPassword})
+	})
+
+	adminAPI := r.Group("/admin-panel/api")
+	adminAPI.Use(func(c *gin.Context) {
+		token := c.GetHeader("X-Admin-Token")
+		if token != adminPassword {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+			return
+		}
+		c.Next()
+	})
+	{
+		adminAPI.GET("/stats", func(c *gin.Context) {
+			ctx := c.Request.Context()
+			var totalShops, suppliers, resellers, activeListings, totalImports, totalOrders, pendingOrders, acceptedOrders, fulfilledOrders, rejectedOrders, totalDisputes, openDisputes int
+			var totalRevenue, totalPaid, totalPending float64
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM shops`).Scan(&totalShops)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM shops WHERE role = 'supplier'`).Scan(&suppliers)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM shops WHERE role = 'reseller'`).Scan(&resellers)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM supplier_listings WHERE status = 'active'`).Scan(&activeListings)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM reseller_imports WHERE status = 'active'`).Scan(&totalImports)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM routed_orders`).Scan(&totalOrders)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM routed_orders WHERE status = 'pending'`).Scan(&pendingOrders)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM routed_orders WHERE status = 'accepted'`).Scan(&acceptedOrders)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM routed_orders WHERE status = 'fulfilled'`).Scan(&fulfilledOrders)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM routed_orders WHERE status = 'rejected'`).Scan(&rejectedOrders)
+			db.QueryRow(ctx, `SELECT COALESCE(SUM(total_wholesale_amount), 0) FROM routed_orders`).Scan(&totalRevenue)
+			db.QueryRow(ctx, `SELECT COALESCE(SUM(supplier_payout), 0) FROM payout_records WHERE status = 'paid'`).Scan(&totalPaid)
+			db.QueryRow(ctx, `SELECT COALESCE(SUM(wholesale_amount), 0) FROM payout_records WHERE status = 'pending'`).Scan(&totalPending)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM disputes`).Scan(&totalDisputes)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM disputes WHERE status = 'open'`).Scan(&openDisputes)
+			c.JSON(http.StatusOK, gin.H{
+				"total_shops": totalShops, "suppliers": suppliers, "resellers": resellers,
+				"active_listings": activeListings, "total_imports": totalImports,
+				"total_orders": totalOrders, "pending_orders": pendingOrders, "accepted_orders": acceptedOrders,
+				"fulfilled_orders": fulfilledOrders, "rejected_orders": rejectedOrders,
+				"total_revenue": totalRevenue, "total_paid": totalPaid, "total_pending": totalPending,
+				"total_disputes": totalDisputes, "open_disputes": openDisputes,
+			})
+		})
+
+		adminAPI.GET("/shops", func(c *gin.Context) {
+			ctx := c.Request.Context()
+			rows, err := db.Query(ctx, `
+				SELECT s.id, s.shopify_domain, COALESCE(s.name,''), s.role, s.status, COALESCE(s.email,''), s.created_at,
+					(SELECT COUNT(*) FROM supplier_listings WHERE supplier_shop_id = s.id) as listing_count,
+					(SELECT COUNT(*) FROM reseller_imports WHERE reseller_shop_id = s.id) as import_count,
+					(SELECT COUNT(*) FROM routed_orders WHERE supplier_shop_id = s.id OR reseller_shop_id = s.id) as order_count,
+					COALESCE((SELECT paypal_email FROM supplier_profiles WHERE shop_id = s.id), COALESCE((SELECT paypal_email FROM reseller_profiles WHERE shop_id = s.id), ''))
+				FROM shops s ORDER BY s.created_at DESC
+			`)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			defer rows.Close()
+			var shops []gin.H
+			for rows.Next() {
+				var id, domain, name, role, status, email, paypal string
+				var createdAt time.Time
+				var listingCount, importCount, orderCount int
+				rows.Scan(&id, &domain, &name, &role, &status, &email, &createdAt, &listingCount, &importCount, &orderCount, &paypal)
+				shops = append(shops, gin.H{
+					"id": id, "domain": domain, "name": name, "role": role, "status": status,
+					"email": email, "paypal": paypal, "created_at": createdAt,
+					"listing_count": listingCount, "import_count": importCount, "order_count": orderCount,
+				})
+			}
+			c.JSON(http.StatusOK, gin.H{"shops": shops})
+		})
+
+		adminAPI.GET("/orders", func(c *gin.Context) {
+			ctx := c.Request.Context()
+			rows, err := db.Query(ctx, `
+				SELECT ro.id, COALESCE(ro.reseller_order_number,''), ro.status,
+					ro.total_wholesale_amount, ro.currency, COALESCE(ro.customer_shipping_name,''),
+					COALESCE(rs.shopify_domain,''), COALESCE(ss.shopify_domain,''),
+					COALESCE(pr.status, 'no_payout') as pay_status,
+					COALESCE(pr.platform_fee, 0), COALESCE(pr.supplier_payout, 0),
+					ro.created_at
+				FROM routed_orders ro
+				LEFT JOIN shops rs ON rs.id = ro.reseller_shop_id
+				LEFT JOIN shops ss ON ss.id = ro.supplier_shop_id
+				LEFT JOIN payout_records pr ON pr.routed_order_id = ro.id
+				ORDER BY ro.created_at DESC LIMIT 100
+			`)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			defer rows.Close()
+			var orders []gin.H
+			for rows.Next() {
+				var id, orderNum, status, currency, customer, reseller, supplier, payStatus string
+				var amount, fee, payout float64
+				var createdAt time.Time
+				rows.Scan(&id, &orderNum, &status, &amount, &currency, &customer, &reseller, &supplier, &payStatus, &fee, &payout, &createdAt)
+				orders = append(orders, gin.H{
+					"id": id, "order_number": orderNum, "status": status, "amount": amount,
+					"currency": currency, "customer": customer, "reseller": reseller, "supplier": supplier,
+					"pay_status": payStatus, "platform_fee": fee, "supplier_payout": payout, "created_at": createdAt,
+				})
+			}
+			c.JSON(http.StatusOK, gin.H{"orders": orders})
+		})
+
+		adminAPI.GET("/payouts", func(c *gin.Context) {
+			ctx := c.Request.Context()
+			rows, err := db.Query(ctx, `
+				SELECT pr.id, COALESCE(ro.reseller_order_number,''), pr.status,
+					pr.wholesale_amount, pr.platform_fee, pr.supplier_payout,
+					COALESCE(rs.shopify_domain,''), COALESCE(ss.shopify_domain,''), pr.created_at
+				FROM payout_records pr
+				JOIN routed_orders ro ON ro.id = pr.routed_order_id
+				LEFT JOIN shops rs ON rs.id = pr.reseller_shop_id
+				LEFT JOIN shops ss ON ss.id = pr.supplier_shop_id
+				ORDER BY pr.created_at DESC LIMIT 100
+			`)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			defer rows.Close()
+			var payouts []gin.H
+			for rows.Next() {
+				var id, orderNum, status, reseller, supplier string
+				var wholesale, fee, payout float64
+				var createdAt time.Time
+				rows.Scan(&id, &orderNum, &status, &wholesale, &fee, &payout, &reseller, &supplier, &createdAt)
+				payouts = append(payouts, gin.H{
+					"id": id, "order_number": orderNum, "status": status,
+					"wholesale": wholesale, "platform_fee": fee, "supplier_payout": payout,
+					"reseller": reseller, "supplier": supplier, "created_at": createdAt,
+				})
+			}
+			c.JSON(http.StatusOK, gin.H{"payouts": payouts})
+		})
+
+		adminAPI.GET("/disputes", func(c *gin.Context) {
+			ctx := c.Request.Context()
+			rows, err := db.Query(ctx, `
+				SELECT d.id, COALESCE(ro.reseller_order_number,''), d.dispute_type, d.status,
+					d.description, COALESCE(d.resolution,''), d.reporter_role,
+					COALESCE(s.shopify_domain,''), d.created_at
+				FROM disputes d
+				JOIN routed_orders ro ON ro.id = d.routed_order_id
+				LEFT JOIN shops s ON s.id = d.reporter_shop_id
+				ORDER BY d.created_at DESC LIMIT 100
+			`)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			defer rows.Close()
+			var disputes []gin.H
+			for rows.Next() {
+				var id, orderNum, dtype, status, desc, resolution, role, shop string
+				var createdAt time.Time
+				rows.Scan(&id, &orderNum, &dtype, &status, &desc, &resolution, &role, &shop, &createdAt)
+				disputes = append(disputes, gin.H{
+					"id": id, "order_number": orderNum, "type": dtype, "status": status,
+					"description": desc, "resolution": resolution, "reporter_role": role,
+					"reporter_shop": shop, "created_at": createdAt,
+				})
+			}
+			c.JSON(http.StatusOK, gin.H{"disputes": disputes})
+		})
+
+		adminAPI.GET("/activity", func(c *gin.Context) {
+			ctx := c.Request.Context()
+			rows, err := db.Query(ctx, `
+				SELECT al.action, al.resource_type, COALESCE(s.shopify_domain,''), al.outcome, al.created_at
+				FROM audit_logs al
+				LEFT JOIN shops s ON s.id = al.shop_id
+				ORDER BY al.created_at DESC LIMIT 100
+			`)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			defer rows.Close()
+			var activity []gin.H
+			for rows.Next() {
+				var action, resourceType, shop, outcome string
+				var createdAt time.Time
+				rows.Scan(&action, &resourceType, &shop, &outcome, &createdAt)
+				activity = append(activity, gin.H{
+					"action": action, "resource_type": resourceType, "shop": shop,
+					"outcome": outcome, "created_at": createdAt,
+				})
+			}
+			c.JSON(http.StatusOK, gin.H{"activity": activity})
+		})
+	}
+
+	// Serve standalone admin panel HTML
+	r.GET("/admin-panel", func(c *gin.Context) {
+		c.Header("Content-Type", "text/html; charset=utf-8")
+		c.String(http.StatusOK, adminPanelHTML)
+	})
+
 	// Public API (no auth) — for supplier directory and platform stats
 	pub := r.Group("/public")
 	{
