@@ -852,7 +852,8 @@ func main() {
 					Reason string `json:"reason"`
 				}
 				c.ShouldBindJSON(&body)
-				if err := ordersSvc.RejectOrder(c.Request.Context(), c.Param("id"), shopID.(string), body.Reason); err != nil {
+				sid := shopID.(string)
+				if err := ordersSvc.RejectOrder(c.Request.Context(), c.Param("id"), sid, body.Reason); err != nil {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
@@ -862,6 +863,10 @@ func main() {
 				if resellerID != "" {
 					inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{ShopID: resellerID, Title: "Order Rejected", Message: "Your order has been rejected. Reason: " + body.Reason, Type: "error", Link: strPtr("/orders/" + c.Param("id"))})
 				}
+				// Sync restored inventory to all resellers
+				go func() {
+					jobWorker.SyncSupplierInventoryToAllResellers(context.Background(), sid)
+				}()
 				c.JSON(http.StatusOK, gin.H{"status": "ok"})
 			})
 
@@ -1768,6 +1773,8 @@ func main() {
 						rows.Scan(&routedID, &supplierID, &wholesale)
 						jobWorker.RunSupplierNotification(bgCtx, routedID, supplierID)
 						jobWorker.RunChargeOrder(bgCtx, routedID, sid, supplierID, wholesale)
+						// Sync inventory to ALL resellers
+						jobWorker.SyncSupplierInventoryToAllResellers(bgCtx, supplierID)
 					}
 				}
 			}()

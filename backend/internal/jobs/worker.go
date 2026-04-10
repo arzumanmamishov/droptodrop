@@ -1418,6 +1418,130 @@ func calculateResellerPriceWorker(wholesale float64, markupType string, markupVa
 	}
 }
 
+// SyncSupplierInventoryToAllResellers updates inventory on ALL resellers' Shopify products
+// for a given supplier. Called after stock changes (order placed, order rejected, manual update).
+func (w *Worker) SyncSupplierInventoryToAllResellers(ctx context.Context, supplierShopID string) {
+	// Get all active imports for this supplier's listings
+	rows, err := w.db.Query(ctx, `
+		SELECT ri.id, ri.reseller_shop_id, ri.shopify_product_id, ri.supplier_listing_id
+		FROM reseller_imports ri
+		JOIN supplier_listings sl ON sl.id = ri.supplier_listing_id
+		WHERE sl.supplier_shop_id = $1 AND ri.status = 'active' AND ri.shopify_product_id IS NOT NULL
+	`, supplierShopID)
+	if err != nil {
+		w.logger.Error().Err(err).Msg("failed to find reseller imports for inventory sync")
+		return
+	}
+	defer rows.Close()
+
+	type syncTarget struct {
+		ImportID         string
+		ResellerShopID   string
+		ShopifyProductID int64
+		ListingID        string
+	}
+	var targets []syncTarget
+	for rows.Next() {
+		var t syncTarget
+		rows.Scan(&t.ImportID, &t.ResellerShopID, &t.ShopifyProductID, &t.ListingID)
+		targets = append(targets, t)
+	}
+
+	if len(targets) == 0 {
+		return
+	}
+
+	w.logger.Info().Int("reseller_count", len(targets)).Str("supplier", supplierShopID).Msg("syncing inventory to all resellers")
+
+	for _, t := range targets {
+		client, _, err := w.getShopifyClient(ctx, t.ResellerShopID)
+		if err != nil {
+			continue
+		}
+
+		// Get supplier's current inventory and stock allocation
+		var supplierQty, stockPct int
+		w.db.QueryRow(ctx, `
+			SELECT COALESCE(slv.inventory_quantity, 0), COALESCE(sl.marketplace_stock_percent, 100)
+			FROM reseller_import_variants riv
+			JOIN supplier_listing_variants slv ON slv.id = riv.supplier_variant_id
+			JOIN supplier_listings sl ON sl.id = slv.listing_id
+			WHERE riv.import_id = $1 LIMIT 1
+		`, t.ImportID).Scan(&supplierQty, &stockPct)
+
+		availableQty := (supplierQty * stockPct) / 100
+		if availableQty < 0 {
+			availableQty = 0
+		}
+
+		// Get the variant's inventory item from Shopify
+		productGID := fmt.Sprintf("gid://shopify/Product/%d", t.ShopifyProductID)
+		var varResp struct {
+			Data struct {
+				Product struct {
+					Variants struct {
+						Edges []struct {
+							Node struct {
+								ID            string `json:"id"`
+								InventoryItem struct {
+									ID string `json:"id"`
+									InventoryLevels struct {
+										Edges []struct {
+											Node struct {
+												Location struct{ ID string `json:"id"` } `json:"location"`
+											} `json:"node"`
+										} `json:"edges"`
+									} `json:"inventoryLevels"`
+								} `json:"inventoryItem"`
+							} `json:"node"`
+						} `json:"edges"`
+					} `json:"variants"`
+				} `json:"product"`
+			} `json:"data"`
+		}
+		client.GraphQL(ctx, fmt.Sprintf(`{ product(id: "%s") { variants(first:1) { edges { node { id inventoryItem { id inventoryLevels(first:5) { edges { node { location { id } } } } } } } } } }`, productGID), nil, &varResp)
+
+		if len(varResp.Data.Product.Variants.Edges) == 0 {
+			continue
+		}
+
+		invItemGID := varResp.Data.Product.Variants.Edges[0].Node.InventoryItem.ID
+		if invItemGID == "" {
+			continue
+		}
+
+		// Get location
+		var locationGID string
+		for _, e := range varResp.Data.Product.Variants.Edges[0].Node.InventoryItem.InventoryLevels.Edges {
+			if e.Node.Location.ID != "" {
+				locationGID = e.Node.Location.ID
+				break
+			}
+		}
+		if locationGID == "" {
+			// Fallback: REST API
+			var restLocs struct{ Locations []struct{ ID int64 `json:"id"` } `json:"locations"` }
+			client.REST(ctx, "GET", "locations.json", nil, &restLocs)
+			if len(restLocs.Locations) > 0 {
+				locationGID = fmt.Sprintf("gid://shopify/Location/%d", restLocs.Locations[0].ID)
+			}
+		}
+		if locationGID == "" {
+			continue
+		}
+
+		invItemID, _ := shopify.ParseGID(invItemGID)
+		locationID, _ := shopify.ParseGID(locationGID)
+		if invItemID > 0 && locationID > 0 {
+			if err := client.SetInventoryQuantity(ctx, invItemID, locationID, availableQty); err != nil {
+				w.logger.Warn().Err(err).Str("import", t.ImportID).Msg("failed to sync inventory to reseller")
+			}
+		}
+	}
+
+	w.logger.Info().Int("synced", len(targets)).Msg("inventory synced to all resellers")
+}
+
 // RunSupplierNotification runs the supplier notification job synchronously.
 func (w *Worker) RunSupplierNotification(ctx context.Context, routedOrderID, supplierShopID string) error {
 	payload, _ := json.Marshal(map[string]string{"routed_order_id": routedOrderID, "supplier_shop_id": supplierShopID})

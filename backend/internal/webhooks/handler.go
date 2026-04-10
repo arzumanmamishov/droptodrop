@@ -204,6 +204,9 @@ func (h *Handler) OrdersCreate(c *gin.Context) {
 
 					// Auto-charge reseller
 					h.jobWorker.RunChargeOrder(bgCtx, routedID, shopID, supplierID, wholesale)
+
+					// Sync inventory to ALL resellers of this supplier
+					h.jobWorker.SyncSupplierInventoryToAllResellers(bgCtx, supplierID)
 				}
 			}
 		}
