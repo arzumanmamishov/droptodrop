@@ -35,6 +35,7 @@ import Samples from './pages/Samples';
 import SetupWizard from './pages/SetupWizard';
 import Onboarding from './pages/Onboarding';
 import ResellerSettings from './pages/ResellerSettings';
+import AdminPanel from './pages/AdminPanel';
 
 export default function App() {
   const [shop, setShop] = useState<Shop | null>(null);
@@ -130,6 +131,7 @@ export default function App() {
               <Route path="/orders/:id" element={<OrderDetail role={shop.role} />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/audit" element={<AuditLog />} />
+              <Route path="/admin" element={<AdminPanel />} />
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </AppFrame>

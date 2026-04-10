@@ -1583,6 +1583,106 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"entries": entries, "total": total})
 		})
 
+		// ===== Admin Panel =====
+		api.GET("/admin/dashboard", func(c *gin.Context) {
+			shopDomain, _ := c.Get("shop_domain")
+			adminDomain := os.Getenv("ADMIN_SHOP_DOMAIN")
+			if adminDomain == "" {
+				adminDomain = "gmurys-vt.myshopify.com" // default admin
+			}
+			domain := ""
+			if d, ok := shopDomain.(string); ok { domain = d }
+			// Also check by shop ID
+			shopID, _ := c.Get("shop_id")
+			var actualDomain string
+			db.QueryRow(c.Request.Context(), `SELECT shopify_domain FROM shops WHERE id = $1`, shopID).Scan(&actualDomain)
+			if domain != adminDomain && actualDomain != adminDomain {
+				c.JSON(http.StatusForbidden, gin.H{"error": "admin access required"})
+				return
+			}
+
+			ctx := c.Request.Context()
+			result := gin.H{}
+
+			// Stats
+			var totalShops, suppliers, resellers, activeListings, totalImports, totalOrders, pendingOrders, fulfilledOrders int
+			var totalRevenue, totalPayouts float64
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM shops`).Scan(&totalShops)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM shops WHERE role = 'supplier'`).Scan(&suppliers)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM shops WHERE role = 'reseller'`).Scan(&resellers)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM supplier_listings WHERE status = 'active'`).Scan(&activeListings)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM reseller_imports`).Scan(&totalImports)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM routed_orders`).Scan(&totalOrders)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM routed_orders WHERE status = 'pending'`).Scan(&pendingOrders)
+			db.QueryRow(ctx, `SELECT COUNT(*) FROM routed_orders WHERE status = 'fulfilled'`).Scan(&fulfilledOrders)
+			db.QueryRow(ctx, `SELECT COALESCE(SUM(total_wholesale_amount), 0) FROM routed_orders`).Scan(&totalRevenue)
+			db.QueryRow(ctx, `SELECT COALESCE(SUM(supplier_payout), 0) FROM payout_records WHERE status = 'paid'`).Scan(&totalPayouts)
+
+			result["stats"] = gin.H{
+				"total_shops": totalShops, "suppliers": suppliers, "resellers": resellers,
+				"active_listings": activeListings, "total_imports": totalImports,
+				"total_orders": totalOrders, "pending_orders": pendingOrders, "fulfilled_orders": fulfilledOrders,
+				"total_revenue": totalRevenue, "total_payouts": totalPayouts,
+			}
+
+			// All shops
+			shopRows, _ := db.Query(ctx, `SELECT id, shopify_domain, COALESCE(name,''), role, status, created_at FROM shops ORDER BY created_at DESC`)
+			var shops []gin.H
+			if shopRows != nil {
+				for shopRows.Next() {
+					var id, domain, name, role, status string
+					var createdAt time.Time
+					shopRows.Scan(&id, &domain, &name, &role, &status, &createdAt)
+					shops = append(shops, gin.H{"id": id, "shopify_domain": domain, "name": name, "role": role, "status": status, "created_at": createdAt})
+				}
+				shopRows.Close()
+			}
+			result["shops"] = shops
+
+			// Recent orders
+			orderRows, _ := db.Query(ctx, `
+				SELECT ro.id, COALESCE(ro.reseller_order_number,''), ro.status, ro.total_wholesale_amount, ro.currency,
+					COALESCE(rs.shopify_domain,'') as reseller, COALESCE(ss.shopify_domain,'') as supplier, ro.created_at
+				FROM routed_orders ro
+				LEFT JOIN shops rs ON rs.id = ro.reseller_shop_id
+				LEFT JOIN shops ss ON ss.id = ro.supplier_shop_id
+				ORDER BY ro.created_at DESC LIMIT 50
+			`)
+			var orders []gin.H
+			if orderRows != nil {
+				for orderRows.Next() {
+					var id, orderNum, status, currency, resellerDomain, supplierDomain string
+					var amount float64
+					var createdAt time.Time
+					orderRows.Scan(&id, &orderNum, &status, &amount, &currency, &resellerDomain, &supplierDomain, &createdAt)
+					orders = append(orders, gin.H{"id": id, "order_number": orderNum, "status": status, "amount": amount, "currency": currency, "reseller": resellerDomain, "supplier": supplierDomain, "created_at": createdAt})
+				}
+				orderRows.Close()
+			}
+			result["recent_orders"] = orders
+
+			// Recent activity
+			actRows, _ := db.Query(ctx, `
+				SELECT al.action, al.resource_type, COALESCE(s.shopify_domain,''), al.created_at
+				FROM audit_logs al
+				LEFT JOIN shops s ON s.id = al.shop_id
+				ORDER BY al.created_at DESC LIMIT 50
+			`)
+			var activity []gin.H
+			if actRows != nil {
+				for actRows.Next() {
+					var action, resourceType, shopDomain string
+					var createdAt time.Time
+					actRows.Scan(&action, &resourceType, &shopDomain, &createdAt)
+					activity = append(activity, gin.H{"action": action, "resource_type": resourceType, "shop_domain": shopDomain, "created_at": createdAt})
+				}
+				actRows.Close()
+			}
+			result["recent_activity"] = activity
+
+			c.JSON(http.StatusOK, result)
+		})
+
 		// ===== Payouts =====
 		api.GET("/payouts", func(c *gin.Context) {
 			shopID, _ := c.Get("shop_id")
