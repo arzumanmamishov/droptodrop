@@ -347,7 +347,7 @@ func (s *Service) GetListing(ctx context.Context, listingID string) (*SupplierLi
 
 // ListMarketplace returns active listings from all suppliers for the marketplace view.
 func (s *Service) ListMarketplace(ctx context.Context, filters MarketplaceFilters, limit, offset int) ([]SupplierListing, int, error) {
-	baseWhere := `WHERE sl.status = 'active'`
+	baseWhere := `WHERE sl.status = 'active' AND EXISTS (SELECT 1 FROM supplier_listing_variants slv WHERE slv.listing_id = sl.id AND slv.inventory_quantity > 0)`
 	args := []interface{}{}
 	argN := 1
 

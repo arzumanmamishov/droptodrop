@@ -108,6 +108,10 @@ func (s *Service) Create(ctx context.Context, resellerShopID string, input Impor
 	if markupValue == 0 {
 		markupValue = 30
 	}
+	// Enforce minimum margin
+	if markupType == "percentage" && markupValue < 30 {
+		markupValue = 30
+	}
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {

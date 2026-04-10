@@ -300,7 +300,7 @@ export default function Marketplace() {
       {/* Import Modal */}
       {importModal && (
         <Modal open onClose={() => setImportModal(null)} title={`Import: ${importModal.title}`}
-          primaryAction={{ content: 'Import Product', onAction: handleImport, loading: importing }}
+          primaryAction={{ content: 'Import Product', onAction: handleImport, loading: importing, disabled: markupType === 'percentage' && parseFloat(markupValue) < 30 }}
           secondaryActions={[{ content: 'Cancel', onAction: () => setImportModal(null) }]}>
           <Modal.Section>
             <BlockStack gap="400">
@@ -325,9 +325,10 @@ export default function Marketplace() {
                   { label: 'Fixed amount', value: 'fixed' },
                 ]} value={markupType} onChange={setMarkupType} />
                 <TextField
-                  label={markupType === 'percentage' ? 'Markup percentage' : 'Fixed markup amount'}
-                  type="number" value={markupValue} onChange={setMarkupValue}
+                  label={markupType === 'percentage' ? 'Markup percentage (min 30%)' : 'Fixed markup amount'}
+                  type="number" value={markupValue} onChange={(v) => setMarkupValue(v)}
                   suffix={markupType === 'percentage' ? '%' : '$'} autoComplete="off"
+                  error={markupType === 'percentage' && parseFloat(markupValue) < 30 ? 'Minimum 30% markup required to protect your margins' : undefined}
                 />
                 {importModal.variants && importModal.variants.length > 0 && (
                   <BlockStack gap="200">
@@ -336,19 +337,22 @@ export default function Marketplace() {
                       const markup = parseFloat(markupValue) || 0;
                       const price = markupType === 'percentage' ? v.wholesale_price * (1 + markup / 100) : v.wholesale_price + markup;
                       const margin = ((price - v.wholesale_price) / price) * 100;
-                      const ai = getSmartPrice(v.wholesale_price);
-                      const aiMargin = ((ai - v.wholesale_price) / ai) * 100;
+                      const _ai = getSmartPrice(v.wholesale_price);
+                      void _ai;
                       return (
                         <div key={v.id} style={{ background: '#f8fafb', borderRadius: '8px', padding: '12px' }}>
                           <InlineStack align="space-between" blockAlign="center">
                             <Text as="span" variant="bodySm" fontWeight="semibold">{v.title || 'Default'}</Text>
-                            <InlineStack gap="200">
-                              <Text as="span" variant="bodySm">${v.wholesale_price.toFixed(2)} → <strong>${price.toFixed(2)}</strong> ({margin.toFixed(0)}%)</Text>
-                            </InlineStack>
+                            <Text as="span" variant="bodySm">${v.wholesale_price.toFixed(2)} → <strong>${price.toFixed(2)}</strong></Text>
                           </InlineStack>
-                          <InlineStack align="end" gap="200">
-                            <Badge tone="success">{`AI: $${ai.toFixed(2)} (${aiMargin.toFixed(0)}% margin)`}</Badge>
-                          </InlineStack>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
+                            <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '6px', fontWeight: 600, background: margin >= 30 ? '#dcfce7' : '#fee2e2', color: margin >= 30 ? '#166534' : '#991b1b' }}>
+                              Margin: {margin.toFixed(0)}%
+                            </span>
+                            <span style={{ fontSize: '12px', padding: '2px 8px', borderRadius: '6px', fontWeight: 600, background: '#dbeafe', color: '#1e40af' }}>
+                              Profit: ${(price - v.wholesale_price).toFixed(2)} per sale
+                            </span>
+                          </div>
                         </div>
                       );
                     })}
