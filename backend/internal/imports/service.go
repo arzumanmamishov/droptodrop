@@ -237,7 +237,7 @@ func (s *Service) List(ctx context.Context, resellerShopID string, limit, offset
 			COALESCE(sl.title, '') as supplier_title, COALESCE(sl.images, '[]'::jsonb) as supplier_images,
 			COALESCE(sl.supplier_shop_id::text, '') as supplier_shop_id,
 			COALESCE(sp.company_name, s.name, s.shopify_domain, '') as supplier_company_name,
-			COALESCE((SELECT SUM(slv.inventory_quantity) FROM supplier_listing_variants slv WHERE slv.listing_id = ri.supplier_listing_id), 0) as supplier_stock,
+			COALESCE((SELECT SUM(slv.inventory_quantity) * COALESCE(sl.marketplace_stock_percent, 100) / 100 FROM supplier_listing_variants slv WHERE slv.listing_id = ri.supplier_listing_id), 0) as supplier_stock,
 			COALESCE((SELECT slv.wholesale_price FROM supplier_listing_variants slv WHERE slv.listing_id = ri.supplier_listing_id LIMIT 1), 0) as supplier_price
 		FROM reseller_imports ri
 		LEFT JOIN supplier_listings sl ON sl.id = ri.supplier_listing_id
