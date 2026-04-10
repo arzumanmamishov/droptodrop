@@ -339,6 +339,10 @@ func main() {
 		c.Header("Content-Type", "text/html; charset=utf-8")
 		c.String(http.StatusOK, adminPanelHTML)
 	})
+	r.GET("/admin-panel/", func(c *gin.Context) {
+		c.Header("Content-Type", "text/html; charset=utf-8")
+		c.String(http.StatusOK, adminPanelHTML)
+	})
 
 	// Public API (no auth) — for supplier directory and platform stats
 	pub := r.Group("/public")
@@ -2094,7 +2098,8 @@ func main() {
 			path := c.Request.URL.Path
 			// Serve static files directly if they exist
 			if !strings.HasPrefix(path, "/api/") && !strings.HasPrefix(path, "/auth/") &&
-				!strings.HasPrefix(path, "/webhooks/") && !strings.HasPrefix(path, "/health") {
+				!strings.HasPrefix(path, "/webhooks/") && !strings.HasPrefix(path, "/health") &&
+				!strings.HasPrefix(path, "/admin-panel") {
 				fullPath := filepath.Join(staticDir, path)
 				if _, err := fs.Stat(os.DirFS(staticDir), strings.TrimPrefix(path, "/")); err == nil {
 					c.File(fullPath)
