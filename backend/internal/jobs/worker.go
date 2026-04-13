@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -179,18 +180,18 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 	}
 
 	// Load supplier listing data via the import
-	var title, description, supplierShopID, supplierListingID string
+	var title, description, supplierShopID, supplierListingID, tags string
 	var syncImages, syncDescription bool
 	var images json.RawMessage
 	var supplierProductID int64
 	err := w.db.QueryRow(ctx, `
 		SELECT sl.title, COALESCE(sl.description,''), sl.images, sl.supplier_shop_id, sl.id,
-			sl.shopify_product_id, ri.sync_images, ri.sync_description
+			sl.shopify_product_id, ri.sync_images, ri.sync_description, COALESCE(sl.tags,'')
 		FROM reseller_imports ri
 		JOIN supplier_listings sl ON sl.id = ri.supplier_listing_id
 		WHERE ri.id = $1
 	`, params.ImportID).Scan(&title, &description, &images, &supplierShopID, &supplierListingID,
-		&supplierProductID, &syncImages, &syncDescription)
+		&supplierProductID, &syncImages, &syncDescription, &tags)
 	if err != nil {
 		return fmt.Errorf("get import data: %w", err)
 	}
@@ -241,6 +242,17 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 	}
 	if syncDescription && description != "" {
 		productInput["descriptionHtml"] = description
+	}
+	if tags != "" {
+		// Split comma-separated tags into array
+		var tagList []string
+		for _, t := range strings.Split(tags, ",") {
+			t = strings.TrimSpace(t)
+			if t != "" { tagList = append(tagList, t) }
+		}
+		if len(tagList) > 0 {
+			productInput["tags"] = tagList
+		}
 	}
 
 	// Call Shopify API to create product (without variants)
