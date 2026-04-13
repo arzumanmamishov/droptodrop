@@ -238,10 +238,32 @@ func (s *Service) UpdateListingStatus(ctx context.Context, shopID, listingID, st
 
 	// Cascade status change to reseller imports
 	if status == "paused" || status == "archived" {
+		// Grace period: warn resellers but don't remove immediately
 		s.db.Exec(ctx, `
-			UPDATE reseller_imports SET status = 'paused', last_sync_error = $1
+			UPDATE reseller_imports SET last_sync_error = $1
 			WHERE supplier_listing_id = $2 AND status = 'active'
-		`, "Supplier "+status+" this product", listingID)
+		`, "WARNING: Supplier will remove this product soon. Please prepare.", listingID)
+
+		// Notify all resellers who imported this product
+		rows, _ := s.db.Query(ctx, `
+			SELECT reseller_shop_id FROM reseller_imports
+			WHERE supplier_listing_id = $1 AND status = 'active'
+		`, listingID)
+		if rows != nil {
+			var resellerIDs []string
+			for rows.Next() {
+				var rid string
+				rows.Scan(&rid)
+				resellerIDs = append(resellerIDs, rid)
+			}
+			rows.Close()
+			for _, rid := range resellerIDs {
+				s.db.Exec(ctx, `
+					INSERT INTO notifications (shop_id, title, message, type, link)
+					VALUES ($1, 'Product Being Removed', $2, 'warning', '/imports')
+				`, rid, "A supplier is removing a product you imported. You have 48 hours to prepare. Check your Imports page.")
+			}
+		}
 
 		s.db.Exec(ctx, `
 			UPDATE product_links SET is_active = FALSE
