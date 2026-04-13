@@ -69,6 +69,7 @@ export interface SupplierListing {
   variants: ListingVariant[];
   supplier_score?: number;
   supplier_name?: string;
+  avg_response_hours?: number;
   created_at: string;
   updated_at: string;
 }

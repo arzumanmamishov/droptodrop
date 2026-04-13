@@ -32,6 +32,7 @@ type SupplierListing struct {
 	Variants           []ListingVariant  `json:"variants,omitempty"`
 	SupplierScore      float64           `json:"supplier_score,omitempty"`
 	SupplierName       string            `json:"supplier_name,omitempty"`
+	AvgResponseHours   float64           `json:"avg_response_hours,omitempty"`
 	CreatedAt          time.Time         `json:"created_at"`
 	UpdatedAt          time.Time         `json:"updated_at"`
 }
@@ -94,6 +95,17 @@ func NewService(db *pgxpool.Pool, logger zerolog.Logger, auditSvc *audit.Service
 
 // CreateListing creates a new supplier listing with variants.
 func (s *Service) CreateListing(ctx context.Context, shopID string, input CreateListingInput) (*SupplierListing, error) {
+	// Validate minimum product info
+	if len(input.Title) < 3 {
+		return nil, fmt.Errorf("product title must be at least 3 characters")
+	}
+	if len(input.Description) < 20 {
+		return nil, fmt.Errorf("product description must be at least 20 characters. Good descriptions help resellers sell your products")
+	}
+	if len(input.Variants) == 0 {
+		return nil, fmt.Errorf("product must have at least one variant with pricing")
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
@@ -436,7 +448,8 @@ func (s *Service) ListMarketplace(ctx context.Context, filters MarketplaceFilter
 		SELECT sl.id, sl.supplier_shop_id, sl.shopify_product_id, sl.title, COALESCE(sl.description,''),
 			COALESCE(sl.product_type,''), COALESCE(sl.vendor,''), COALESCE(sl.tags,''), sl.images,
 			COALESCE(sl.category,'other'), sl.status, sl.processing_days, COALESCE(sl.marketplace_stock_percent,100), sl.shipping_countries, sl.blind_fulfillment, sl.created_at, sl.updated_at,
-			COALESCE(sp.reliability_score, 0), COALESCE(sp.company_name, s.name, s.shopify_domain, '')
+			COALESCE(sp.reliability_score, 0), COALESCE(sp.company_name, s.name, s.shopify_domain, ''),
+			COALESCE(sp.avg_fulfillment_hours, 0)
 		FROM supplier_listings sl
 		LEFT JOIN supplier_profiles sp ON sp.shop_id = sl.supplier_shop_id
 		LEFT JOIN shops s ON s.id = sl.supplier_shop_id
@@ -454,7 +467,7 @@ func (s *Service) ListMarketplace(ctx context.Context, filters MarketplaceFilter
 		var l SupplierListing
 		if err := rows.Scan(&l.ID, &l.SupplierShopID, &l.ShopifyProductID, &l.Title, &l.Description,
 			&l.ProductType, &l.Vendor, &l.Tags, &l.Images, &l.Category, &l.Status, &l.ProcessingDays, &l.MarketplaceStockPct,
-			&l.ShippingCountries, &l.BlindFulfillment, &l.CreatedAt, &l.UpdatedAt, &l.SupplierScore, &l.SupplierName); err != nil {
+			&l.ShippingCountries, &l.BlindFulfillment, &l.CreatedAt, &l.UpdatedAt, &l.SupplierScore, &l.SupplierName, &l.AvgResponseHours); err != nil {
 			return nil, 0, fmt.Errorf("scan listing: %w", err)
 		}
 		listings = append(listings, l)

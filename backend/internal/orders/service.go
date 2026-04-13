@@ -456,8 +456,15 @@ func (s *Service) AcceptOrder(ctx context.Context, orderID, supplierShopID strin
 		return fmt.Errorf("order not found or not in pending state")
 	}
 
-	// Update supplier stats
+	// Update supplier stats + response time
 	s.db.Exec(ctx, `UPDATE supplier_profiles SET total_orders_received = total_orders_received + 1 WHERE shop_id = $1`, supplierShopID)
+	// Calculate average response time (hours between order created and accepted)
+	s.db.Exec(ctx, `
+		UPDATE supplier_profiles SET avg_fulfillment_hours = COALESCE((
+			SELECT AVG(EXTRACT(EPOCH FROM (accepted_at - created_at)) / 3600)
+			FROM routed_orders WHERE supplier_shop_id = $1 AND accepted_at IS NOT NULL
+		), 0) WHERE shop_id = $1
+	`, supplierShopID)
 	s.UpdateReliabilityScore(ctx, supplierShopID)
 
 	s.audit.Log(ctx, supplierShopID, "merchant", supplierShopID, "order_accepted", "routed_order", orderID, nil, "success", "")

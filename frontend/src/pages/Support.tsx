@@ -1,0 +1,91 @@
+import { Page, Layout, Card, BlockStack, Text, Divider, InlineStack } from '@shopify/polaris';
+
+export default function Support() {
+  return (
+    <Page title="Help & Support">
+      <Layout>
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingMd">Frequently Asked Questions</Text>
+              <Divider />
+
+              <BlockStack gap="300">
+                <BlockStack gap="100">
+                  <Text as="h3" variant="headingSm">How do I import products?</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">Go to Marketplace, find a product, click "Import". Set your markup (minimum 30%) and select which variants you want.</Text>
+                </BlockStack>
+
+                <BlockStack gap="100">
+                  <Text as="h3" variant="headingSm">How does inventory work?</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">All resellers share the same inventory pool. When one reseller sells a product, stock updates for everyone automatically.</Text>
+                </BlockStack>
+
+                <BlockStack gap="100">
+                  <Text as="h3" variant="headingSm">How do payments work?</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">Resellers pay suppliers directly via PayPal. Go to Payouts page to see what you owe or are owed. Add your PayPal email in Settings.</Text>
+                </BlockStack>
+
+                <BlockStack gap="100">
+                  <Text as="h3" variant="headingSm">How do returns work?</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">Resellers can request a return on fulfilled orders. The supplier uploads a return shipping label, and the customer ships back to the supplier directly.</Text>
+                </BlockStack>
+
+                <BlockStack gap="100">
+                  <Text as="h3" variant="headingSm">What is the minimum markup?</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">We enforce a minimum 30% markup to protect reseller margins. We recommend 40%+ to cover shipping costs.</Text>
+                </BlockStack>
+
+                <BlockStack gap="100">
+                  <Text as="h3" variant="headingSm">Can I choose which product variants to import?</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">Yes! When importing, you can select specific variants (colors, sizes) using checkboxes. You don't have to import all variants.</Text>
+                </BlockStack>
+
+                <BlockStack gap="100">
+                  <Text as="h3" variant="headingSm">What happens if a supplier removes a product?</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">You'll get a notification warning you in advance. Suppliers cannot remove products while orders are in progress.</Text>
+                </BlockStack>
+              </BlockStack>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+
+        <Layout.Section variant="oneHalf">
+          <Card>
+            <BlockStack gap="300">
+              <Text as="h2" variant="headingMd">Contact Support</Text>
+              <Divider />
+              <Text as="p" variant="bodyMd">Need help? Reach out to us:</Text>
+              <BlockStack gap="200">
+                <InlineStack gap="200" blockAlign="center">
+                  <span style={{ fontSize: '16px' }}>📧</span>
+                  <Text as="p" variant="bodyMd">support@droptodrop.com</Text>
+                </InlineStack>
+                <InlineStack gap="200" blockAlign="center">
+                  <span style={{ fontSize: '16px' }}>💬</span>
+                  <Text as="p" variant="bodyMd">Use the Messages feature to contact suppliers directly</Text>
+                </InlineStack>
+              </BlockStack>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+
+        <Layout.Section variant="oneHalf">
+          <Card>
+            <BlockStack gap="300">
+              <Text as="h2" variant="headingMd">Quick Tips</Text>
+              <Divider />
+              <BlockStack gap="200">
+                <Text as="p" variant="bodySm">• Set markup to at least 40% to cover shipping</Text>
+                <Text as="p" variant="bodySm">• Add your PayPal email in Settings for payments</Text>
+                <Text as="p" variant="bodySm">• Use Re-sync to update products after supplier changes</Text>
+                <Text as="p" variant="bodySm">• Check Notifications for order updates</Text>
+                <Text as="p" variant="bodySm">• Use Disputes for quality issues or problems</Text>
+              </BlockStack>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+      </Layout>
+    </Page>
+  );
+}

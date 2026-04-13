@@ -200,6 +200,11 @@ export default function Marketplace() {
                                 {'★'.repeat(Math.round(listing.supplier_score || 0))}{listing.supplier_score?.toFixed(1)}
                               </span>
                             )}
+                            {(listing.avg_response_hours || 0) > 0 && (
+                              <span style={{ fontSize: '10px', color: '#64748b' }}>
+                                ~{listing.avg_response_hours! < 1 ? '<1h' : `${Math.round(listing.avg_response_hours!)}h`} response
+                              </span>
+                            )}
                           </InlineStack>
                         </BlockStack>
 
@@ -382,6 +387,9 @@ export default function Marketplace() {
                     })}
                   </BlockStack>
                 )}
+                <div style={{ background: '#fef3c7', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', color: '#92400e' }}>
+                  <strong>Shipping reminder:</strong> Make sure your markup covers shipping costs. If the supplier charges shipping separately, factor it into your margin. We recommend at least 40% markup for products with shipping.
+                </div>
               </FormLayout>
             </BlockStack>
           </Modal.Section>

@@ -80,6 +80,7 @@ export default function AppFrame({ shop, children }: AppFrameProps) {
     { url: '/samples', label: 'Samples', icon: InventoryIcon, selected: location.pathname === '/samples' },
     { url: '/billing', label: 'Billing', icon: CashDollarIcon, selected: location.pathname === '/billing' },
     { url: '/audit', label: 'Audit Log', icon: ListBulletedIcon, selected: location.pathname === '/audit' },
+    { url: '/support', label: 'Help', icon: ChatIcon, selected: location.pathname === '/support' },
     { url: '/supplier/setup', label: 'Settings', icon: SettingsIcon, selected: location.pathname === '/supplier/setup' },
   ];
 
@@ -103,6 +104,7 @@ export default function AppFrame({ shop, children }: AppFrameProps) {
     { url: '/samples', label: 'Samples', icon: InventoryIcon, selected: location.pathname === '/samples' },
     { url: '/billing', label: 'Billing', icon: CashDollarIcon, selected: location.pathname === '/billing' },
     { url: '/audit', label: 'Audit Log', icon: ListBulletedIcon, selected: location.pathname === '/audit' },
+    { url: '/support', label: 'Help', icon: ChatIcon, selected: location.pathname === '/support' },
     { url: '/reseller/settings', label: 'Settings', icon: SettingsIcon, selected: location.pathname === '/reseller/settings' },
   ];
 
