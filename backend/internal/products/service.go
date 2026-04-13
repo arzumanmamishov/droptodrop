@@ -96,17 +96,6 @@ func NewService(db *pgxpool.Pool, logger zerolog.Logger, auditSvc *audit.Service
 
 // CreateListing creates a new supplier listing with variants.
 func (s *Service) CreateListing(ctx context.Context, shopID string, input CreateListingInput) (*SupplierListing, error) {
-	// Validate minimum product info
-	if len(input.Title) < 3 {
-		return nil, fmt.Errorf("product title must be at least 3 characters")
-	}
-	if len(input.Description) < 20 {
-		return nil, fmt.Errorf("product description must be at least 20 characters. Good descriptions help resellers sell your products")
-	}
-	if len(input.Variants) == 0 {
-		return nil, fmt.Errorf("product must have at least one variant with pricing")
-	}
-
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
