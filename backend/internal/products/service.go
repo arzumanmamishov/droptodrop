@@ -29,9 +29,11 @@ type SupplierListing struct {
 	MarketplaceStockPct   int               `json:"marketplace_stock_percent"`
 	ShippingCountries json.RawMessage   `json:"shipping_countries"`
 	BlindFulfillment  bool              `json:"blind_fulfillment"`
-	Variants          []ListingVariant  `json:"variants,omitempty"`
-	CreatedAt         time.Time         `json:"created_at"`
-	UpdatedAt         time.Time         `json:"updated_at"`
+	Variants           []ListingVariant  `json:"variants,omitempty"`
+	SupplierScore      float64           `json:"supplier_score,omitempty"`
+	SupplierName       string            `json:"supplier_name,omitempty"`
+	CreatedAt          time.Time         `json:"created_at"`
+	UpdatedAt          time.Time         `json:"updated_at"`
 }
 
 // ListingVariant represents a variant within a supplier listing.
@@ -238,6 +240,18 @@ func (s *Service) UpdateListingStatus(ctx context.Context, shopID, listingID, st
 
 	// Cascade status change to reseller imports
 	if status == "paused" || status == "archived" {
+		// Block if there are pending/accepted orders for this listing's products
+		var pendingCount int
+		s.db.QueryRow(ctx, `
+			SELECT COUNT(*) FROM routed_orders ro
+			JOIN routed_order_items roi ON roi.routed_order_id = ro.id
+			JOIN supplier_listing_variants slv ON slv.shopify_variant_id = roi.supplier_variant_id
+			WHERE slv.listing_id = $1 AND ro.status IN ('pending', 'accepted', 'processing')
+		`, listingID).Scan(&pendingCount)
+		if pendingCount > 0 {
+			return fmt.Errorf("cannot pause/archive: %d orders are still in progress. Please fulfill or reject them first", pendingCount)
+		}
+
 		// Grace period: warn resellers but don't remove immediately
 		s.db.Exec(ctx, `
 			UPDATE reseller_imports SET last_sync_error = $1
@@ -299,6 +313,18 @@ func (s *Service) DeleteListing(ctx context.Context, shopID, listingID string) e
 	err = tx.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM supplier_listings WHERE id = $1 AND supplier_shop_id = $2)`, listingID, shopID).Scan(&exists)
 	if err != nil || !exists {
 		return fmt.Errorf("listing not found")
+	}
+
+	// Block if there are pending/accepted orders
+	var pendingCount int
+	tx.QueryRow(ctx, `
+		SELECT COUNT(*) FROM routed_orders ro
+		JOIN routed_order_items roi ON roi.routed_order_id = ro.id
+		JOIN supplier_listing_variants slv ON slv.shopify_variant_id = roi.supplier_variant_id
+		WHERE slv.listing_id = $1 AND ro.status IN ('pending', 'accepted', 'processing')
+	`, listingID).Scan(&pendingCount)
+	if pendingCount > 0 {
+		return fmt.Errorf("cannot delete: %d orders are still in progress. Please fulfill or reject them first", pendingCount)
 	}
 
 	// Mark reseller imports as removed
@@ -393,6 +419,11 @@ func (s *Service) ListMarketplace(ctx context.Context, filters MarketplaceFilter
 		args = append(args, filters.MaxProcessingDays)
 		argN++
 	}
+	if filters.MaxPrice > 0 {
+		baseWhere += fmt.Sprintf(` AND EXISTS (SELECT 1 FROM supplier_listing_variants slvp WHERE slvp.listing_id = sl.id AND slvp.wholesale_price <= $%d)`, argN)
+		args = append(args, filters.MaxPrice)
+		argN++
+	}
 
 	var total int
 	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM supplier_listings sl %s`, baseWhere)
@@ -404,8 +435,11 @@ func (s *Service) ListMarketplace(ctx context.Context, filters MarketplaceFilter
 	listQuery := fmt.Sprintf(`
 		SELECT sl.id, sl.supplier_shop_id, sl.shopify_product_id, sl.title, COALESCE(sl.description,''),
 			COALESCE(sl.product_type,''), COALESCE(sl.vendor,''), COALESCE(sl.tags,''), sl.images,
-			COALESCE(sl.category,'other'), sl.status, sl.processing_days, COALESCE(sl.marketplace_stock_percent,100), sl.shipping_countries, sl.blind_fulfillment, sl.created_at, sl.updated_at
+			COALESCE(sl.category,'other'), sl.status, sl.processing_days, COALESCE(sl.marketplace_stock_percent,100), sl.shipping_countries, sl.blind_fulfillment, sl.created_at, sl.updated_at,
+			COALESCE(sp.reliability_score, 0), COALESCE(sp.company_name, s.name, s.shopify_domain, '')
 		FROM supplier_listings sl
+		LEFT JOIN supplier_profiles sp ON sp.shop_id = sl.supplier_shop_id
+		LEFT JOIN shops s ON s.id = sl.supplier_shop_id
 		%s ORDER BY sl.updated_at DESC LIMIT %d OFFSET %d
 	`, baseWhere, limit, offset)
 
@@ -420,7 +454,7 @@ func (s *Service) ListMarketplace(ctx context.Context, filters MarketplaceFilter
 		var l SupplierListing
 		if err := rows.Scan(&l.ID, &l.SupplierShopID, &l.ShopifyProductID, &l.Title, &l.Description,
 			&l.ProductType, &l.Vendor, &l.Tags, &l.Images, &l.Category, &l.Status, &l.ProcessingDays, &l.MarketplaceStockPct,
-			&l.ShippingCountries, &l.BlindFulfillment, &l.CreatedAt, &l.UpdatedAt); err != nil {
+			&l.ShippingCountries, &l.BlindFulfillment, &l.CreatedAt, &l.UpdatedAt, &l.SupplierScore, &l.SupplierName); err != nil {
 			return nil, 0, fmt.Errorf("scan listing: %w", err)
 		}
 		listings = append(listings, l)

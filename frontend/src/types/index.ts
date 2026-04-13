@@ -67,6 +67,8 @@ export interface SupplierListing {
   shipping_countries: string[];
   blind_fulfillment: boolean;
   variants: ListingVariant[];
+  supplier_score?: number;
+  supplier_name?: string;
   created_at: string;
   updated_at: string;
 }

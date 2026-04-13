@@ -193,7 +193,14 @@ export default function Marketplace() {
                           <div style={{ cursor: 'pointer' }} onClick={() => setDetailModal(listing)}>
                             <Text as="h3" variant="headingSm" fontWeight="bold">{listing.title}</Text>
                           </div>
-                          <Text as="p" variant="bodySm" tone="subdued">{listing.vendor || 'Unknown vendor'}</Text>
+                          <InlineStack gap="200" blockAlign="center" wrap>
+                            <Text as="span" variant="bodySm" tone="subdued">{listing.supplier_name || listing.vendor || 'Unknown'}</Text>
+                            {(listing.supplier_score || 0) > 0 && (
+                              <span style={{ fontSize: '11px', fontWeight: 600, color: '#92400e' }}>
+                                {'★'.repeat(Math.round(listing.supplier_score || 0))}{listing.supplier_score?.toFixed(1)}
+                              </span>
+                            )}
+                          </InlineStack>
                         </BlockStack>
 
                         {/* Pricing */}

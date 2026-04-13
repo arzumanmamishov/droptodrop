@@ -883,6 +883,11 @@ func main() {
 					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 					return
 				}
+				sid := shopID.(string)
+				// Update supplier fulfillment stats
+				db.Exec(c.Request.Context(), `UPDATE supplier_profiles SET total_orders_fulfilled = total_orders_fulfilled + 1 WHERE shop_id = $1`, sid)
+				ordersSvc.UpdateReliabilityScore(c.Request.Context(), sid)
+
 				// Notify reseller about fulfillment
 				var resellerID string
 				db.QueryRow(c.Request.Context(), `SELECT reseller_shop_id FROM routed_orders WHERE id = $1`, c.Param("id")).Scan(&resellerID)

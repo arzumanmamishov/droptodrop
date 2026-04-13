@@ -456,6 +456,10 @@ func (s *Service) AcceptOrder(ctx context.Context, orderID, supplierShopID strin
 		return fmt.Errorf("order not found or not in pending state")
 	}
 
+	// Update supplier stats
+	s.db.Exec(ctx, `UPDATE supplier_profiles SET total_orders_received = total_orders_received + 1 WHERE shop_id = $1`, supplierShopID)
+	s.UpdateReliabilityScore(ctx, supplierShopID)
+
 	s.audit.Log(ctx, supplierShopID, "merchant", supplierShopID, "order_accepted", "routed_order", orderID, nil, "success", "")
 	return nil
 }
@@ -513,7 +517,30 @@ func (s *Service) RejectOrder(ctx context.Context, orderID, supplierShopID, reas
 		return fmt.Errorf("commit: %w", err)
 	}
 
+	// Update supplier stats
+	s.db.Exec(ctx, `UPDATE supplier_profiles SET cancellation_count = cancellation_count + 1 WHERE shop_id = $1`, supplierShopID)
+	s.UpdateReliabilityScore(ctx, supplierShopID)
+
 	s.audit.Log(ctx, supplierShopID, "merchant", supplierShopID, "order_rejected", "routed_order", orderID,
 		map[string]string{"reason": reason}, "success", "")
 	return nil
+}
+
+// UpdateReliabilityScore recalculates the supplier's reliability score.
+// Score = (fulfilled / received * 4.0) + (1 - cancellations/received) * 1.0, max 5.0
+func (s *Service) UpdateReliabilityScore(ctx context.Context, supplierShopID string) {
+	var received, fulfilled, cancellations int
+	s.db.QueryRow(ctx, `SELECT COALESCE(total_orders_received,0), COALESCE(total_orders_fulfilled,0), COALESCE(cancellation_count,0) FROM supplier_profiles WHERE shop_id = $1`, supplierShopID).Scan(&received, &fulfilled, &cancellations)
+
+	if received == 0 {
+		return
+	}
+
+	fulfillRate := float64(fulfilled) / float64(received)
+	cancelRate := float64(cancellations) / float64(received)
+	score := (fulfillRate * 4.0) + ((1.0 - cancelRate) * 1.0) // max 5.0
+	if score > 5.0 { score = 5.0 }
+	if score < 0 { score = 0 }
+
+	s.db.Exec(ctx, `UPDATE supplier_profiles SET reliability_score = $1 WHERE shop_id = $2`, score, supplierShopID)
 }
