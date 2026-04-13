@@ -70,6 +70,7 @@ export interface SupplierListing {
   supplier_score?: number;
   supplier_name?: string;
   avg_response_hours?: number;
+  supplier_currency?: string;
   created_at: string;
   updated_at: string;
 }

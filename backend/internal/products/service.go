@@ -33,6 +33,7 @@ type SupplierListing struct {
 	SupplierScore      float64           `json:"supplier_score,omitempty"`
 	SupplierName       string            `json:"supplier_name,omitempty"`
 	AvgResponseHours   float64           `json:"avg_response_hours,omitempty"`
+	SupplierCurrency   string            `json:"supplier_currency,omitempty"`
 	CreatedAt          time.Time         `json:"created_at"`
 	UpdatedAt          time.Time         `json:"updated_at"`
 }
@@ -449,7 +450,7 @@ func (s *Service) ListMarketplace(ctx context.Context, filters MarketplaceFilter
 			COALESCE(sl.product_type,''), COALESCE(sl.vendor,''), COALESCE(sl.tags,''), sl.images,
 			COALESCE(sl.category,'other'), sl.status, sl.processing_days, COALESCE(sl.marketplace_stock_percent,100), sl.shipping_countries, sl.blind_fulfillment, sl.created_at, sl.updated_at,
 			COALESCE(sp.reliability_score, 0), COALESCE(sp.company_name, s.name, s.shopify_domain, ''),
-			COALESCE(sp.avg_fulfillment_hours, 0)
+			COALESCE(sp.avg_fulfillment_hours, 0), COALESCE(s.currency, 'USD')
 		FROM supplier_listings sl
 		LEFT JOIN supplier_profiles sp ON sp.shop_id = sl.supplier_shop_id
 		LEFT JOIN shops s ON s.id = sl.supplier_shop_id
@@ -467,7 +468,7 @@ func (s *Service) ListMarketplace(ctx context.Context, filters MarketplaceFilter
 		var l SupplierListing
 		if err := rows.Scan(&l.ID, &l.SupplierShopID, &l.ShopifyProductID, &l.Title, &l.Description,
 			&l.ProductType, &l.Vendor, &l.Tags, &l.Images, &l.Category, &l.Status, &l.ProcessingDays, &l.MarketplaceStockPct,
-			&l.ShippingCountries, &l.BlindFulfillment, &l.CreatedAt, &l.UpdatedAt, &l.SupplierScore, &l.SupplierName, &l.AvgResponseHours); err != nil {
+			&l.ShippingCountries, &l.BlindFulfillment, &l.CreatedAt, &l.UpdatedAt, &l.SupplierScore, &l.SupplierName, &l.AvgResponseHours, &l.SupplierCurrency); err != nil {
 			return nil, 0, fmt.Errorf("scan listing: %w", err)
 		}
 		listings = append(listings, l)

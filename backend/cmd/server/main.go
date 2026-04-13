@@ -362,16 +362,24 @@ func main() {
 		})
 
 		pub.GET("/suppliers", func(c *gin.Context) {
-			rows, err := db.Query(c.Request.Context(), `
-				SELECT s.id, s.shopify_domain, COALESCE(sp.company_name, s.shopify_domain),
+			search := c.Query("search")
+			query := `
+				SELECT s.id, s.shopify_domain, COALESCE(sp.company_name, s.name, s.shopify_domain),
 					COALESCE(sp.default_processing_days, 3), COALESCE(sp.is_verified, FALSE),
-					(SELECT COUNT(*) FROM supplier_listings sl WHERE sl.supplier_shop_id = s.id AND sl.status = 'active')
+					(SELECT COUNT(*) FROM supplier_listings sl WHERE sl.supplier_shop_id = s.id AND sl.status = 'active'),
+					COALESCE(sp.reliability_score, 0), COALESCE(sp.avg_fulfillment_hours, 0),
+					COALESCE(sp.total_orders_fulfilled, 0)
 				FROM shops s
 				LEFT JOIN supplier_profiles sp ON sp.shop_id = s.id
-				WHERE s.role = 'supplier' AND s.status = 'active'
-				ORDER BY (SELECT COUNT(*) FROM supplier_listings sl WHERE sl.supplier_shop_id = s.id AND sl.status = 'active') DESC
-				LIMIT 50
-			`)
+				WHERE s.role = 'supplier' AND s.status = 'active'`
+			args := []interface{}{}
+			if search != "" {
+				query += ` AND (COALESCE(sp.company_name,'') ILIKE $1 OR s.shopify_domain ILIKE $1 OR s.name ILIKE $1)`
+				args = append(args, "%"+search+"%")
+			}
+			query += ` ORDER BY COALESCE(sp.reliability_score, 0) DESC, (SELECT COUNT(*) FROM supplier_listings sl WHERE sl.supplier_shop_id = s.id AND sl.status = 'active') DESC LIMIT 50`
+
+			rows, err := db.Query(c.Request.Context(), query, args...)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
@@ -380,13 +388,16 @@ func main() {
 			var suppliers []gin.H
 			for rows.Next() {
 				var id, domain, name string
-				var days int
+				var days, fulfilled int
 				var verified bool
 				var count int
-				rows.Scan(&id, &domain, &name, &days, &verified, &count)
+				var score, responseHours float64
+				rows.Scan(&id, &domain, &name, &days, &verified, &count, &score, &responseHours, &fulfilled)
 				suppliers = append(suppliers, gin.H{
 					"id": id, "domain": domain, "name": name,
 					"processing_days": days, "verified": verified, "listing_count": count,
+					"reliability_score": score, "avg_response_hours": responseHours,
+					"total_fulfilled": fulfilled,
 				})
 			}
 			c.JSON(http.StatusOK, gin.H{"suppliers": suppliers})

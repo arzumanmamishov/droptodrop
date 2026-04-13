@@ -70,6 +70,51 @@ export default function Support() {
           </Card>
         </Layout.Section>
 
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="400">
+              <Text as="h2" variant="headingMd">Policies</Text>
+              <Divider />
+
+              <BlockStack gap="300">
+                <BlockStack gap="100">
+                  <Text as="h3" variant="headingSm">Chargeback Policy</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    If a customer disputes a charge, the reseller handles the chargeback with their payment processor.
+                    If the chargeback is due to supplier error (wrong item, not shipped), the supplier is responsible —
+                    use the Disputes feature to resolve. Supplier reliability scores are affected by chargebacks.
+                  </Text>
+                </BlockStack>
+
+                <BlockStack gap="100">
+                  <Text as="h3" variant="headingSm">Refund Policy</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Returns go through the supplier: reseller requests return → supplier uploads return label →
+                    customer ships to supplier → supplier confirms receipt → reseller processes refund.
+                    Since payments are via PayPal, there are no double refund fees like other platforms.
+                  </Text>
+                </BlockStack>
+
+                <BlockStack gap="100">
+                  <Text as="h3" variant="headingSm">Margin Protection</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    We enforce a minimum 30% markup on all imports to protect resellers from unsustainable margins.
+                    Always factor in shipping costs — we recommend 40%+ markup. Use the profit calculator during import.
+                  </Text>
+                </BlockStack>
+
+                <BlockStack gap="100">
+                  <Text as="h3" variant="headingSm">Supplier Disconnection</Text>
+                  <Text as="p" variant="bodySm" tone="subdued">
+                    Suppliers cannot remove listings while orders are in progress. When a supplier pauses a product,
+                    all resellers receive a warning notification with time to prepare.
+                  </Text>
+                </BlockStack>
+              </BlockStack>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+
         <Layout.Section variant="oneHalf">
           <Card>
             <BlockStack gap="300">

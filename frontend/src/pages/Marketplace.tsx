@@ -205,6 +205,11 @@ export default function Marketplace() {
                                 ~{listing.avg_response_hours! < 1 ? '<1h' : `${Math.round(listing.avg_response_hours!)}h`} response
                               </span>
                             )}
+                            {(listing.supplier_score || 0) > 0 && listing.supplier_score! < 2 && (
+                              <span style={{ fontSize: '10px', padding: '1px 6px', borderRadius: '4px', background: '#fee2e2', color: '#991b1b', fontWeight: 600 }}>
+                                Low reliability
+                              </span>
+                            )}
                           </InlineStack>
                         </BlockStack>
 
@@ -388,7 +393,18 @@ export default function Marketplace() {
                   </BlockStack>
                 )}
                 <div style={{ background: '#fef3c7', borderRadius: '8px', padding: '10px 14px', fontSize: '12px', color: '#92400e' }}>
-                  <strong>Shipping reminder:</strong> Make sure your markup covers shipping costs. If the supplier charges shipping separately, factor it into your margin. We recommend at least 40% markup for products with shipping.
+                  <strong>Shipping reminder:</strong> Make sure your markup covers shipping costs. We recommend at least 40% markup for products with shipping.
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <Button variant="plain" onClick={() => {
+                    if (importModal) {
+                      const wholesale = importModal.variants?.[0]?.wholesale_price || 0;
+                      startConversation(importModal.supplier_shop_id);
+                      toast.success(`Message sent to negotiate margin for "${importModal.title}" (wholesale: $${wholesale.toFixed(2)})`);
+                    }
+                  }}>
+                    Want a better margin? Message the supplier to negotiate
+                  </Button>
                 </div>
               </FormLayout>
             </BlockStack>
