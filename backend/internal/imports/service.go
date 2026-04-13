@@ -59,12 +59,13 @@ type ImportVariant struct {
 
 // ImportInput is the input for importing a supplier listing.
 type ImportInput struct {
-	SupplierListingID string  `json:"supplier_listing_id" binding:"required"`
-	MarkupType        string  `json:"markup_type"`
-	MarkupValue       float64 `json:"markup_value"`
-	SyncImages        bool    `json:"sync_images"`
-	SyncDescription   bool    `json:"sync_description"`
-	SyncTitle         bool    `json:"sync_title"`
+	SupplierListingID  string   `json:"supplier_listing_id" binding:"required"`
+	MarkupType         string   `json:"markup_type"`
+	MarkupValue        float64  `json:"markup_value"`
+	SyncImages         bool     `json:"sync_images"`
+	SyncDescription    bool     `json:"sync_description"`
+	SyncTitle          bool     `json:"sync_title"`
+	SelectedVariantIDs []string `json:"selected_variant_ids"` // optional: if empty, import all
 }
 
 // Service handles import operations.
@@ -159,6 +160,23 @@ func (s *Service) Create(ctx context.Context, resellerShopID string, input Impor
 		variantList = append(variantList, v)
 	}
 	rows.Close()
+
+	// Filter by selected variant IDs if provided
+	if len(input.SelectedVariantIDs) > 0 {
+		selectedSet := make(map[string]bool)
+		for _, id := range input.SelectedVariantIDs {
+			selectedSet[id] = true
+		}
+		var filtered []variantData
+		for _, v := range variantList {
+			if selectedSet[v.ID] {
+				filtered = append(filtered, v)
+			}
+		}
+		if len(filtered) > 0 {
+			variantList = filtered
+		}
+	}
 
 	// Now insert import variants (rows closed, connection is free)
 	for _, v := range variantList {

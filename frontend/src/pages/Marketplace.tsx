@@ -29,6 +29,7 @@ export default function Marketplace() {
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importSuccess, setImportSuccess] = useState(false);
+  const [selectedVariants, setSelectedVariants] = useState<Set<string>>(new Set());
   const [detailModal, setDetailModal] = useState<SupplierListing | null>(null);
 
   const limit = 20;
@@ -49,6 +50,7 @@ export default function Marketplace() {
         markup_type: markupType,
         markup_value: parseFloat(markupValue),
         sync_images: true, sync_description: true, sync_title: false,
+        selected_variant_ids: selectedVariants.size > 0 ? Array.from(selectedVariants) : [],
       });
       setImportSuccess(true);
       setImportModal(null);
@@ -217,7 +219,7 @@ export default function Marketplace() {
                         )}
 
                         {/* Actions */}
-                        <Button variant="primary" fullWidth onClick={() => setImportModal(listing)}>
+                        <Button variant="primary" fullWidth onClick={() => { setImportModal(listing); setSelectedVariants(new Set()); }}>
                           Import to My Store
                         </Button>
                         <div style={{ display: 'flex', gap: '6px' }}>
@@ -332,17 +334,32 @@ export default function Marketplace() {
                 />
                 {importModal.variants && importModal.variants.length > 0 && (
                   <BlockStack gap="200">
-                    <Text as="h3" variant="headingSm">Price Preview</Text>
-                    {importModal.variants.slice(0, 5).map((v) => {
+                    <InlineStack align="space-between" blockAlign="center">
+                      <Text as="h3" variant="headingSm">Variants {importModal.variants.length > 1 ? `(${selectedVariants.size || 'all'} of ${importModal.variants.length})` : ''}</Text>
+                      {importModal.variants.length > 1 && (
+                        <Button variant="plain" onClick={() => {
+                          if (selectedVariants.size === importModal.variants.length) setSelectedVariants(new Set());
+                          else setSelectedVariants(new Set(importModal.variants.map(v => v.id)));
+                        }}>{selectedVariants.size === importModal.variants.length ? 'Deselect all' : 'Select all'}</Button>
+                      )}
+                    </InlineStack>
+                    {importModal.variants.slice(0, 20).map((v) => {
                       const markup = parseFloat(markupValue) || 0;
                       const price = markupType === 'percentage' ? v.wholesale_price * (1 + markup / 100) : v.wholesale_price + markup;
                       const margin = ((price - v.wholesale_price) / price) * 100;
                       const _ai = getSmartPrice(v.wholesale_price);
                       void _ai;
                       return (
-                        <div key={v.id} style={{ background: '#f8fafb', borderRadius: '8px', padding: '12px' }}>
+                        <div key={v.id} style={{ background: selectedVariants.has(v.id) || selectedVariants.size === 0 ? '#f8fafb' : '#fafafa', borderRadius: '8px', padding: '12px', opacity: selectedVariants.size > 0 && !selectedVariants.has(v.id) ? 0.5 : 1 }}>
                           <InlineStack align="space-between" blockAlign="center">
-                            <Text as="span" variant="bodySm" fontWeight="semibold">{v.title || 'Default'}</Text>
+                            <InlineStack gap="200" blockAlign="center">
+                              {importModal.variants.length > 1 && (
+                                <input type="checkbox" checked={selectedVariants.has(v.id)} onChange={() => {
+                                  setSelectedVariants(prev => { const next = new Set(prev); if (next.has(v.id)) next.delete(v.id); else next.add(v.id); return next; });
+                                }} style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#1e40af' }} />
+                              )}
+                              <Text as="span" variant="bodySm" fontWeight="semibold">{v.title || 'Default'}</Text>
+                            </InlineStack>
                             <Text as="span" variant="bodySm">${v.wholesale_price.toFixed(2)} → <strong>${price.toFixed(2)}</strong></Text>
                           </InlineStack>
                           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
