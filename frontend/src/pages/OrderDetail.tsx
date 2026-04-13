@@ -377,7 +377,16 @@ export default function OrderDetail({ role }: OrderDetailProps) {
         </Layout.Section>
 
         <Layout.Section>
-          <Button onClick={() => navigate('/disputes')} tone="critical">Report Issue</Button>
+          <InlineStack gap="200">
+            {!isSupplier && order.status === 'fulfilled' && (
+              <Button onClick={() => {
+                api.post('/returns', { routed_order_id: order.id, reason: 'Customer requested return' })
+                  .then(() => { toast.success('Return request sent to supplier'); })
+                  .catch(() => { toast.error('Failed to create return request'); });
+              }}>Request Return</Button>
+            )}
+            <Button onClick={() => navigate('/disputes')} tone="critical">Report Issue</Button>
+          </InlineStack>
         </Layout.Section>
       </Layout>
 

@@ -36,6 +36,7 @@ import SetupWizard from './pages/SetupWizard';
 import Onboarding from './pages/Onboarding';
 import ResellerSettings from './pages/ResellerSettings';
 import AdminPanel from './pages/AdminPanel';
+import Returns from './pages/Returns';
 
 export default function App() {
   const [shop, setShop] = useState<Shop | null>(null);
@@ -116,6 +117,7 @@ export default function App() {
                 </>
               )}
               <Route path="/analytics" element={<Analytics />} />
+              <Route path="/returns" element={<Returns role={shop.role} />} />
               <Route path="/disputes" element={<Disputes />} />
               <Route path="/notifications" element={<Notifications />} />
               <Route path="/payouts" element={<Payouts role={shop.role} />} />

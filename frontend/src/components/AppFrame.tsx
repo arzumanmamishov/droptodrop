@@ -67,6 +67,7 @@ export default function AppFrame({ shop, children }: AppFrameProps) {
     { url: '/payouts', label: 'Payouts', icon: CashDollarIcon, selected: location.pathname === '/payouts', badge: badge(counts.payouts) },
     { url: '/messages', label: 'Messages', icon: ChatIcon, selected: location.pathname === '/messages', badge: badge(counts.messages) },
     { url: '/notifications', label: 'Notifications', icon: NotificationIcon, selected: location.pathname === '/notifications', badge: badge(counts.notifications) },
+    { url: '/returns', label: 'Returns', icon: ImportIcon, selected: location.pathname === '/returns' },
     { url: '/disputes', label: 'Disputes', icon: AlertCircleIcon, selected: location.pathname === '/disputes', badge: badge(counts.disputes) },
   ];
   const supplierMore = [
@@ -91,6 +92,7 @@ export default function AppFrame({ shop, children }: AppFrameProps) {
     { url: '/payouts', label: 'Payouts', icon: CashDollarIcon, selected: location.pathname === '/payouts', badge: badge(counts.payouts) },
     { url: '/messages', label: 'Messages', icon: ChatIcon, selected: location.pathname === '/messages', badge: badge(counts.messages) },
     { url: '/notifications', label: 'Notifications', icon: NotificationIcon, selected: location.pathname === '/notifications', badge: badge(counts.notifications) },
+    { url: '/returns', label: 'Returns', icon: ImportIcon, selected: location.pathname === '/returns' },
     { url: '/disputes', label: 'Disputes', icon: AlertCircleIcon, selected: location.pathname === '/disputes', badge: badge(counts.disputes) },
   ];
   const resellerMore = [

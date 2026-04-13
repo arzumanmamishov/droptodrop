@@ -1135,6 +1135,130 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"order": order, "fulfillments": events})
 		})
 
+		// ===== Returns =====
+		api.POST("/returns", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			sid := shopID.(string)
+			var body struct {
+				RoutedOrderID string `json:"routed_order_id" binding:"required"`
+				Reason        string `json:"reason" binding:"required"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			// Get order details
+			var supplierID, customerName string
+			err := db.QueryRow(c.Request.Context(), `
+				SELECT supplier_shop_id, customer_shipping_name FROM routed_orders
+				WHERE id = $1 AND reseller_shop_id = $2 AND status = 'fulfilled'
+			`, body.RoutedOrderID, sid).Scan(&supplierID, &customerName)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "order not found or not fulfilled"})
+				return
+			}
+			var returnID string
+			err = db.QueryRow(c.Request.Context(), `
+				INSERT INTO return_requests (routed_order_id, reseller_shop_id, supplier_shop_id, reason, customer_name)
+				VALUES ($1, $2, $3, $4, $5) RETURNING id
+			`, body.RoutedOrderID, sid, supplierID, body.Reason, customerName).Scan(&returnID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			// Notify supplier
+			inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{
+				ShopID: supplierID, Title: "Return Request",
+				Message: "A customer wants to return an order. Please upload a return label.",
+				Type: "warning", Link: strPtr("/returns"),
+			})
+			c.JSON(http.StatusCreated, gin.H{"id": returnID, "status": "requested"})
+		})
+
+		api.GET("/returns", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			role, _ := c.Get("shop_role")
+			sid := shopID.(string)
+			shopCol := "reseller_shop_id"
+			if role.(string) == "supplier" { shopCol = "supplier_shop_id" }
+			rows, err := db.Query(c.Request.Context(), fmt.Sprintf(`
+				SELECT rr.id, rr.routed_order_id, COALESCE(ro.reseller_order_number,''), rr.status, rr.reason,
+					COALESCE(rr.customer_name,''), COALESCE(rr.return_label_url,''), COALESCE(rr.supplier_notes,''),
+					COALESCE(rs.shopify_domain,''), COALESCE(ss.shopify_domain,''), rr.created_at
+				FROM return_requests rr
+				JOIN routed_orders ro ON ro.id = rr.routed_order_id
+				LEFT JOIN shops rs ON rs.id = rr.reseller_shop_id
+				LEFT JOIN shops ss ON ss.id = rr.supplier_shop_id
+				WHERE rr.%s = $1 ORDER BY rr.created_at DESC LIMIT 50
+			`, shopCol), sid)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			defer rows.Close()
+			var returns []gin.H
+			for rows.Next() {
+				var id, orderID, orderNum, status, reason, customer, labelURL, notes, reseller, supplier string
+				var createdAt time.Time
+				rows.Scan(&id, &orderID, &orderNum, &status, &reason, &customer, &labelURL, &notes, &reseller, &supplier, &createdAt)
+				returns = append(returns, gin.H{
+					"id": id, "order_id": orderID, "order_number": orderNum, "status": status,
+					"reason": reason, "customer_name": customer, "return_label_url": labelURL,
+					"supplier_notes": notes, "reseller": reseller, "supplier": supplier, "created_at": createdAt,
+				})
+			}
+			c.JSON(http.StatusOK, gin.H{"returns": returns})
+		})
+
+		// Supplier uploads return label
+		api.PUT("/returns/:id/label", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			var body struct {
+				LabelURL string `json:"label_url" binding:"required"`
+				Notes    string `json:"notes"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			result, err := db.Exec(c.Request.Context(), `
+				UPDATE return_requests SET return_label_url = $1, supplier_notes = $2, status = 'label_uploaded', updated_at = NOW()
+				WHERE id = $3 AND supplier_shop_id = $4 AND status = 'requested'
+			`, body.LabelURL, body.Notes, c.Param("id"), shopID)
+			if err != nil || result.RowsAffected() == 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "return not found or already processed"})
+				return
+			}
+			// Notify reseller
+			var resellerID string
+			db.QueryRow(c.Request.Context(), `SELECT reseller_shop_id FROM return_requests WHERE id = $1`, c.Param("id")).Scan(&resellerID)
+			if resellerID != "" {
+				inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{
+					ShopID: resellerID, Title: "Return Label Ready",
+					Message: "Supplier uploaded a return shipping label. Share it with your customer.",
+					Type: "success", Link: strPtr("/returns"),
+				})
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		})
+
+		// Update return status
+		api.PUT("/returns/:id/status", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			var body struct {
+				Status string `json:"status" binding:"required"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			db.Exec(c.Request.Context(), `
+				UPDATE return_requests SET status = $1, updated_at = NOW()
+				WHERE id = $2 AND (supplier_shop_id = $3 OR reseller_shop_id = $3)
+			`, body.Status, c.Param("id"), shopID)
+			c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		})
+
 		// ===== Disputes (shared) =====
 		api.POST("/disputes", func(c *gin.Context) {
 			shopID, _ := c.Get("shop_id")
