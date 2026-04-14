@@ -200,6 +200,7 @@ export default function SupplierListings() {
                                     }}>
                                       Total Stock: {totalStock} pcs
                                     </span>
+                                    <span style={{ color: '#cbd5e1' }}>|</span>
                                     <span style={{
                                       padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
                                       background: marketplaceStock > 0 ? '#dcfce7' : '#fee2e2',
@@ -208,10 +209,14 @@ export default function SupplierListings() {
                                       Marketplace: {marketplaceStock} pcs ({allocationPct}%)
                                     </span>
                                     {price != null && (
-                                      <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 500 }}>
-                                        ${price.toFixed(2)} wholesale
-                                      </span>
+                                      <>
+                                        <span style={{ color: '#cbd5e1' }}>|</span>
+                                        <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 500 }}>
+                                          ${price.toFixed(2)} wholesale
+                                        </span>
+                                      </>
                                     )}
+                                    <span style={{ color: '#cbd5e1' }}>|</span>
                                     <span style={{ fontSize: '11px', color: '#94a3b8' }}>
                                       {listing.processing_days}d processing
                                     </span>

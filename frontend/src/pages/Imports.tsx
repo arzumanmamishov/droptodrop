@@ -229,9 +229,11 @@ export default function Imports() {
                               <Text as="span" variant="bodySm" tone="subdued">
                                 Wholesale: ${imp.supplier_price?.toFixed(2) || '0.00'}
                               </Text>
+                              <Text as="span" variant="bodySm" tone="subdued">|</Text>
                               <Text as="span" variant="bodySm" tone="subdued">
                                 Markup: {imp.markup_type === 'percentage' ? `${imp.markup_value}%` : `$${imp.markup_value.toFixed(2)}`}
                               </Text>
+                              <Text as="span" variant="bodySm" tone="subdued">|</Text>
                               <Badge tone={imp.supplier_stock > 0 ? 'success' : 'critical'}>
                                 {`${imp.supplier_stock || 0} pcs in stock`}
                               </Badge>
