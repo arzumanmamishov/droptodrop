@@ -21,7 +21,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 
 .app { display: none; }
 .header { background: linear-gradient(135deg, #0f172a, #1e3a8a); color: #fff; padding: 16px 32px; display: flex; justify-content: space-between; align-items: center; }
-.header h1 { font-size: 20px; font-weight: 700; }
+.header h1 { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.header h1 img { width: 32px; height: 32px; object-fit: contain; }
 .header button { background: rgba(255,255,255,0.15); color: #fff; border: none; padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; }
 .tabs { display: flex; gap: 4px; padding: 16px 32px; background: #fff; border-bottom: 1px solid #e2e8f0; }
 .tab { padding: 8px 20px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; color: #64748b; border: 1px solid transparent; }
@@ -55,6 +56,7 @@ tr:hover { background: #f8fafc; }
 
 <div id="login" class="login-wrap">
   <div class="login-box">
+    <img src="/pngdrop.png" alt="DropToDrop" style="width:64px;height:64px;object-fit:contain;margin-bottom:12px">
     <h1>DropToDrop Admin</h1>
     <p>Enter admin password to access the dashboard.</p>
     <div id="login-error" class="login-error" style="display:none"></div>
@@ -65,7 +67,7 @@ tr:hover { background: #f8fafc; }
 
 <div id="app" class="app">
   <div class="header">
-    <h1>DropToDrop Admin</h1>
+    <h1><img src="/pngdrop.png" alt="">DropToDrop Admin</h1>
     <button onclick="logout()">Logout</button>
   </div>
   <div class="tabs" id="tabs"></div>
