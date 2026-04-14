@@ -198,14 +198,14 @@ export default function SupplierListings() {
                                       padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
                                       background: '#f1f5f9', color: '#475569',
                                     }}>
-                                      Total Stock: {totalStock}
+                                      Total Stock: {totalStock} pcs
                                     </span>
                                     <span style={{
                                       padding: '2px 8px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
                                       background: marketplaceStock > 0 ? '#dcfce7' : '#fee2e2',
                                       color: marketplaceStock > 0 ? '#166534' : '#991b1b',
                                     }}>
-                                      Marketplace: {marketplaceStock} ({allocationPct}%)
+                                      Marketplace: {marketplaceStock} pcs ({allocationPct}%)
                                     </span>
                                     {price != null && (
                                       <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 500 }}>

@@ -233,7 +233,7 @@ export default function Imports() {
                                 Markup: {imp.markup_type === 'percentage' ? `${imp.markup_value}%` : `$${imp.markup_value.toFixed(2)}`}
                               </Text>
                               <Badge tone={imp.supplier_stock > 0 ? 'success' : 'critical'}>
-                                {`${imp.supplier_stock || 0} in stock`}
+                                {`${imp.supplier_stock || 0} pcs in stock`}
                               </Badge>
                             </InlineStack>
 
