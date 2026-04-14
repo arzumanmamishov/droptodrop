@@ -30,6 +30,7 @@ type RoutedOrder struct {
 	TotalWholesaleAmount   float64           `json:"total_wholesale_amount"`
 	Currency               string            `json:"currency"`
 	Notes                  string            `json:"notes"`
+	PayStatus              string            `json:"pay_status,omitempty"`
 	ResellerShopName       string            `json:"reseller_shop_name,omitempty"`
 	SupplierShopName       string            `json:"supplier_shop_name,omitempty"`
 	Items                  []RoutedOrderItem `json:"items,omitempty"`
@@ -354,6 +355,10 @@ func (s *Service) ListRoutedOrders(ctx context.Context, shopID, role, status str
 			return nil, 0, fmt.Errorf("scan order: %w", err)
 		}
 
+		// Load payment status
+		s.db.QueryRow(ctx, `SELECT COALESCE(status, 'unpaid') FROM payout_records WHERE routed_order_id = $1 LIMIT 1`, o.ID).Scan(&o.PayStatus)
+		if o.PayStatus == "" { o.PayStatus = "unpaid" }
+
 		// Load items with product images
 		itemRows, err := s.db.Query(ctx, `
 			SELECT roi.id, roi.routed_order_id, roi.reseller_line_item_id, roi.supplier_variant_id,
@@ -419,6 +424,10 @@ func (s *Service) GetRoutedOrder(ctx context.Context, orderID, shopID string) (*
 	if err != nil {
 		return nil, fmt.Errorf("get order: %w", err)
 	}
+
+	// Load payment status
+	s.db.QueryRow(ctx, `SELECT COALESCE(status, 'unpaid') FROM payout_records WHERE routed_order_id = $1 LIMIT 1`, orderID).Scan(&o.PayStatus)
+	if o.PayStatus == "" { o.PayStatus = "unpaid" }
 
 	rows, err := s.db.Query(ctx, `
 		SELECT id, routed_order_id, reseller_line_item_id, supplier_variant_id, reseller_variant_id,

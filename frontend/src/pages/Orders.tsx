@@ -188,6 +188,24 @@ export default function Orders({ role }: OrdersProps) {
                           }}>
                             {cfg.label}
                           </span>
+                          {(() => {
+                            const payMap: Record<string, { color: string; bg: string; label: string }> = {
+                              unpaid: { color: '#92400e', bg: '#fef3c7', label: 'Unpaid' },
+                              pending: { color: '#92400e', bg: '#fef3c7', label: 'Unpaid' },
+                              payment_sent: { color: '#1e40af', bg: '#dbeafe', label: 'Payment Sent' },
+                              paid: { color: '#166534', bg: '#dcfce7', label: 'Paid' },
+                              disputed: { color: '#991b1b', bg: '#fee2e2', label: 'Disputed' },
+                            };
+                            const pay = payMap[order.pay_status || 'unpaid'] || payMap['unpaid'];
+                            return (
+                              <span style={{
+                                padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 700,
+                                color: pay.color, background: pay.bg,
+                              }}>
+                                {pay.label}
+                              </span>
+                            );
+                          })()}
                           {items.length > 0 && (
                             <span style={{ fontSize: '12px', color: '#64748b' }}>
                               {items.map(i => i.title).join(', ').slice(0, 60)}{items.map(i => i.title).join(', ').length > 60 ? '...' : ''}

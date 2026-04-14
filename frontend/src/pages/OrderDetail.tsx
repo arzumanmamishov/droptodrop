@@ -179,13 +179,31 @@ export default function OrderDetail({ role }: OrderDetailProps) {
                 </div>
               </div>
               {/* Right: status */}
-              <div style={{ textAlign: 'right' }}>
+              <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: '6px', alignItems: 'flex-end' }}>
                 <span style={{
                   padding: '6px 18px', borderRadius: '24px', fontSize: '13px', fontWeight: 700,
                   color: cfg.color, background: cfg.bg,
                 }}>
                   {cfg.label}
                 </span>
+                {(() => {
+                  const payMap: Record<string, { color: string; bg: string; label: string }> = {
+                    unpaid: { color: '#92400e', bg: '#fef3c7', label: 'Unpaid' },
+                    pending: { color: '#92400e', bg: '#fef3c7', label: 'Unpaid' },
+                    payment_sent: { color: '#1e40af', bg: '#dbeafe', label: 'Payment Sent' },
+                    paid: { color: '#166534', bg: '#dcfce7', label: 'Paid' },
+                    disputed: { color: '#991b1b', bg: '#fee2e2', label: 'Disputed' },
+                  };
+                  const pay = payMap[order.pay_status || 'unpaid'] || payMap['unpaid'];
+                  return (
+                    <span style={{
+                      padding: '4px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 700,
+                      color: pay.color, background: pay.bg,
+                    }}>
+                      {pay.label}
+                    </span>
+                  );
+                })()}
               </div>
             </div>
 
