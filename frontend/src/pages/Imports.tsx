@@ -221,7 +221,7 @@ export default function Imports() {
 
                             <InlineStack gap="200" blockAlign="center" wrap>
                               <span style={{
-                                padding: '2px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600,
+                                padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 700,
                                 color: cfg.color, background: cfg.bg,
                               }}>
                                 {cfg.label}

@@ -170,7 +170,7 @@ export default function Payouts({ role }: Props) {
                           padding: '4px 12px',
                           borderRadius: '20px',
                           fontSize: '12px',
-                          fontWeight: 600,
+                          fontWeight: 700,
                           color: cfg.color,
                           background: cfg.bg,
                         }}>

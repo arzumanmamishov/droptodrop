@@ -65,7 +65,7 @@ function OrderCommentsSection({ orderId }: { orderId: string }) {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
             <span style={{
-              fontSize: '11px', fontWeight: 600, textTransform: 'uppercase',
+              fontSize: '12px', fontWeight: 700, textTransform: 'uppercase',
               color: c.shop_role === 'supplier' ? '#1e40af' : '#059669',
             }}>
               {c.shop_role}
@@ -322,7 +322,7 @@ export default function OrderDetail({ role }: OrderDetailProps) {
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                           <span style={{
-                            padding: '2px 10px', borderRadius: '12px', fontSize: '11px', fontWeight: 600,
+                            padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: 700,
                             color: itemCfg.color, background: itemCfg.bg,
                           }}>
                             {item.fulfillment_status || 'unfulfilled'}

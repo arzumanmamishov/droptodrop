@@ -86,7 +86,7 @@ export default function Returns({ role }: Props) {
                               Order #{r.order_number || r.order_id.slice(0, 8)}
                             </Text>
                             <span style={{
-                              padding: '3px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 600,
+                              padding: '3px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 700,
                               color: cfg.color, background: cfg.bg,
                             }}>
                               {cfg.label}

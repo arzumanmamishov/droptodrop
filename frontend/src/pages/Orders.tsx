@@ -183,7 +183,7 @@ export default function Orders({ role }: OrdersProps) {
                         {/* Status + product names */}
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap', marginBottom: '8px' }}>
                           <span style={{
-                            padding: '3px 12px', borderRadius: '20px', fontSize: '11px', fontWeight: 600,
+                            padding: '3px 12px', borderRadius: '20px', fontSize: '12px', fontWeight: 700,
                             color: cfg.color, background: cfg.bg,
                           }}>
                             {cfg.label}
