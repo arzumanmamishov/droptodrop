@@ -550,4 +550,9 @@ func (s *Service) UpdateReliabilityScore(ctx context.Context, supplierShopID str
 	if score < 0 { score = 0 }
 
 	s.db.Exec(ctx, `UPDATE supplier_profiles SET reliability_score = $1 WHERE shop_id = $2`, score, supplierShopID)
+
+	// Auto-verify supplier: 10+ fulfilled orders AND score > 3.5
+	if fulfilled >= 10 && score > 3.5 {
+		s.db.Exec(ctx, `UPDATE supplier_profiles SET is_verified = TRUE, verified_at = NOW() WHERE shop_id = $1 AND is_verified = FALSE`, supplierShopID)
+	}
 }

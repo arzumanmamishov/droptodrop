@@ -194,6 +194,11 @@ export default function Marketplace() {
                             <Text as="h3" variant="headingSm" fontWeight="bold">{listing.title}</Text>
                           </div>
                           <InlineStack gap="200" blockAlign="center" wrap>
+                            {listing.supplier_verified && (
+                              <span style={{ fontSize: '11px', padding: '1px 6px', borderRadius: '4px', background: '#dbeafe', color: '#1e40af', fontWeight: 600 }}>
+                                ✓ Verified
+                              </span>
+                            )}
                             <Text as="span" variant="bodySm" tone="subdued">{listing.supplier_name || listing.vendor || 'Unknown'}</Text>
                             {(listing.supplier_score || 0) > 0 && (
                               <span style={{ fontSize: '11px', fontWeight: 600, color: '#92400e' }}>

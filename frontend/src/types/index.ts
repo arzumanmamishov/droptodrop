@@ -71,6 +71,7 @@ export interface SupplierListing {
   supplier_name?: string;
   avg_response_hours?: number;
   supplier_currency?: string;
+  supplier_verified?: boolean;
   created_at: string;
   updated_at: string;
 }
