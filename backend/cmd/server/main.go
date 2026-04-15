@@ -905,6 +905,35 @@ func main() {
 				if resellerID != "" {
 					inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{ShopID: resellerID, Title: "Order Shipped", Message: "Your order has been fulfilled with tracking info.", Type: "success", Link: strPtr("/orders/" + c.Param("id"))})
 				}
+
+				// Auto-refund sample cost on first sale
+				if resellerID != "" {
+					// Find unrefunded samples for this reseller from this supplier
+					var sampleID string
+					var sampleCost float64
+					db.QueryRow(c.Request.Context(), `
+						SELECT so.id, so.sample_cost FROM sample_orders so
+						JOIN supplier_listings sl ON sl.id = so.supplier_listing_id
+						WHERE so.reseller_shop_id = $1 AND sl.supplier_shop_id = $2
+						AND so.refunded = FALSE AND so.sample_cost > 0 AND so.status IN ('shipped','received')
+						LIMIT 1
+					`, resellerID, sid).Scan(&sampleID, &sampleCost)
+					if sampleID != "" && sampleCost > 0 {
+						db.Exec(c.Request.Context(), `UPDATE sample_orders SET refunded = TRUE, refunded_at = NOW() WHERE id = $1`, sampleID)
+						inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{
+							ShopID: resellerID, Title: "Sample Cost Refunded",
+							Message: fmt.Sprintf("Your sample cost of $%.2f has been refunded — your first sale was fulfilled!", sampleCost),
+							Type: "success", Link: strPtr("/samples"),
+						})
+						inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{
+							ShopID: sid, Title: "Sample Refund Due",
+							Message: fmt.Sprintf("Please refund $%.2f sample cost to the reseller — their first sale was fulfilled.", sampleCost),
+							Type: "info", Link: strPtr("/samples"),
+						})
+						logger.Info().Str("sample_id", sampleID).Float64("cost", sampleCost).Msg("sample cost auto-refund triggered")
+					}
+				}
+
 				c.JSON(http.StatusOK, event)
 			})
 		}
@@ -1770,6 +1799,7 @@ func main() {
 		})
 		api.POST("/samples", func(c *gin.Context) {
 			shopID, _ := c.Get("shop_id")
+			sid := shopID.(string)
 			var body struct {
 				ListingID string `json:"listing_id" binding:"required"`
 				Quantity  int    `json:"quantity"`
@@ -1780,16 +1810,37 @@ func main() {
 				return
 			}
 			if body.Quantity <= 0 { body.Quantity = 1 }
-			sample, err := advSvc.CreateSampleOrder(c.Request.Context(), shopID.(string), body.ListingID, body.Quantity, body.Notes)
+
+			// Limit: one sample per product per reseller
+			var existingCount int
+			db.QueryRow(c.Request.Context(), `SELECT COUNT(*) FROM sample_orders WHERE reseller_shop_id = $1 AND supplier_listing_id = $2`, sid, body.ListingID).Scan(&existingCount)
+			if existingCount > 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "You have already requested a sample for this product"})
+				return
+			}
+
+			// Get wholesale price for sample cost
+			var sampleCost float64
+			db.QueryRow(c.Request.Context(), `SELECT COALESCE(wholesale_price, 0) FROM supplier_listing_variants WHERE listing_id = $1 LIMIT 1`, body.ListingID).Scan(&sampleCost)
+
+			sample, err := advSvc.CreateSampleOrder(c.Request.Context(), sid, body.ListingID, body.Quantity, body.Notes)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
+
+			// Set sample cost
+			db.Exec(c.Request.Context(), `UPDATE sample_orders SET sample_cost = $1 WHERE id = $2`, sampleCost, sample.ID)
+
 			// Notify supplier about sample request
 			var supplierID string
 			db.QueryRow(c.Request.Context(), `SELECT supplier_shop_id FROM supplier_listings WHERE id = $1`, body.ListingID).Scan(&supplierID)
 			if supplierID != "" {
-				inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{ShopID: supplierID, Title: "Sample Request", Message: "A reseller has requested a product sample.", Type: "info", Link: strPtr("/samples")})
+				inappNotifSvc.Create(c.Request.Context(), inappnotif.CreateInput{
+					ShopID: supplierID, Title: "Sample Request",
+					Message: fmt.Sprintf("A reseller has requested a product sample. Sample cost: $%.2f (refunded after first sale).", sampleCost),
+					Type: "info", Link: strPtr("/samples"),
+				})
 			}
 			c.JSON(http.StatusCreated, sample)
 		})

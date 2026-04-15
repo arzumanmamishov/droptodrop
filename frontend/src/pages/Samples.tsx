@@ -10,6 +10,7 @@ import { api } from '../utils/api';
 interface SampleOrder {
   id: string; status: string; quantity: number;
   notes: string; tracking_number: string; created_at: string; listing_title: string;
+  sample_cost?: number; refunded?: boolean;
 }
 
 interface Props { role: string; }
@@ -46,13 +47,18 @@ export default function Samples({ role }: Props) {
           <Card>
             {samples.length > 0 ? (
               <DataTable
-                columnContentTypes={['text', 'text', 'numeric', 'text', 'text', 'text']}
-                headings={['Product', 'Status', 'Qty', 'Notes', 'Date', isSupplier ? 'Actions' : '']}
+                columnContentTypes={['text', 'text', 'numeric', 'text', 'text', 'text', 'text']}
+                headings={['Product', 'Status', 'Qty', 'Cost', 'Payment', 'Date', isSupplier ? 'Actions' : '']}
                 rows={samples.map(s => [
                   s.listing_title || s.id.slice(0, 8),
                   statusBadge(s.status),
                   s.quantity,
-                  s.notes || '-',
+                  s.sample_cost ? `$${s.sample_cost.toFixed(2)}` : '-',
+                  s.refunded
+                    ? <Badge key={`r-${s.id}`} tone="success">Refunded</Badge>
+                    : s.sample_cost && s.sample_cost > 0
+                      ? <Badge key={`r-${s.id}`} tone="attention">Refund on 1st sale</Badge>
+                      : '-',
                   new Date(s.created_at).toLocaleDateString(),
                   isSupplier && s.status === 'requested' ? (
                     <InlineStack key={s.id} gap="200">
