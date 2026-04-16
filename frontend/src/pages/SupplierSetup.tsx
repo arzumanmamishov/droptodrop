@@ -10,10 +10,14 @@ import {
   Banner,
   BlockStack,
   Spinner,
+  Modal,
+  Button,
+  InlineStack,
 } from '@shopify/polaris';
 import { api } from '../utils/api';
 import { useToast } from '../hooks/useToast';
 import { SupplierProfile } from '../types';
+import { COUNTRIES, COUNTRY_NAMES } from '../constants/countries';
 
 export default function SupplierSetup() {
   const toast = useToast();
@@ -32,6 +36,9 @@ export default function SupplierSetup() {
   const [returnPolicyUrl, setReturnPolicyUrl] = useState('');
   const [paypalEmail, setPaypalEmail] = useState('');
   const [shippingCountries, setShippingCountries] = useState('');
+  const [countryModal, setCountryModal] = useState(false);
+  const [selectedCountries, setSelectedCountries] = useState<Set<string>>(new Set());
+  const [countrySearch, setCountrySearch] = useState('');
 
   useEffect(() => {
     api
@@ -47,6 +54,7 @@ export default function SupplierSetup() {
         setReturnPolicyUrl(data.return_policy_url);
         setPaypalEmail(data.paypal_email || '');
         setShippingCountries((data.shipping_countries || []).join(', '));
+        setSelectedCountries(new Set(data.shipping_countries || []));
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -173,11 +181,73 @@ export default function SupplierSetup() {
               <TextField label="Support email" type="email" value={supportEmail} onChange={setSupportEmail} autoComplete="email" />
               <TextField label="Return policy URL" value={returnPolicyUrl} onChange={setReturnPolicyUrl} autoComplete="url" />
               <TextField label="PayPal email" type="email" value={paypalEmail} onChange={setPaypalEmail} autoComplete="email" helpText="Resellers will use this to send you payments via PayPal." />
-              <TextField label="Shipping countries" value={shippingCountries} onChange={setShippingCountries} autoComplete="off" helpText="Comma-separated country codes (e.g. IT, ES, DE, FR). Leave empty to ship worldwide." placeholder="IT, ES, DE, FR" />
+              <BlockStack gap="200">
+                <InlineStack align="space-between" blockAlign="center">
+                  <span style={{ fontSize: '14px', fontWeight: 500 }}>Shipping countries</span>
+                  <Button size="slim" onClick={() => setCountryModal(true)}>
+                    {selectedCountries.size > 0 ? `Change (${selectedCountries.size})` : 'Select Countries'}
+                  </Button>
+                </InlineStack>
+                {selectedCountries.size > 0 ? (
+                  <InlineStack gap="200" wrap>
+                    {Array.from(selectedCountries).map(c => (
+                      <span key={c} style={{ padding: '2px 8px', borderRadius: '6px', fontSize: '12px', fontWeight: 600, background: '#dbeafe', color: '#1e40af' }}>
+                        {COUNTRY_NAMES[c] || c}
+                      </span>
+                    ))}
+                  </InlineStack>
+                ) : (
+                  <span style={{ fontSize: '13px', color: '#94a3b8' }}>Ships worldwide (no restrictions)</span>
+                )}
+              </BlockStack>
             </FormLayout>
           </Card>
         </Layout.AnnotatedSection>
       </Layout>
+
+      {countryModal && (
+        <Modal open onClose={() => setCountryModal(false)} title="Select Shipping Countries"
+          primaryAction={{ content: selectedCountries.size > 0 ? `Save (${selectedCountries.size})` : 'Ship Worldwide', onAction: () => {
+            setShippingCountries(Array.from(selectedCountries).join(', '));
+            setCountryModal(false);
+          }}}
+          secondaryActions={[{ content: 'Cancel', onAction: () => setCountryModal(false) }]}
+        >
+          <Modal.Section>
+            <BlockStack gap="300">
+              <input type="text" placeholder="Search countries..." value={countrySearch}
+                onChange={(e) => setCountrySearch(e.target.value)}
+                style={{ width: '100%', padding: '8px 12px', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '14px' }}
+              />
+              <InlineStack gap="200" wrap>
+                <Button size="slim" onClick={() => setSelectedCountries(new Set(COUNTRIES))}>All</Button>
+                <Button size="slim" onClick={() => setSelectedCountries(new Set())}>Clear</Button>
+                <Button size="slim" onClick={() => setSelectedCountries(new Set(['DE','AT','CH','FR','IT','ES','NL','BE','PT','PL','CZ','SE','DK','NO','FI','IE','GB']))}>EU + UK</Button>
+                <Button size="slim" onClick={() => setSelectedCountries(new Set(['US','CA','MX']))}>N. America</Button>
+              </InlineStack>
+              <div style={{ maxHeight: '300px', overflowY: 'auto', border: '1px solid #f1f5f9', borderRadius: '8px' }}>
+                {COUNTRIES.filter(c => {
+                  const name = (COUNTRY_NAMES[c] || c).toLowerCase();
+                  return !countrySearch || name.includes(countrySearch.toLowerCase()) || c.toLowerCase().includes(countrySearch.toLowerCase());
+                }).map(code => (
+                  <label key={code} style={{
+                    display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 12px', cursor: 'pointer',
+                    background: selectedCountries.has(code) ? '#eff6ff' : 'transparent',
+                    borderBottom: '1px solid #f8fafc',
+                  }}>
+                    <input type="checkbox" checked={selectedCountries.has(code)}
+                      onChange={() => setSelectedCountries(prev => { const next = new Set(prev); if (next.has(code)) next.delete(code); else next.add(code); return next; })}
+                      style={{ width: '16px', height: '16px', accentColor: '#1e40af' }}
+                    />
+                    <span style={{ fontSize: '13px' }}>{COUNTRY_NAMES[code] || code}</span>
+                    <span style={{ fontSize: '11px', color: '#94a3b8' }}>{code}</span>
+                  </label>
+                ))}
+              </div>
+            </BlockStack>
+          </Modal.Section>
+        </Modal>
+      )}
     </Page>
   );
 }
