@@ -95,11 +95,6 @@ export default function Dashboard() {
     finally { setSavingCountries(false); }
   }, [selectedCountries, refetch, toast]);
 
-  // Auto-refresh every 30 seconds
-  useEffect(() => {
-    const interval = setInterval(() => refetch(), 30000);
-    return () => clearInterval(interval);
-  }, [refetch]);
 
   // Platform stats
   const [platformStats, setPlatformStats] = useState<{ total_products: number; total_orders: number; total_suppliers: number; total_resellers: number } | null>(null);
