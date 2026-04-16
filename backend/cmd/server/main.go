@@ -525,10 +525,14 @@ func main() {
 				pendingOrders, pendingTotal, _ := ordersSvc.ListRoutedOrders(c.Request.Context(), sid, "supplier", "pending", 100, 0)
 				_ = pendingOrders
 				dashboard["pending_order_count"] = pendingTotal
-				// PayPal setup check
+				// PayPal + shipping countries check
 				var paypal string
-				db.QueryRow(c.Request.Context(), `SELECT COALESCE(paypal_email,'') FROM supplier_profiles WHERE shop_id = $1`, sid).Scan(&paypal)
+				var shippingCountries json.RawMessage
+				db.QueryRow(c.Request.Context(), `SELECT COALESCE(paypal_email,''), COALESCE(shipping_countries, '[]'::jsonb) FROM supplier_profiles WHERE shop_id = $1`, sid).Scan(&paypal, &shippingCountries)
 				dashboard["paypal_email"] = paypal
+				var countries []string
+				json.Unmarshal(shippingCountries, &countries)
+				dashboard["shipping_countries"] = countries
 			} else if role == "reseller" {
 				imports, importTotal, _ := importsSvc.List(c.Request.Context(), sid, 100, 0)
 				orders, orderTotal, _ := ordersSvc.ListRoutedOrders(c.Request.Context(), sid, "reseller", "", 10, 0)
