@@ -2,6 +2,7 @@ package shops
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -121,10 +122,12 @@ func (s *Service) GetSupplierProfile(ctx context.Context, shopID string) (*Suppl
 	var p SupplierProfile
 	err := s.db.QueryRow(ctx, `
 		SELECT id, shop_id, is_enabled, default_processing_days, blind_fulfillment, reseller_approval_mode,
-			COALESCE(company_name,''), COALESCE(support_email,''), COALESCE(return_policy_url,''), COALESCE(paypal_email,'')
+			COALESCE(company_name,''), COALESCE(support_email,''), COALESCE(return_policy_url,''), COALESCE(paypal_email,''),
+			COALESCE(shipping_countries, '[]'::jsonb)
 		FROM supplier_profiles WHERE shop_id = $1
 	`, shopID).Scan(&p.ID, &p.ShopID, &p.IsEnabled, &p.DefaultProcessingDays, &p.BlindFulfillment,
-		&p.ResellerApprovalMode, &p.CompanyName, &p.SupportEmail, &p.ReturnPolicyURL, &p.PaypalEmail)
+		&p.ResellerApprovalMode, &p.CompanyName, &p.SupportEmail, &p.ReturnPolicyURL, &p.PaypalEmail,
+		&p.ShippingCountries)
 	if err != nil {
 		return nil, fmt.Errorf("get supplier profile: %w", err)
 	}
@@ -133,6 +136,12 @@ func (s *Service) GetSupplierProfile(ctx context.Context, shopID string) (*Suppl
 
 // UpdateSupplierProfile updates supplier settings.
 func (s *Service) UpdateSupplierProfile(ctx context.Context, shopID string, update map[string]interface{}) error {
+	// Convert shipping_countries to JSON for storage
+	var countriesJSON []byte
+	if sc, ok := update["shipping_countries"]; ok && sc != nil {
+		countriesJSON, _ = json.Marshal(sc)
+	}
+
 	_, err := s.db.Exec(ctx, `
 		UPDATE supplier_profiles SET
 			is_enabled = COALESCE($2, is_enabled),
@@ -142,7 +151,8 @@ func (s *Service) UpdateSupplierProfile(ctx context.Context, shopID string, upda
 			company_name = COALESCE($6, company_name),
 			support_email = COALESCE($7, support_email),
 			return_policy_url = COALESCE($8, return_policy_url),
-			paypal_email = COALESCE($9, paypal_email)
+			paypal_email = COALESCE($9, paypal_email),
+			shipping_countries = COALESCE($10, shipping_countries)
 		WHERE shop_id = $1
 	`, shopID,
 		update["is_enabled"],
@@ -153,6 +163,7 @@ func (s *Service) UpdateSupplierProfile(ctx context.Context, shopID string, upda
 		update["support_email"],
 		update["return_policy_url"],
 		update["paypal_email"],
+		countriesJSON,
 	)
 	if err != nil {
 		return fmt.Errorf("update supplier profile: %w", err)

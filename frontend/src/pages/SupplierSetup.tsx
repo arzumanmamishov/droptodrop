@@ -31,6 +31,7 @@ export default function SupplierSetup() {
   const [supportEmail, setSupportEmail] = useState('');
   const [returnPolicyUrl, setReturnPolicyUrl] = useState('');
   const [paypalEmail, setPaypalEmail] = useState('');
+  const [shippingCountries, setShippingCountries] = useState('');
 
   useEffect(() => {
     api
@@ -45,6 +46,7 @@ export default function SupplierSetup() {
         setSupportEmail(data.support_email);
         setReturnPolicyUrl(data.return_policy_url);
         setPaypalEmail(data.paypal_email || '');
+        setShippingCountries((data.shipping_countries || []).join(', '));
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false));
@@ -64,6 +66,7 @@ export default function SupplierSetup() {
         support_email: supportEmail,
         return_policy_url: returnPolicyUrl,
         paypal_email: paypalEmail,
+        shipping_countries: shippingCountries.split(',').map((s: string) => s.trim()).filter(Boolean),
       });
       toast.success('Profile saved');
       setSuccess(true);
@@ -73,7 +76,7 @@ export default function SupplierSetup() {
     } finally {
       setSaving(false);
     }
-  }, [isEnabled, processingDays, blindFulfillment, approvalMode, companyName, supportEmail, returnPolicyUrl, paypalEmail, toast]);
+  }, [isEnabled, processingDays, blindFulfillment, approvalMode, companyName, supportEmail, returnPolicyUrl, paypalEmail, shippingCountries, toast]);
 
   if (loading) {
     return (
@@ -170,6 +173,7 @@ export default function SupplierSetup() {
               <TextField label="Support email" type="email" value={supportEmail} onChange={setSupportEmail} autoComplete="email" />
               <TextField label="Return policy URL" value={returnPolicyUrl} onChange={setReturnPolicyUrl} autoComplete="url" />
               <TextField label="PayPal email" type="email" value={paypalEmail} onChange={setPaypalEmail} autoComplete="email" helpText="Resellers will use this to send you payments via PayPal." />
+              <TextField label="Shipping countries" value={shippingCountries} onChange={setShippingCountries} autoComplete="off" helpText="Comma-separated country codes (e.g. IT, ES, DE, FR). Leave empty to ship worldwide." placeholder="IT, ES, DE, FR" />
             </FormLayout>
           </Card>
         </Layout.AnnotatedSection>
