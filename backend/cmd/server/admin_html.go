@@ -223,16 +223,37 @@ function loadShops() {
   });
 }
 
+var orderSort = 'newest';
 function loadOrders() {
   api('/orders').then(d => {
-    var orders = d.orders||[];
-    var html = '<div class="card"><div class="card-head">All Orders <span class="count">'+orders.length+'</span></div><table><tr><th>Order</th><th>Status</th><th>Amount</th><th>Customer</th><th>Reseller → Supplier</th><th>Payment</th><th>Fee</th><th>Date</th></tr>';
-    orders.forEach(o => {
-      html += '<tr><td><strong>#'+o.order_number+'</strong></td><td>'+badge(o.status)+'</td><td style="font-weight:600">$'+o.amount.toFixed(2)+' <span style="color:#94a3b8;font-weight:400">'+o.currency+'</span></td><td>'+o.customer+'</td><td style="font-size:12px">'+o.reseller+' → '+o.supplier+'</td><td>'+badge(o.pay_status)+'</td><td style="color:#1e40af;font-weight:600">$'+o.platform_fee.toFixed(2)+'</td><td style="font-size:12px;color:#94a3b8">'+new Date(o.created_at).toLocaleDateString()+'</td></tr>';
-    });
-    html += '</table></div>';
+    var orders = (d.orders||[]).slice();
+    orders.sort(function(a,b) { return orderSort==='newest' ? new Date(b.created_at)-new Date(a.created_at) : new Date(a.created_at)-new Date(b.created_at); });
+    var today = new Date().toDateString();
+    var todayOrders = orders.filter(function(o){return new Date(o.created_at).toDateString()===today;});
+    var restOrders = orders.filter(function(o){return new Date(o.created_at).toDateString()!==today;});
+
+    var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px"><span style="font-size:16px;font-weight:700">Orders</span><button onclick="orderSort=orderSort===\'newest\'?\'oldest\':\'newest\';loadOrders()" class="btn-sm" style="background:#f1f5f9;color:#475569;border:1px solid #e2e8f0;padding:6px 14px;font-size:12px">'+(orderSort==='newest'?'↓ Newest':'↑ Oldest')+'</button></div>';
+
+    if (todayOrders.length > 0) {
+      html += '<div style="font-size:14px;font-weight:700;color:#1e293b;margin-bottom:10px">📅 Today\'s Orders <span style="font-size:11px;background:#dbeafe;color:#1e40af;padding:2px 8px;border-radius:10px">'+todayOrders.length+'</span></div>';
+      html += '<div class="card"><table><tr><th>Order</th><th>Status</th><th>Amount</th><th>Customer</th><th>Flow</th><th>Payment</th><th>Fee</th><th>Time</th></tr>';
+      todayOrders.forEach(function(o) { html += orderRow(o); });
+      html += '</table></div>';
+    }
+
+    if (restOrders.length > 0) {
+      html += '<div style="font-size:14px;font-weight:700;color:#64748b;margin:16px 0 10px">Previous Orders <span style="font-size:11px;background:#f1f5f9;color:#94a3b8;padding:2px 8px;border-radius:10px">'+restOrders.length+'</span></div>';
+      html += '<div class="card"><table><tr><th>Order</th><th>Status</th><th>Amount</th><th>Customer</th><th>Flow</th><th>Payment</th><th>Fee</th><th>Date</th></tr>';
+      restOrders.forEach(function(o) { html += orderRow(o); });
+      html += '</table></div>';
+    }
+
+    if (orders.length === 0) html += '<div class="card" style="padding:40px;text-align:center;color:#94a3b8">No orders yet</div>';
     document.getElementById('content').innerHTML = html;
   });
+}
+function orderRow(o) {
+  return '<tr><td><strong>#'+o.order_number+'</strong></td><td>'+badge(o.status)+'</td><td style="font-weight:600">$'+o.amount.toFixed(2)+' <span style="color:#94a3b8;font-weight:400">'+o.currency+'</span></td><td>'+o.customer+'</td><td style="font-size:12px">'+o.reseller+' → '+o.supplier+'</td><td>'+badge(o.pay_status)+'</td><td style="color:#1e40af;font-weight:600">$'+o.platform_fee.toFixed(2)+'</td><td style="font-size:12px;color:#94a3b8">'+new Date(o.created_at).toLocaleDateString()+' '+new Date(o.created_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})+'</td></tr>';
 }
 
 function loadPayouts() {

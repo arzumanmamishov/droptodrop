@@ -39,6 +39,7 @@ const statusConfig: Record<string, { color: string; bg: string; label: string }>
 export default function Orders({ role }: OrdersProps) {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState('');
+  const [sortOrder, setSortOrder] = useState<'newest' | 'oldest'>('newest');
   const [page, setPage] = useState(0);
   const [routeOrderId, setRouteOrderId] = useState('');
   const [routing, setRouting] = useState(false);
@@ -94,20 +95,38 @@ export default function Orders({ role }: OrdersProps) {
         {routeError && <Layout.Section><Banner tone="critical" onDismiss={() => setRouteError(null)}>{routeError}</Banner></Layout.Section>}
 
         <Layout.Section>
-          <div className="tab-pills" style={{ flexWrap: 'wrap' }}>
-            {STATUS_TABS.map((tab) => (
-              <div key={tab.value} className={`tab-pill ${statusFilter === tab.value ? 'tab-pill-active' : ''}`}
-                onClick={() => { setStatusFilter(tab.value); setPage(0); }}>
-                {tab.label}
-              </div>
-            ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+            <div className="tab-pills" style={{ flexWrap: 'wrap' }}>
+              {STATUS_TABS.map((tab) => (
+                <div key={tab.value} className={`tab-pill ${statusFilter === tab.value ? 'tab-pill-active' : ''}`}
+                  onClick={() => { setStatusFilter(tab.value); setPage(0); }}>
+                  {tab.label}
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={() => setSortOrder(s => s === 'newest' ? 'oldest' : 'newest')}
+              style={{
+                padding: '6px 14px', fontSize: '12px', fontWeight: 600,
+                background: '#f1f5f9', color: '#475569', border: '1px solid #e2e8f0',
+                borderRadius: '8px', cursor: 'pointer',
+              }}
+            >
+              {sortOrder === 'newest' ? '↓ Newest first' : '↑ Oldest first'}
+            </button>
           </div>
         </Layout.Section>
 
         <Layout.Section>
-          {orders.length > 0 ? (
-            <BlockStack gap="300">
-              {orders.map((order) => {
+          {(() => {
+            const today = new Date().toDateString();
+            const sorted = [...orders].sort((a, b) => {
+              const diff = new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+              return sortOrder === 'newest' ? diff : -diff;
+            });
+            const todayOrders = sorted.filter(o => new Date(o.created_at).toDateString() === today);
+            const restOrders = sorted.filter(o => new Date(o.created_at).toDateString() !== today);
+            const renderOrder = (order: RoutedOrder) => {
                 const cfg = statusConfig[order.status] || statusConfig['pending'];
                 const items = order.items || [];
                 const firstImage = items.find(i => i.image_url)?.image_url;
@@ -244,15 +263,41 @@ export default function Orders({ role }: OrdersProps) {
                     </div>
                   </Card>
                 );
-              })}
-            </BlockStack>
-          ) : (
-            <Card>
-              <EmptyState heading="No orders" image="">
-                <p>{statusFilter ? `No ${statusFilter} orders found.` : role === 'supplier' ? 'Orders will appear when resellers sell your products.' : 'Orders will appear when customers buy imported products.'}</p>
-              </EmptyState>
-            </Card>
-          )}
+              };
+
+            return orders.length > 0 ? (
+              <BlockStack gap="400">
+                {todayOrders.length > 0 && (
+                  <>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      📅 Today's Orders
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: '#1e40af', background: '#dbeafe', padding: '2px 8px', borderRadius: '10px' }}>
+                        {todayOrders.length}
+                      </span>
+                    </div>
+                    {todayOrders.map(renderOrder)}
+                  </>
+                )}
+                {restOrders.length > 0 && (
+                  <>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: '#64748b', marginTop: todayOrders.length > 0 ? '8px' : '0' }}>
+                      Previous Orders
+                      <span style={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8', background: '#f1f5f9', padding: '2px 8px', borderRadius: '10px', marginLeft: '8px' }}>
+                        {restOrders.length}
+                      </span>
+                    </div>
+                    {restOrders.map(renderOrder)}
+                  </>
+                )}
+              </BlockStack>
+            ) : (
+              <Card>
+                <EmptyState heading="No orders" image="">
+                  <p>{statusFilter ? `No ${statusFilter} orders found.` : role === 'supplier' ? 'Orders will appear when resellers sell your products.' : 'Orders will appear when customers buy imported products.'}</p>
+                </EmptyState>
+              </Card>
+            );
+          })()}
         </Layout.Section>
 
         {totalPages > 1 && (
