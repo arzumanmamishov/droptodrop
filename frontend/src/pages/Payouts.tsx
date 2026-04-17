@@ -74,11 +74,11 @@ export default function Payouts({ role }: Props) {
   const getPayAmount = (p: PayoutOrder) => p.supplier_payout > 0 ? p.supplier_payout : p.wholesale;
 
   const statusConfig: Record<string, { color: string; bg: string; label: string }> = {
-    pending:      { color: '#92400e', bg: '#fef3c7', label: 'Awaiting Payment' },
-    unpaid:       { color: '#92400e', bg: '#fef3c7', label: 'Awaiting Payment' },
-    payment_sent: { color: '#1e40af', bg: '#dbeafe', label: 'Sent' },
-    paid:         { color: '#166534', bg: '#dcfce7', label: 'Paid' },
-    disputed:     { color: '#991b1b', bg: '#fee2e2', label: 'Disputed' },
+    pending:      { color: '#92400e', bg: '#fef3c7', label: '⏳ Awaiting Payment' },
+    unpaid:       { color: '#92400e', bg: '#fef3c7', label: '⏳ Awaiting Payment' },
+    payment_sent: { color: '#1e40af', bg: '#dbeafe', label: '📤 Sent' },
+    paid:         { color: '#166534', bg: '#dcfce7', label: '✅ Paid' },
+    disputed:     { color: '#991b1b', bg: '#fee2e2', label: '⚠️ Disputed' },
   };
 
   const getConfirmMessage = () => {
