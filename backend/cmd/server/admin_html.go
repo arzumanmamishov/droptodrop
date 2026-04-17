@@ -77,7 +77,7 @@ tr:hover { background: #f8fafc; }
 <script>
 let token = localStorage.getItem('admin_token');
 const API = '/admin-panel/api';
-const TABS = ['Overview','Shops','Orders','Payouts','Disputes','Activity'];
+const TABS = ['Overview','Shops','Orders','Payouts','Revenue','Disputes','Activity'];
 let currentTab = 'Overview';
 
 function doLogin() {
@@ -111,6 +111,7 @@ function loadTab(tab) {
   else if (tab === 'Shops') loadShops();
   else if (tab === 'Orders') loadOrders();
   else if (tab === 'Payouts') loadPayouts();
+  else if (tab === 'Revenue') loadRevenue();
   else if (tab === 'Disputes') loadDisputes();
   else if (tab === 'Activity') loadActivity();
 }
@@ -134,11 +135,21 @@ function stat(label, value, color) {
   return '<div class="stat"><div class="stat-label">'+label+'</div><div class="stat-value '+(color||'')+'">'+value+'</div></div>';
 }
 
+function suspendShop(id, currentStatus) {
+  var newStatus = currentStatus === 'active' ? 'suspended' : 'active';
+  if (!confirm('Are you sure you want to ' + (newStatus === 'suspended' ? 'SUSPEND' : 'ACTIVATE') + ' this shop?')) return;
+  fetch(API + '/shops/' + id + '/status', { method: 'PUT', headers: {'Content-Type':'application/json', 'X-Admin-Token': token}, body: JSON.stringify({status: newStatus}) })
+    .then(r => r.json()).then(() => loadShops());
+}
+
 function loadShops() {
   api('/shops').then(d => {
-    let html = '<div class="card"><div class="card-header">All Shops ('+((d.shops||[]).length)+')</div><table><tr><th>Domain</th><th>Name</th><th>Role</th><th>Status</th><th>PayPal</th><th>Listings</th><th>Imports</th><th>Orders</th><th>Joined</th></tr>';
+    let html = '<div class="card"><div class="card-header">All Shops ('+((d.shops||[]).length)+')</div><table><tr><th>Domain</th><th>Name</th><th>Role</th><th>Status</th><th>PayPal</th><th>Listings</th><th>Imports</th><th>Orders</th><th>Joined</th><th>Action</th></tr>';
     (d.shops||[]).forEach(s => {
-      html += '<tr><td><strong>'+s.domain+'</strong></td><td>'+s.name+'</td><td>'+badge(s.role)+'</td><td>'+badge(s.status)+'</td><td style="font-size:12px;color:#64748b">'+s.paypal+'</td><td>'+s.listing_count+'</td><td>'+s.import_count+'</td><td>'+s.order_count+'</td><td style="font-size:12px;color:#94a3b8">'+new Date(s.created_at).toLocaleDateString()+'</td></tr>';
+      var btn = s.status === 'active'
+        ? '<button onclick="suspendShop(\''+s.id+'\',\'active\')" style="padding:3px 10px;font-size:11px;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;cursor:pointer">Suspend</button>'
+        : '<button onclick="suspendShop(\''+s.id+'\',\'suspended\')" style="padding:3px 10px;font-size:11px;background:#dcfce7;color:#166534;border:1px solid #86efac;border-radius:6px;cursor:pointer">Activate</button>';
+      html += '<tr><td><strong>'+s.domain+'</strong></td><td>'+s.name+'</td><td>'+badge(s.role)+'</td><td>'+badge(s.status)+'</td><td style="font-size:12px;color:#64748b">'+(s.paypal||'-')+'</td><td>'+s.listing_count+'</td><td>'+s.import_count+'</td><td>'+s.order_count+'</td><td style="font-size:12px;color:#94a3b8">'+new Date(s.created_at).toLocaleDateString()+'</td><td>'+btn+'</td></tr>';
     });
     html += '</table></div>';
     document.getElementById('content').innerHTML = html;
@@ -161,6 +172,25 @@ function loadPayouts() {
     let html = '<div class="card"><div class="card-header">Payouts ('+((d.payouts||[]).length)+')</div><table><tr><th>Order</th><th>Status</th><th>Wholesale</th><th>Fee</th><th>Supplier Payout</th><th>Reseller</th><th>Supplier</th><th>Date</th></tr>';
     (d.payouts||[]).forEach(p => {
       html += '<tr><td><strong>#'+p.order_number+'</strong></td><td>'+badge(p.status)+'</td><td>$'+p.wholesale.toFixed(2)+'</td><td style="color:#64748b">$'+p.platform_fee.toFixed(2)+'</td><td style="color:#166534;font-weight:600">$'+p.supplier_payout.toFixed(2)+'</td><td style="font-size:12px">'+p.reseller+'</td><td style="font-size:12px">'+p.supplier+'</td><td style="font-size:12px;color:#94a3b8">'+new Date(p.created_at).toLocaleDateString()+'</td></tr>';
+    });
+    html += '</table></div>';
+    document.getElementById('content').innerHTML = html;
+  });
+}
+
+function loadRevenue() {
+  api('/revenue').then(d => {
+    let html = '<div class="stats-grid">' +
+      stat('Total Volume', '$'+(d.total_revenue||0).toFixed(2)) +
+      stat('Your Platform Fees', '$'+(d.total_fees||0).toFixed(2), 'blue') +
+      stat('Fees Collected', '$'+(d.paid_fees||0).toFixed(2), 'green') +
+      stat('Fees Pending', '$'+(d.pending_fees||0).toFixed(2), 'amber') +
+      stat('Fees Disputed', '$'+(d.disputed_fees||0).toFixed(2), 'red') +
+      stat('Owed to You', '$'+((d.total_fees||0)-(d.paid_fees||0)).toFixed(2), (d.total_fees||0)-(d.paid_fees||0) > 0 ? 'red' : 'green') +
+    '</div>';
+    html += '<div class="card"><div class="card-header">Revenue by Shop</div><table><tr><th>Shop</th><th>Role</th><th>Volume</th><th>Fees Generated</th><th>Fees Paid</th><th>Fees Pending</th><th>Owes You</th></tr>';
+    (d.shop_breakdown||[]).forEach(s => {
+      html += '<tr><td><strong>'+s.domain+'</strong></td><td>'+badge(s.role)+'</td><td>$'+s.total_volume.toFixed(2)+'</td><td style="color:#1e40af;font-weight:600">$'+s.total_fees.toFixed(2)+'</td><td style="color:#166534">$'+s.paid_fees.toFixed(2)+'</td><td style="color:#92400e">$'+s.pending_fees.toFixed(2)+'</td><td style="font-weight:700;color:'+(s.owed > 0 ? '#dc2626' : '#166534')+'">$'+s.owed.toFixed(2)+'</td></tr>';
     });
     html += '</table></div>';
     document.getElementById('content').innerHTML = html;

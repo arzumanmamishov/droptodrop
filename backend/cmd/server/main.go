@@ -332,6 +332,70 @@ func main() {
 			}
 			c.JSON(http.StatusOK, gin.H{"activity": activity})
 		})
+
+		// Suspend/activate a shop
+		adminAPI.PUT("/shops/:id/status", func(c *gin.Context) {
+			var body struct {
+				Status string `json:"status" binding:"required"`
+			}
+			if err := c.ShouldBindJSON(&body); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			if body.Status != "active" && body.Status != "suspended" {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "status must be 'active' or 'suspended'"})
+				return
+			}
+			result, err := db.Exec(c.Request.Context(), `UPDATE shops SET status = $1, updated_at = NOW() WHERE id = $2`, body.Status, c.Param("id"))
+			if err != nil || result.RowsAffected() == 0 {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "shop not found"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		})
+
+		// Platform revenue summary
+		adminAPI.GET("/revenue", func(c *gin.Context) {
+			ctx := c.Request.Context()
+			var totalRevenue, totalFees, totalPaid, totalPending, totalDisputed float64
+			db.QueryRow(ctx, `SELECT COALESCE(SUM(wholesale_amount), 0), COALESCE(SUM(platform_fee), 0) FROM payout_records`).Scan(&totalRevenue, &totalFees)
+			db.QueryRow(ctx, `SELECT COALESCE(SUM(platform_fee), 0) FROM payout_records WHERE status = 'paid'`).Scan(&totalPaid)
+			db.QueryRow(ctx, `SELECT COALESCE(SUM(platform_fee), 0) FROM payout_records WHERE status = 'pending'`).Scan(&totalPending)
+			db.QueryRow(ctx, `SELECT COALESCE(SUM(platform_fee), 0) FROM payout_records WHERE status = 'disputed'`).Scan(&totalDisputed)
+
+			// Per-shop breakdown
+			rows, _ := db.Query(ctx, `
+				SELECT COALESCE(s.shopify_domain,''), s.role,
+					COALESCE(SUM(pr.wholesale_amount), 0) as total_volume,
+					COALESCE(SUM(pr.platform_fee), 0) as total_fees,
+					COALESCE(SUM(CASE WHEN pr.status = 'paid' THEN pr.platform_fee ELSE 0 END), 0) as paid_fees,
+					COALESCE(SUM(CASE WHEN pr.status = 'pending' THEN pr.platform_fee ELSE 0 END), 0) as pending_fees
+				FROM payout_records pr
+				JOIN shops s ON s.id = pr.reseller_shop_id
+				GROUP BY s.shopify_domain, s.role
+				ORDER BY total_fees DESC
+			`)
+			var shopFees []gin.H
+			if rows != nil {
+				for rows.Next() {
+					var domain, role string
+					var volume, fees, paid, pending float64
+					rows.Scan(&domain, &role, &volume, &fees, &paid, &pending)
+					shopFees = append(shopFees, gin.H{
+						"domain": domain, "role": role, "total_volume": volume,
+						"total_fees": fees, "paid_fees": paid, "pending_fees": pending,
+						"owed": fees - paid,
+					})
+				}
+				rows.Close()
+			}
+
+			c.JSON(http.StatusOK, gin.H{
+				"total_revenue": totalRevenue, "total_fees": totalFees,
+				"paid_fees": totalPaid, "pending_fees": totalPending, "disputed_fees": totalDisputed,
+				"shop_breakdown": shopFees,
+			})
+		})
 	}
 
 	// Serve standalone admin panel HTML
