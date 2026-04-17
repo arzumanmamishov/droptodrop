@@ -1663,6 +1663,7 @@ func main() {
 		})
 		api.POST("/billing/subscribe", func(c *gin.Context) {
 			shopID, _ := c.Get("shop_id")
+			sid := shopID.(string)
 			var body struct {
 				PlanID string `json:"plan_id" binding:"required"`
 			}
@@ -1670,22 +1671,136 @@ func main() {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
-			sid := shopID.(string)
-			sub, err := billingHandler.GetSvc().Subscribe(c.Request.Context(), sid, body.PlanID)
-			if err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-				return
-			}
-			// Log plan change
+
+			// Get plan details
 			var planName string
 			var planPrice float64
-			db.QueryRow(c.Request.Context(), `SELECT name, price_monthly FROM billing_plans WHERE id = $1`, body.PlanID).Scan(&planName, &planPrice)
-			auditSvc.Log(c.Request.Context(), sid, "merchant", sid, "plan_changed", "subscription", sub.ID,
-				map[string]interface{}{"plan": planName, "price": planPrice}, "success", "")
-			var shopDomain string
-			db.QueryRow(c.Request.Context(), `SELECT shopify_domain FROM shops WHERE id = $1`, sid).Scan(&shopDomain)
-			logger.Info().Str("shop", shopDomain).Str("plan", planName).Float64("price", planPrice).Msg("subscription changed")
-			c.JSON(http.StatusOK, sub)
+			var trialDays int
+			err := db.QueryRow(c.Request.Context(), `SELECT name, price_monthly, trial_days FROM billing_plans WHERE id = $1 AND is_active = TRUE`, body.PlanID).Scan(&planName, &planPrice, &trialDays)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "plan not found"})
+				return
+			}
+
+			// Free plan: activate directly without Shopify billing
+			if planPrice == 0 {
+				sub, err := billingHandler.GetSvc().Subscribe(c.Request.Context(), sid, body.PlanID)
+				if err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+					return
+				}
+				auditSvc.Log(c.Request.Context(), sid, "merchant", sid, "plan_changed", "subscription", sub.ID,
+					map[string]interface{}{"plan": planName, "price": 0}, "success", "")
+				c.JSON(http.StatusOK, gin.H{"status": "ok", "subscription": sub})
+				return
+			}
+
+			// Paid plan: use Shopify App Billing API
+			var shopDomain, encToken string
+			err = db.QueryRow(c.Request.Context(), `
+				SELECT s.shopify_domain, ai.access_token FROM shops s
+				JOIN app_installations ai ON ai.shop_id = s.id AND ai.is_active = TRUE
+				WHERE s.id = $1
+			`, sid).Scan(&shopDomain, &encToken)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "shop credentials not found"})
+				return
+			}
+			token, err := authpkg.Decrypt(encToken, cfg.Security.EncryptionKey)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to decrypt credentials"})
+				return
+			}
+
+			client := shopify.NewClient(shopDomain, token, logger)
+			returnURL := fmt.Sprintf("%s/billing/confirm?shop_id=%s&plan_id=%s", cfg.Shopify.AppURL, sid, body.PlanID)
+
+			// Create Shopify recurring charge
+			chargeQuery := `mutation appSubscriptionCreate($name: String!, $returnUrl: URL!, $trialDays: Int, $lineItems: [AppSubscriptionLineItemInput!]!) {
+				appSubscriptionCreate(name: $name, returnUrl: $returnUrl, trialDays: $trialDays, lineItems: $lineItems) {
+					appSubscription { id }
+					confirmationUrl
+					userErrors { field message }
+				}
+			}`
+			var chargeResult struct {
+				Data struct {
+					AppSubscriptionCreate struct {
+						AppSubscription *struct {
+							ID string `json:"id"`
+						} `json:"appSubscription"`
+						ConfirmationUrl string `json:"confirmationUrl"`
+						UserErrors []struct {
+							Field   []string `json:"field"`
+							Message string   `json:"message"`
+						} `json:"userErrors"`
+					} `json:"appSubscriptionCreate"`
+				} `json:"data"`
+			}
+
+			chargeVars := map[string]interface{}{
+				"name":      fmt.Sprintf("DropToDrop %s Plan", planName),
+				"returnUrl": returnURL,
+				"trialDays": trialDays,
+				"lineItems": []map[string]interface{}{
+					{
+						"plan": map[string]interface{}{
+							"appRecurringPricingDetails": map[string]interface{}{
+								"price": map[string]interface{}{
+									"amount":       fmt.Sprintf("%.2f", planPrice),
+									"currencyCode": "USD",
+								},
+								"interval": "EVERY_30_DAYS",
+							},
+						},
+					},
+				},
+			}
+
+			if err := client.GraphQL(c.Request.Context(), chargeQuery, chargeVars, &chargeResult); err != nil {
+				logger.Error().Err(err).Msg("failed to create Shopify subscription")
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create billing charge"})
+				return
+			}
+
+			if len(chargeResult.Data.AppSubscriptionCreate.UserErrors) > 0 {
+				errMsg := chargeResult.Data.AppSubscriptionCreate.UserErrors[0].Message
+				c.JSON(http.StatusBadRequest, gin.H{"error": errMsg})
+				return
+			}
+
+			confirmURL := chargeResult.Data.AppSubscriptionCreate.ConfirmationUrl
+			if confirmURL == "" {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "no confirmation URL returned"})
+				return
+			}
+
+			logger.Info().Str("shop", shopDomain).Str("plan", planName).Str("confirm_url", confirmURL).Msg("Shopify subscription created")
+			c.JSON(http.StatusOK, gin.H{"confirmation_url": confirmURL, "plan": planName})
+		})
+
+		// Shopify billing confirmation callback
+		api.GET("/billing/confirm", func(c *gin.Context) {
+			shopIDParam := c.Query("shop_id")
+			planID := c.Query("plan_id")
+			chargeID := c.Query("charge_id")
+
+			if shopIDParam != "" && planID != "" {
+				sub, err := billingHandler.GetSvc().Subscribe(c.Request.Context(), shopIDParam, planID)
+				if err != nil {
+					logger.Error().Err(err).Msg("failed to activate subscription after Shopify confirmation")
+				} else {
+					var planName string
+					var planPrice float64
+					db.QueryRow(c.Request.Context(), `SELECT name, price_monthly FROM billing_plans WHERE id = $1`, planID).Scan(&planName, &planPrice)
+					auditSvc.Log(c.Request.Context(), shopIDParam, "merchant", shopIDParam, "plan_changed", "subscription", sub.ID,
+						map[string]interface{}{"plan": planName, "price": planPrice, "charge_id": chargeID}, "success", "")
+					logger.Info().Str("shop_id", shopIDParam).Str("plan", planName).Msg("subscription activated via Shopify billing")
+				}
+			}
+
+			// Redirect back to billing page in the app
+			c.Redirect(http.StatusFound, "/billing")
 		})
 		api.POST("/billing/cancel", func(c *gin.Context) {
 			shopID, _ := c.Get("shop_id")

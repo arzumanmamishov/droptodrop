@@ -63,9 +63,19 @@ export default function Billing() {
     setSubscribing(planId);
     setActionError(null);
     try {
-      await api.post('/billing/subscribe', { plan_id: planId });
-      setActionSuccess(`Subscribed to ${planId} plan!`);
-      refetch();
+      const result = await api.post<{ confirmation_url?: string; subscription?: unknown }>('/billing/subscribe', { plan_id: planId });
+      if (result.confirmation_url) {
+        // Paid plan: redirect to Shopify payment page
+        if (window.top !== window.self) {
+          window.top!.location.href = result.confirmation_url;
+        } else {
+          window.location.href = result.confirmation_url;
+        }
+      } else {
+        // Free plan: activated directly
+        setActionSuccess('Plan activated!');
+        refetch();
+      }
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Failed to subscribe');
     } finally {
