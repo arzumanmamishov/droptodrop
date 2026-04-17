@@ -1853,6 +1853,34 @@ func main() {
 			}
 			c.JSON(http.StatusOK, result)
 		})
+		api.PUT("/shipping-rules/:id", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			var rule advanced.ShippingRule
+			if err := c.ShouldBindJSON(&rule); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+				return
+			}
+			_, err := db.Exec(c.Request.Context(), `
+				UPDATE shipping_rules SET country_code=$1, shipping_rate=$2, free_shipping_threshold=$3,
+					estimated_days_min=$4, estimated_days_max=$5, updated_at=NOW()
+				WHERE id=$6 AND shop_id=$7
+			`, rule.CountryCode, rule.ShippingRate, rule.FreeShippingThreshold,
+				rule.EstDaysMin, rule.EstDaysMax, c.Param("id"), shopID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		})
+		api.DELETE("/shipping-rules/:id", func(c *gin.Context) {
+			shopID, _ := c.Get("shop_id")
+			_, err := db.Exec(c.Request.Context(), `DELETE FROM shipping_rules WHERE id=$1 AND shop_id=$2`, c.Param("id"), shopID)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"status": "ok"})
+		})
 
 		// ===== Sample Orders =====
 		api.GET("/samples", func(c *gin.Context) {
