@@ -77,7 +77,7 @@ export default function Payouts({ role }: Props) {
     pending:      { color: '#92400e', bg: '#fef3c7', label: '○ Awaiting Payment' },
     unpaid:       { color: '#92400e', bg: '#fef3c7', label: '○ Awaiting Payment' },
     payment_sent: { color: '#1e40af', bg: '#dbeafe', label: '↗ Sent' },
-    paid:         { color: '#166534', bg: '#dcfce7', label: '● Paid' },
+    paid:         { color: '#166534', bg: '#dcfce7', label: '✓ Paid' },
     disputed:     { color: '#991b1b', bg: '#fee2e2', label: '◈ Disputed' },
   };
 

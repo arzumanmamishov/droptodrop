@@ -31,7 +31,7 @@ const statusConfig: Record<string, { color: string; bg: string; label: string }>
   pending:    { color: '#92400e', bg: '#fef3c7', label: '◷ Pending' },
   accepted:   { color: '#1e40af', bg: '#dbeafe', label: '◉ Accepted' },
   processing: { color: '#6d28d9', bg: '#ede9fe', label: '↻ Processing' },
-  fulfilled:  { color: '#166534', bg: '#dcfce7', label: '● Fulfilled' },
+  fulfilled:  { color: '#166534', bg: '#dcfce7', label: '✓ Fulfilled' },
   rejected:   { color: '#991b1b', bg: '#fee2e2', label: '✕ Rejected' },
   cancelled:  { color: '#991b1b', bg: '#fee2e2', label: '✕ Cancelled' },
 };

@@ -24,7 +24,7 @@ const statusConfig: Record<string, { color: string; bg: string; label: string }>
   pending:    { color: '#92400e', bg: '#fef3c7', label: '◷ Pending' },
   accepted:   { color: '#1e40af', bg: '#dbeafe', label: '◉ Accepted' },
   processing: { color: '#6d28d9', bg: '#ede9fe', label: '↻ Processing' },
-  fulfilled:  { color: '#166534', bg: '#dcfce7', label: '● Fulfilled' },
+  fulfilled:  { color: '#166534', bg: '#dcfce7', label: '✓ Fulfilled' },
   rejected:   { color: '#991b1b', bg: '#fee2e2', label: '✕ Rejected' },
   cancelled:  { color: '#991b1b', bg: '#fee2e2', label: '✕ Cancelled' },
   unfulfilled:{ color: '#92400e', bg: '#fef3c7', label: '○ Unfulfilled' },
@@ -191,7 +191,7 @@ export default function OrderDetail({ role }: OrderDetailProps) {
                     unpaid: { color: '#92400e', bg: '#fef3c7', label: '○ Unpaid' },
                     pending: { color: '#92400e', bg: '#fef3c7', label: '○ Unpaid' },
                     payment_sent: { color: '#1e40af', bg: '#dbeafe', label: '↗ Sent' },
-                    paid: { color: '#166534', bg: '#dcfce7', label: '● Paid' },
+                    paid: { color: '#166534', bg: '#dcfce7', label: '✓ Paid' },
                     disputed: { color: '#991b1b', bg: '#fee2e2', label: '◈ Disputed' },
                   };
                   const pay = payMap[order.pay_status || 'unpaid'] || payMap['unpaid'];
