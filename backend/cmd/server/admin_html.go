@@ -127,7 +127,8 @@ const NAV = [
   {id:'Payouts', icon:'💳', label:'Payouts'},
   {id:'Revenue', icon:'💰', label:'Revenue'},
   {id:'Disputes', icon:'⚠️', label:'Disputes'},
-  {id:'Activity', icon:'📋', label:'Activity'},
+  {id:'Subscriptions', icon:'📋', label:'Subscriptions'},
+  {id:'Activity', icon:'🔄', label:'Activity'},
 ];
 let currentTab = 'Overview';
 
@@ -166,6 +167,7 @@ function loadTab(tab) {
   else if (tab === 'Payouts') loadPayouts();
   else if (tab === 'Revenue') loadRevenue();
   else if (tab === 'Disputes') loadDisputes();
+  else if (tab === 'Subscriptions') loadSubscriptions();
   else if (tab === 'Activity') loadActivity();
 }
 
@@ -318,6 +320,19 @@ function loadDisputes() {
       html += '<div class="card" style="padding:40px;text-align:center;color:#94a3b8">No '+(disputeTab==='orders'?'order disputes':'app complaints')+' yet</div>';
     }
 
+    document.getElementById('content').innerHTML = html;
+  });
+}
+
+function loadSubscriptions() {
+  api('/subscriptions').then(d => {
+    var subs = d.subscriptions||[];
+    var html = '<div class="card"><div class="card-head">Subscriptions <span class="count">'+subs.length+'</span></div><table><tr><th>Shop</th><th>Plan</th><th>Price</th><th>Status</th><th>Started</th><th>Period Ends</th></tr>';
+    subs.forEach(function(s) {
+      html += '<tr><td><strong>'+s.domain+'</strong></td><td>'+badge(s.plan_name)+'</td><td style="font-weight:600">$'+s.price.toFixed(2)+'/mo</td><td>'+badge(s.status)+'</td><td style="font-size:12px;color:#94a3b8">'+new Date(s.created_at).toLocaleDateString()+'</td><td style="font-size:12px;color:#94a3b8">'+(s.period_end ? new Date(s.period_end).toLocaleDateString() : '—')+'</td></tr>';
+    });
+    if (subs.length === 0) html += '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px">No subscriptions yet</td></tr>';
+    html += '</table></div>';
     document.getElementById('content').innerHTML = html;
   });
 }

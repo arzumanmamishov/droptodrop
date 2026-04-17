@@ -396,6 +396,34 @@ func main() {
 				"shop_breakdown": shopFees,
 			})
 		})
+
+		adminAPI.GET("/subscriptions", func(c *gin.Context) {
+			ctx := c.Request.Context()
+			rows, err := db.Query(ctx, `
+				SELECT s.shopify_domain, bp.name, bp.price_monthly, ss.status, ss.created_at, ss.current_period_end
+				FROM shop_subscriptions ss
+				JOIN shops s ON s.id = ss.shop_id
+				JOIN billing_plans bp ON bp.id = ss.plan_id
+				ORDER BY ss.created_at DESC
+			`)
+			if err != nil {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+				return
+			}
+			defer rows.Close()
+			var subs []gin.H
+			for rows.Next() {
+				var domain, planName, status string
+				var price float64
+				var createdAt time.Time
+				var periodEnd *time.Time
+				rows.Scan(&domain, &planName, &price, &status, &createdAt, &periodEnd)
+				sub := gin.H{"domain": domain, "plan_name": planName, "price": price, "status": status, "created_at": createdAt}
+				if periodEnd != nil { sub["period_end"] = *periodEnd }
+				subs = append(subs, sub)
+			}
+			c.JSON(http.StatusOK, gin.H{"subscriptions": subs})
+		})
 	}
 
 	// Serve standalone admin panel HTML
@@ -561,9 +589,19 @@ func main() {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
-			if err := shopsSvc.SetRole(c.Request.Context(), shopID.(string), body.Role); err != nil {
+			sid := shopID.(string)
+			if err := shopsSvc.SetRole(c.Request.Context(), sid, body.Role); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
+			}
+			// Auto-assign Free plan for new suppliers
+			if body.Role == "supplier" {
+				var freePlanID string
+				db.QueryRow(c.Request.Context(), `SELECT id FROM billing_plans WHERE price_monthly = 0 AND is_active = TRUE LIMIT 1`).Scan(&freePlanID)
+				if freePlanID != "" {
+					billingHandler.GetSvc().Subscribe(c.Request.Context(), sid, freePlanID)
+					logger.Info().Str("shop_id", sid).Msg("auto-assigned Free plan to new supplier")
+				}
 			}
 			c.JSON(http.StatusOK, gin.H{"status": "ok", "role": body.Role})
 		})
@@ -1632,11 +1670,21 @@ func main() {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
-			sub, err := billingHandler.GetSvc().Subscribe(c.Request.Context(), shopID.(string), body.PlanID)
+			sid := shopID.(string)
+			sub, err := billingHandler.GetSvc().Subscribe(c.Request.Context(), sid, body.PlanID)
 			if err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 				return
 			}
+			// Log plan change
+			var planName string
+			var planPrice float64
+			db.QueryRow(c.Request.Context(), `SELECT name, price_monthly FROM billing_plans WHERE id = $1`, body.PlanID).Scan(&planName, &planPrice)
+			auditSvc.Log(c.Request.Context(), sid, "merchant", sid, "plan_changed", "subscription", sub.ID,
+				map[string]interface{}{"plan": planName, "price": planPrice}, "success", "")
+			var shopDomain string
+			db.QueryRow(c.Request.Context(), `SELECT shopify_domain FROM shops WHERE id = $1`, sid).Scan(&shopDomain)
+			logger.Info().Str("shop", shopDomain).Str("plan", planName).Float64("price", planPrice).Msg("subscription changed")
 			c.JSON(http.StatusOK, sub)
 		})
 		api.POST("/billing/cancel", func(c *gin.Context) {
