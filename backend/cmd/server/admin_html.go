@@ -291,14 +291,33 @@ function loadRevenue() {
   });
 }
 
+var disputeTab = 'orders';
 function loadDisputes() {
   api('/disputes').then(d => {
     var disputes = d.disputes||[];
-    var html = '<div class="card"><div class="card-head">Disputes <span class="count">'+disputes.length+'</span></div><table><tr><th>Order</th><th>Type</th><th>Status</th><th>Reporter</th><th>Shop</th><th>Description</th><th>Resolution</th><th>Date</th></tr>';
-    disputes.forEach(x => {
-      html += '<tr><td><strong>#'+x.order_number+'</strong></td><td>'+badge(x.type)+'</td><td>'+badge(x.status)+'</td><td>'+badge(x.reporter_role)+'</td><td style="font-size:12px">'+x.reporter_shop+'</td><td style="font-size:12px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+x.description+'</td><td style="font-size:12px">'+(x.resolution||'—')+'</td><td style="font-size:12px;color:#94a3b8">'+new Date(x.created_at).toLocaleDateString()+'</td></tr>';
-    });
-    html += '</table></div>';
+    var appTypes = ['app_bug','payment_problem','account_issue','feature_request','policy_violation','app_other'];
+    var appComplaints = disputes.filter(function(x){ return x.description.indexOf('[APP COMPLAINT]')===0 || appTypes.indexOf(x.type)>=0; });
+    var orderDisputes = disputes.filter(function(x){ return appComplaints.indexOf(x)<0; });
+
+    var html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">' +
+      '<div style="display:flex;gap:4px">' +
+        '<div class="tab '+(disputeTab==='orders'?'active':'')+'" onclick="disputeTab=\'orders\';loadDisputes()" style="padding:8px 20px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;'+(disputeTab==='orders'?'background:#1e40af;color:#fff':'color:#64748b')+'">Order Disputes <span style="font-size:11px">('+ orderDisputes.length+')</span></div>' +
+        '<div class="tab '+(disputeTab==='app'?'active':'')+'" onclick="disputeTab=\'app\';loadDisputes()" style="padding:8px 20px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;'+(disputeTab==='app'?'background:#1e40af;color:#fff':'color:#64748b')+'">App Complaints <span style="font-size:11px">('+appComplaints.length+')</span></div>' +
+      '</div></div>';
+
+    var list = disputeTab === 'orders' ? orderDisputes : appComplaints;
+
+    if (list.length > 0) {
+      html += '<div class="card"><div class="card-head">'+(disputeTab==='orders'?'Order Disputes':'App Complaints')+' <span class="count">'+list.length+'</span></div><table><tr><th>Order</th><th>Type</th><th>Status</th><th>Reporter</th><th>Shop</th><th>Description</th><th>Resolution</th><th>Date</th></tr>';
+      list.forEach(function(x) {
+        var desc = x.description.replace('[APP COMPLAINT] ','');
+        html += '<tr><td><strong>#'+x.order_number+'</strong></td><td>'+badge(x.type)+'</td><td>'+badge(x.status)+'</td><td>'+badge(x.reporter_role)+'</td><td style="font-size:12px">'+x.reporter_shop+'</td><td style="font-size:12px;max-width:250px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+desc+'</td><td style="font-size:12px">'+(x.resolution||'—')+'</td><td style="font-size:12px;color:#94a3b8">'+new Date(x.created_at).toLocaleDateString()+' '+new Date(x.created_at).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"})+'</td></tr>';
+      });
+      html += '</table></div>';
+    } else {
+      html += '<div class="card" style="padding:40px;text-align:center;color:#94a3b8">No '+(disputeTab==='orders'?'order disputes':'app complaints')+' yet</div>';
+    }
+
     document.getElementById('content').innerHTML = html;
   });
 }
