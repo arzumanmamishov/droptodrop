@@ -49,17 +49,44 @@ func NewService(db *pgxpool.Pool, logger zerolog.Logger) *Service {
 
 // Create creates a new dispute for a routed order.
 func (s *Service) Create(ctx context.Context, shopID, role string, input CreateInput) (*Dispute, error) {
-	// Resolve order: accept UUID, order number with or without #
-	orderInput := input.RoutedOrderID
+	// App complaint types don't need an order
+	appTypes := map[string]bool{"app_bug": true, "payment_problem": true, "account_issue": true, "feature_request": true, "policy_violation": true, "app_other": true}
+	isAppComplaint := appTypes[input.DisputeType]
+
 	var routedOrderID string
-	err := s.db.QueryRow(ctx, `
-		SELECT id FROM routed_orders
-		WHERE (id::text = $1 OR reseller_order_number = $1 OR reseller_order_number = '#' || $1 OR reseller_order_number = $1)
-		AND (reseller_shop_id = $2 OR supplier_shop_id = $2)
-		LIMIT 1
-	`, orderInput, shopID).Scan(&routedOrderID)
-	if err != nil {
-		return nil, fmt.Errorf("order not found or access denied")
+	var err error
+	if isAppComplaint {
+		// For app complaints, use the most recent order or create without order
+		s.db.QueryRow(ctx, `SELECT id FROM routed_orders WHERE reseller_shop_id = $1 OR supplier_shop_id = $1 ORDER BY created_at DESC LIMIT 1`, shopID).Scan(&routedOrderID)
+		if routedOrderID == "" {
+			// No orders at all — we need a dummy. Create the dispute directly without order validation.
+			d := &Dispute{}
+			err := s.db.QueryRow(ctx, `
+				INSERT INTO disputes (reporter_shop_id, reporter_role, dispute_type, description, routed_order_id)
+				VALUES ($1, $2, $3, $4, (SELECT id FROM routed_orders LIMIT 1))
+				RETURNING id, COALESCE(routed_order_id, '00000000-0000-0000-0000-000000000000'), reporter_shop_id, reporter_role, dispute_type, status, description, resolution, created_at, updated_at
+			`, shopID, role, input.DisputeType, input.Description).Scan(
+				&d.ID, &d.RoutedOrderID, &d.ReporterShopID, &d.ReporterRole,
+				&d.DisputeType, &d.Status, &d.Description, &d.Resolution,
+				&d.CreatedAt, &d.UpdatedAt,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("create app complaint: %w", err)
+			}
+			return d, nil
+		}
+	} else {
+		// Order disputes require a valid order
+		orderInput := input.RoutedOrderID
+		err = s.db.QueryRow(ctx, `
+			SELECT id FROM routed_orders
+			WHERE (id::text = $1 OR reseller_order_number = $1 OR reseller_order_number = '#' || $1)
+			AND (reseller_shop_id = $2 OR supplier_shop_id = $2)
+			LIMIT 1
+		`, orderInput, shopID).Scan(&routedOrderID)
+		if err != nil {
+			return nil, fmt.Errorf("order not found or access denied")
+		}
 	}
 
 	d := &Dispute{}
