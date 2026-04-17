@@ -105,7 +105,7 @@ func (s *Service) CreateListing(ctx context.Context, shopID string, input Create
 		JOIN billing_plans bp ON bp.id = ss.plan_id
 		WHERE ss.shop_id = $1 AND ss.status = 'active'
 	`, shopID).Scan(&maxProducts)
-	if maxProducts == 0 { maxProducts = 5 } // default: Starter plan (5 products)
+	if maxProducts == 0 { maxProducts = 50 } // default: Free plan (50 products)
 	s.db.QueryRow(ctx, `SELECT COUNT(*) FROM supplier_listings WHERE supplier_shop_id = $1`, shopID).Scan(&currentCount)
 	if currentCount >= maxProducts {
 		return nil, fmt.Errorf("you have reached your plan limit of %d products. Upgrade your plan to add more", maxProducts)
