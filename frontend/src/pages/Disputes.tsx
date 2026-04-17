@@ -25,30 +25,33 @@ interface DisputesResponse {
   total: number;
 }
 
-const ORDER_DISPUTE_TYPES = [
-  { label: 'Quality Issue', value: 'quality_issue' },
-  { label: 'Wrong Item', value: 'wrong_item' },
-  { label: 'Not Received', value: 'not_received' },
-  { label: 'Damaged', value: 'damaged' },
-  { label: 'Late Delivery', value: 'late_delivery' },
-  { label: 'Missing Items', value: 'missing_items' },
-  { label: 'Other', value: 'other' },
+const ORDER_TYPES = [
+  { label: 'Quality Issue', value: 'quality_issue', icon: '🔍' },
+  { label: 'Wrong Item', value: 'wrong_item', icon: '❌' },
+  { label: 'Not Received', value: 'not_received', icon: '📭' },
+  { label: 'Damaged', value: 'damaged', icon: '💔' },
+  { label: 'Late Delivery', value: 'late_delivery', icon: '🕐' },
+  { label: 'Missing Items', value: 'missing_items', icon: '📦' },
+  { label: 'Other', value: 'other', icon: '📝' },
 ];
 
-const APP_COMPLAINT_TYPES = [
-  { label: 'App Bug / Technical Issue', value: 'app_bug' },
-  { label: 'Payment Problem', value: 'payment_problem' },
-  { label: 'Account Issue', value: 'account_issue' },
-  { label: 'Feature Request', value: 'feature_request' },
-  { label: 'Policy Violation by Other Party', value: 'policy_violation' },
-  { label: 'Other', value: 'app_other' },
+const APP_TYPES = [
+  { label: 'App Bug / Technical Issue', value: 'app_bug', icon: '🐛' },
+  { label: 'Payment Problem', value: 'payment_problem', icon: '💳' },
+  { label: 'Account Issue', value: 'account_issue', icon: '👤' },
+  { label: 'Feature Request', value: 'feature_request', icon: '💡' },
+  { label: 'Policy Violation', value: 'policy_violation', icon: '⚖️' },
+  { label: 'Other', value: 'app_other', icon: '📝' },
 ];
 
-const statusConfig: Record<string, { color: string; bg: string }> = {
-  open: { color: '#92400e', bg: '#fef3c7' },
-  in_review: { color: '#1e40af', bg: '#dbeafe' },
-  resolved: { color: '#166534', bg: '#dcfce7' },
-  closed: { color: '#64748b', bg: '#f1f5f9' },
+const ALL_TYPES = [...ORDER_TYPES, ...APP_TYPES];
+const APP_TYPE_VALUES = APP_TYPES.map(t => t.value);
+
+const statusStyles: Record<string, { color: string; bg: string; label: string; icon: string }> = {
+  open:      { color: '#92400e', bg: '#fef3c7', label: 'Open', icon: '🟡' },
+  in_review: { color: '#1e40af', bg: '#dbeafe', label: 'In Review', icon: '🔵' },
+  resolved:  { color: '#166534', bg: '#dcfce7', label: 'Resolved', icon: '🟢' },
+  closed:    { color: '#64748b', bg: '#f1f5f9', label: 'Closed', icon: '⚫' },
 };
 
 export default function Disputes() {
@@ -64,31 +67,19 @@ export default function Disputes() {
   const [page, setPage] = useState(0);
 
   const limit = 20;
-  const { data, loading, refetch } = useApi<DisputesResponse>(
-    `/disputes?limit=${limit}&offset=${page * limit}`,
-  );
+  const { data, loading, refetch } = useApi<DisputesResponse>(`/disputes?limit=${limit}&offset=${page * limit}`);
   const totalPages = Math.ceil((data?.total || 0) / limit);
 
   const handleCreate = useCallback(async () => {
-    setCreating(true);
-    setError(null);
+    setCreating(true); setError(null);
     try {
       if (createModal === 'order') {
-        await api.post('/disputes', {
-          routed_order_id: orderId.replace('#', '').trim(),
-          dispute_type: disputeType,
-          description,
-        });
+        await api.post('/disputes', { routed_order_id: orderId.replace('#', '').trim(), dispute_type: disputeType, description });
       } else {
-        await api.post('/disputes', {
-          routed_order_id: orderId.replace('#', '').trim() || '00000000-0000-0000-0000-000000000000',
-          dispute_type: disputeType,
-          description: `[APP COMPLAINT] ${description}`,
-        });
+        await api.post('/disputes', { routed_order_id: '', dispute_type: disputeType, description: `[APP COMPLAINT] ${description}` });
       }
       toast.success(createModal === 'order' ? 'Dispute filed' : 'Complaint submitted');
-      setCreateModal(null);
-      setOrderId(''); setDescription('');
+      setCreateModal(null); setOrderId(''); setDescription('');
       setDisputeType(createModal === 'order' ? 'quality_issue' : 'app_bug');
       refetch();
     } catch (err) {
@@ -100,88 +91,151 @@ export default function Disputes() {
   if (loading) return <Page title="Disputes"><div style={{ display: 'flex', justifyContent: 'center', padding: '3rem' }}><Spinner size="large" /></div></Page>;
 
   const allDisputes = data?.disputes || [];
-  const appComplaints = allDisputes.filter(d => d.description.startsWith('[APP COMPLAINT]') || ['app_bug','payment_problem','account_issue','feature_request','policy_violation','app_other'].includes(d.dispute_type));
+  const appComplaints = allDisputes.filter(d => d.description.startsWith('[APP COMPLAINT]') || APP_TYPE_VALUES.includes(d.dispute_type));
   const orderDisputes = allDisputes.filter(d => !appComplaints.includes(d));
+  const currentList = activeTab === 'orders' ? orderDisputes : appComplaints;
 
-  const renderDispute = (d: Dispute) => {
-    const cfg = statusConfig[d.status] || statusConfig['open'];
-    const typeLabel = [...ORDER_DISPUTE_TYPES, ...APP_COMPLAINT_TYPES].find(t => t.value === d.dispute_type)?.label || d.dispute_type;
-    const desc = d.description.replace('[APP COMPLAINT] ', '');
-    return (
-      <Card key={d.id}>
-        <div style={{ padding: '2px 0' }}>
-          <InlineStack align="space-between" blockAlign="start" wrap={false}>
-            <BlockStack gap="100">
-              <InlineStack gap="200" blockAlign="center">
-                {d.routed_order_id && d.routed_order_id !== '00000000-0000-0000-0000-000000000000' && (
-                  <Button variant="plain" onClick={() => navigate(`/orders/${d.routed_order_id}`)}>
-                    Order {d.routed_order_id.slice(0, 8)}
-                  </Button>
-                )}
-                <span style={{ padding: '3px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600, background: '#f1f5f9', color: '#475569' }}>
-                  {typeLabel}
-                </span>
-                <span style={{ padding: '3px 10px', borderRadius: '20px', fontSize: '11px', fontWeight: 700, color: cfg.color, background: cfg.bg }}>
-                  {d.status.replace('_', ' ')}
-                </span>
-              </InlineStack>
-              <Text as="p" variant="bodySm">{desc.length > 120 ? desc.slice(0, 120) + '...' : desc}</Text>
-              {d.resolution && (
-                <Text as="p" variant="bodySm" tone="success">Resolution: {d.resolution}</Text>
-              )}
-              <Text as="span" variant="bodySm" tone="subdued">
-                {new Date(d.created_at).toLocaleDateString()} {new Date(d.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                {' · '}{d.reporter_role}
-              </Text>
-            </BlockStack>
-          </InlineStack>
-        </div>
-      </Card>
-    );
-  };
+  const openCount = currentList.filter(d => d.status === 'open').length;
+  const resolvedCount = currentList.filter(d => d.status === 'resolved').length;
 
   return (
     <Page title="Disputes & Complaints">
       <Layout>
+        {/* Tab bar */}
         <Layout.Section>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <div className="tab-pills">
-              <div className={`tab-pill ${activeTab === 'orders' ? 'tab-pill-active' : ''}`} onClick={() => setActiveTab('orders')}>
-                Order Disputes {orderDisputes.length > 0 && <span style={{ marginLeft: '4px', fontSize: '11px' }}>({orderDisputes.length})</span>}
-              </div>
-              <div className={`tab-pill ${activeTab === 'app' ? 'tab-pill-active' : ''}`} onClick={() => setActiveTab('app')}>
-                App Complaints {appComplaints.length > 0 && <span style={{ marginLeft: '4px', fontSize: '11px' }}>({appComplaints.length})</span>}
-              </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+            <div style={{ display: 'flex', gap: '0', background: '#f1f5f9', borderRadius: '12px', padding: '4px' }}>
+              <button
+                onClick={() => setActiveTab('orders')}
+                style={{
+                  padding: '10px 24px', fontSize: '13px', fontWeight: 600, border: 'none', borderRadius: '10px', cursor: 'pointer',
+                  background: activeTab === 'orders' ? '#fff' : 'transparent',
+                  color: activeTab === 'orders' ? '#1e293b' : '#64748b',
+                  boxShadow: activeTab === 'orders' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                }}
+              >
+                📦 Order Disputes
+                {orderDisputes.length > 0 && <span style={{ marginLeft: '6px', fontSize: '11px', padding: '1px 7px', borderRadius: '10px', background: '#fee2e2', color: '#991b1b' }}>{orderDisputes.length}</span>}
+              </button>
+              <button
+                onClick={() => setActiveTab('app')}
+                style={{
+                  padding: '10px 24px', fontSize: '13px', fontWeight: 600, border: 'none', borderRadius: '10px', cursor: 'pointer',
+                  background: activeTab === 'app' ? '#fff' : 'transparent',
+                  color: activeTab === 'app' ? '#1e293b' : '#64748b',
+                  boxShadow: activeTab === 'app' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                }}
+              >
+                🛠️ App Complaints
+                {appComplaints.length > 0 && <span style={{ marginLeft: '6px', fontSize: '11px', padding: '1px 7px', borderRadius: '10px', background: '#dbeafe', color: '#1e40af' }}>{appComplaints.length}</span>}
+              </button>
             </div>
             <button
               onClick={() => { setCreateModal(activeTab === 'orders' ? 'order' : 'app'); setDisputeType(activeTab === 'orders' ? 'quality_issue' : 'app_bug'); }}
               style={{
-                padding: '8px 20px', fontSize: '13px', fontWeight: 600,
-                background: '#111', color: '#fff', border: 'none', borderRadius: '8px', cursor: 'pointer',
+                padding: '10px 24px', fontSize: '13px', fontWeight: 600,
+                background: '#111', color: '#fff', border: 'none', borderRadius: '10px', cursor: 'pointer',
               }}
             >
-              {activeTab === 'orders' ? 'Report Order Issue' : 'Submit Complaint'}
+              {activeTab === 'orders' ? '+ Report Issue' : '+ Submit Complaint'}
             </button>
           </div>
         </Layout.Section>
 
+        {/* Stats */}
+        {currentList.length > 0 && (
+          <Layout.Section>
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <div style={{ flex: 1, background: '#fff', borderRadius: '14px', padding: '16px 20px', border: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🟡</div>
+                <div><div style={{ fontSize: '22px', fontWeight: 700 }}>{openCount}</div><div style={{ fontSize: '12px', color: '#94a3b8' }}>Open</div></div>
+              </div>
+              <div style={{ flex: 1, background: '#fff', borderRadius: '14px', padding: '16px 20px', border: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#dcfce7', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>🟢</div>
+                <div><div style={{ fontSize: '22px', fontWeight: 700 }}>{resolvedCount}</div><div style={{ fontSize: '12px', color: '#94a3b8' }}>Resolved</div></div>
+              </div>
+              <div style={{ flex: 1, background: '#fff', borderRadius: '14px', padding: '16px 20px', border: '1px solid #f1f5f9', display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <div style={{ width: '40px', height: '40px', borderRadius: '10px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px' }}>📊</div>
+                <div><div style={{ fontSize: '22px', fontWeight: 700 }}>{currentList.length}</div><div style={{ fontSize: '12px', color: '#94a3b8' }}>Total</div></div>
+              </div>
+            </div>
+          </Layout.Section>
+        )}
+
+        {/* Disputes list */}
         <Layout.Section>
-          {activeTab === 'orders' ? (
-            orderDisputes.length > 0 ? (
-              <BlockStack gap="300">{orderDisputes.map(renderDispute)}</BlockStack>
-            ) : (
-              <Card><EmptyState heading="No order disputes" image="">
-                <p>File a dispute if you have a problem with a specific order — quality, delivery, or payment issues.</p>
-              </EmptyState></Card>
-            )
+          {currentList.length > 0 ? (
+            <BlockStack gap="300">
+              {currentList.map((d) => {
+                const sCfg = statusStyles[d.status] || statusStyles['open'];
+                const typeInfo = ALL_TYPES.find(t => t.value === d.dispute_type);
+                const desc = d.description.replace('[APP COMPLAINT] ', '');
+                return (
+                  <Card key={d.id}>
+                    <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
+                      {/* Icon */}
+                      <div style={{
+                        width: '44px', height: '44px', borderRadius: '12px', flexShrink: 0,
+                        background: sCfg.bg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '20px',
+                      }}>
+                        {typeInfo?.icon || '📝'}
+                      </div>
+
+                      {/* Content */}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                          <div>
+                            <div style={{ fontSize: '14px', fontWeight: 700, color: '#1e293b' }}>
+                              {typeInfo?.label || d.dispute_type}
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>
+                              {new Date(d.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })} {new Date(d.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              {' · '}{d.reporter_role}
+                              {d.routed_order_id && d.routed_order_id !== '00000000-0000-0000-0000-000000000000' && (
+                                <span> · <a onClick={() => navigate(`/orders/${d.routed_order_id}`)} style={{ color: '#1e40af', cursor: 'pointer', textDecoration: 'underline' }}>View Order</a></span>
+                              )}
+                            </div>
+                          </div>
+                          <span style={{
+                            padding: '4px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 700,
+                            color: sCfg.color, background: sCfg.bg, whiteSpace: 'nowrap',
+                          }}>
+                            {sCfg.icon} {sCfg.label}
+                          </span>
+                        </div>
+
+                        <div style={{
+                          fontSize: '13px', color: '#475569', lineHeight: '1.5',
+                          background: '#f8fafc', borderRadius: '10px', padding: '10px 14px', marginBottom: '6px',
+                        }}>
+                          {desc}
+                        </div>
+
+                        {d.resolution && (
+                          <div style={{
+                            fontSize: '13px', color: '#166534', lineHeight: '1.5',
+                            background: '#f0fdf4', borderRadius: '10px', padding: '10px 14px',
+                            border: '1px solid #dcfce7',
+                          }}>
+                            <strong>Resolution:</strong> {d.resolution}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </BlockStack>
           ) : (
-            appComplaints.length > 0 ? (
-              <BlockStack gap="300">{appComplaints.map(renderDispute)}</BlockStack>
-            ) : (
-              <Card><EmptyState heading="No app complaints" image="">
-                <p>Submit a complaint about app bugs, payment problems, policy violations, or feature requests.</p>
-              </EmptyState></Card>
-            )
+            <Card>
+              <EmptyState heading={activeTab === 'orders' ? 'No order disputes' : 'No app complaints'} image="">
+                <p>{activeTab === 'orders'
+                  ? 'File a dispute if you have a problem with a specific order.'
+                  : 'Submit a complaint about app issues, payments, or feature requests.'
+                }</p>
+              </EmptyState>
+            </Card>
           )}
         </Layout.Section>
 
@@ -198,7 +252,7 @@ export default function Disputes() {
 
       {createModal && (
         <Modal open onClose={() => setCreateModal(null)}
-          title={createModal === 'order' ? 'Report Order Issue' : 'Submit App Complaint'}
+          title={createModal === 'order' ? '📦 Report Order Issue' : '🛠️ Submit App Complaint'}
           primaryAction={{ content: 'Submit', onAction: handleCreate, loading: creating, disabled: (createModal === 'order' && !orderId) || !description }}
           secondaryActions={[{ content: 'Cancel', onAction: () => setCreateModal(null) }]}
         >
@@ -208,14 +262,14 @@ export default function Disputes() {
               <FormLayout>
                 {createModal === 'order' && (
                   <TextField label="Order ID or Number" value={orderId} onChange={setOrderId} autoComplete="off"
-                    helpText="Enter the order number (e.g. 1005)" />
+                    helpText="Enter the order number (e.g. 1005)" placeholder="#1005" />
                 )}
                 <Select label="Issue Type"
-                  options={createModal === 'order' ? ORDER_DISPUTE_TYPES : APP_COMPLAINT_TYPES}
+                  options={createModal === 'order' ? ORDER_TYPES.map(t => ({ label: `${t.icon} ${t.label}`, value: t.value })) : APP_TYPES.map(t => ({ label: `${t.icon} ${t.label}`, value: t.value }))}
                   value={disputeType} onChange={setDisputeType} />
                 <TextField label="Description" value={description} onChange={setDescription}
                   multiline={4} autoComplete="off"
-                  helpText={createModal === 'order' ? 'Describe the problem with this order' : 'Describe your issue or suggestion'} />
+                  helpText={createModal === 'order' ? 'Describe the problem with this order in detail' : 'Describe your issue, suggestion, or feedback'} />
               </FormLayout>
             </BlockStack>
           </Modal.Section>
