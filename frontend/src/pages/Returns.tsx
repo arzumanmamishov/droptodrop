@@ -231,12 +231,23 @@ export default function Returns({ role }: Props) {
           secondaryActions={[{ content: 'Cancel', onAction: () => setLabelModal(null) }]}
         >
           <Modal.Section>
-            <FormLayout>
-              <TextField label="Return label URL" value={labelUrl} onChange={setLabelUrl} autoComplete="url"
-                placeholder="https://..." helpText="Paste URL to the return shipping label (PDF or image)" />
-              <TextField label="Notes for reseller (optional)" value={labelNotes} onChange={setLabelNotes}
-                autoComplete="off" multiline={2} placeholder="Return instructions..." />
-            </FormLayout>
+            <BlockStack gap="400">
+              <div style={{ background: '#f0f4ff', borderRadius: '10px', padding: '12px 16px', fontSize: '13px', color: '#1e40af' }}>
+                <strong>How to get a return label:</strong>
+                <ol style={{ margin: '6px 0 0 16px', lineHeight: '1.6' }}>
+                  <li>Go to your shipping provider (DHL, UPS, FedEx, etc.)</li>
+                  <li>Create a return shipping label for this order</li>
+                  <li>Copy the label URL or tracking page link</li>
+                  <li>Paste it below — the reseller will share it with the customer</li>
+                </ol>
+              </div>
+              <FormLayout>
+                <TextField label="Return label URL" value={labelUrl} onChange={setLabelUrl} autoComplete="url"
+                  placeholder="https://www.dhl.com/label/..." helpText="Paste the link to the return shipping label (PDF, image, or tracking page)" />
+                <TextField label="Return instructions (optional)" value={labelNotes} onChange={setLabelNotes}
+                  autoComplete="off" multiline={2} placeholder="e.g. Pack securely, include order number on the box..." />
+              </FormLayout>
+            </BlockStack>
           </Modal.Section>
         </Modal>
       )}
