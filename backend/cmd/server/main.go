@@ -2265,15 +2265,32 @@ func main() {
 				return
 			}
 
-			// Calculate fee from billing plan
+			// Calculate fee from billing plan — charged on RETAIL price
 			feePercent := 2.0
 			db.QueryRow(c.Request.Context(), `
 				SELECT bp.app_fee_percent FROM shop_subscriptions ss
 				JOIN billing_plans bp ON bp.id = ss.plan_id
 				WHERE ss.shop_id = $1 AND ss.status = 'active'
 			`, sid).Scan(&feePercent)
-			platformFee := wholesale * feePercent / 100
+			// Get retail price from markup
+			var markupType string
+			var markupValue float64
+			db.QueryRow(c.Request.Context(), `
+				SELECT COALESCE(ri.markup_type,'percentage'), COALESCE(ri.markup_value, 30)
+				FROM routed_orders ro
+				JOIN reseller_imports ri ON ri.reseller_shop_id = ro.reseller_shop_id
+				WHERE ro.id = $1 LIMIT 1
+			`, orderID).Scan(&markupType, &markupValue)
+			var retailPrice float64
+			if markupType == "fixed" {
+				retailPrice = wholesale + markupValue
+			} else {
+				retailPrice = wholesale * (1 + markupValue/100)
+			}
+			if retailPrice < wholesale { retailPrice = wholesale }
+			platformFee := retailPrice * feePercent / 100
 			supplierPayout := wholesale - platformFee
+			if supplierPayout < 0 { supplierPayout = 0 }
 
 			// Update to payment_sent or create record
 			result, _ := db.Exec(c.Request.Context(), `UPDATE payout_records SET status = 'payment_sent', updated_at = NOW() WHERE routed_order_id = $1 AND status IN ('pending', 'disputed')`, orderID)

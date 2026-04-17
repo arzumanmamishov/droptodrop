@@ -1759,7 +1759,7 @@ func (w *Worker) handleChargeOrder(ctx context.Context, payload json.RawMessage)
 	var wholesaleAmount float64
 	fmt.Sscanf(params.WholesaleAmount, "%f", &wholesaleAmount)
 
-	// Get platform fee from plan
+	// Get platform fee from plan — charged on RETAIL price (not wholesale)
 	feePercent := 2.0
 	w.db.QueryRow(ctx, `
 		SELECT bp.app_fee_percent FROM shop_subscriptions ss
@@ -1767,8 +1767,28 @@ func (w *Worker) handleChargeOrder(ctx context.Context, payload json.RawMessage)
 		WHERE ss.shop_id = $1 AND ss.status = 'active'
 	`, params.ResellerShopID).Scan(&feePercent)
 
-	platformFee := wholesaleAmount * feePercent / 100
+	// Calculate retail price from wholesale + reseller markup
+	var markupType string
+	var markupValue float64
+	w.db.QueryRow(ctx, `
+		SELECT COALESCE(ri.markup_type,'percentage'), COALESCE(ri.markup_value, 30)
+		FROM routed_orders ro
+		JOIN routed_order_items roi ON roi.routed_order_id = ro.id
+		JOIN reseller_imports ri ON ri.reseller_shop_id = ro.reseller_shop_id
+		WHERE ro.id = $1 LIMIT 1
+	`, params.RoutedOrderID).Scan(&markupType, &markupValue)
+
+	var retailPrice float64
+	if markupType == "fixed" {
+		retailPrice = wholesaleAmount + (markupValue * float64(1)) // approximate
+	} else {
+		retailPrice = wholesaleAmount * (1 + markupValue/100)
+	}
+	if retailPrice < wholesaleAmount { retailPrice = wholesaleAmount }
+
+	platformFee := retailPrice * feePercent / 100
 	supplierPayout := wholesaleAmount - platformFee
+	if supplierPayout < 0 { supplierPayout = 0 }
 
 	// Record payout
 	_, err := w.db.Exec(ctx, `

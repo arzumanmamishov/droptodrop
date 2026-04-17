@@ -97,6 +97,20 @@ func NewService(db *pgxpool.Pool, logger zerolog.Logger, auditSvc *audit.Service
 
 // CreateListing creates a new supplier listing with variants.
 func (s *Service) CreateListing(ctx context.Context, shopID string, input CreateListingInput) (*SupplierListing, error) {
+	// Check listing limit from subscription plan
+	var maxProducts int
+	var currentCount int
+	s.db.QueryRow(ctx, `
+		SELECT COALESCE(bp.max_products, 5) FROM shop_subscriptions ss
+		JOIN billing_plans bp ON bp.id = ss.plan_id
+		WHERE ss.shop_id = $1 AND ss.status = 'active'
+	`, shopID).Scan(&maxProducts)
+	if maxProducts == 0 { maxProducts = 5 } // default: Starter plan (5 products)
+	s.db.QueryRow(ctx, `SELECT COUNT(*) FROM supplier_listings WHERE supplier_shop_id = $1`, shopID).Scan(&currentCount)
+	if currentCount >= maxProducts {
+		return nil, fmt.Errorf("you have reached your plan limit of %d products. Upgrade your plan to add more", maxProducts)
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
