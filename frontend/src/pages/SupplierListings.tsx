@@ -32,6 +32,7 @@ export default function SupplierListings() {
   const { data, loading, error, refetch } = useApi<ListingsResponse>(
     '/supplier/listings?limit=100&offset=0',
   );
+  const { data: billingData } = useApi<{ limits?: { max_products: number; products_used: number } }>('/billing');
 
   const handleStatusChange = useCallback(async (id: string, status: string) => {
     try {
@@ -132,6 +133,14 @@ export default function SupplierListings() {
               <div className="stat-card-value">{pausedCount}</div>
               <div className="stat-card-label">Paused</div>
             </div>
+            {billingData?.limits && (
+              <div className="stat-card" style={{ flex: 1 }}>
+                <div className="stat-card-value" style={{ color: billingData.limits.products_used >= billingData.limits.max_products ? '#dc2626' : '#1e40af' }}>
+                  {billingData.limits.products_used}/{billingData.limits.max_products}
+                </div>
+                <div className="stat-card-label">Plan Limit</div>
+              </div>
+            )}
           </InlineStack>
         </Layout.Section>
 

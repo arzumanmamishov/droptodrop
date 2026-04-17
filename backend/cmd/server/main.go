@@ -1035,8 +1035,17 @@ func main() {
 			})
 
 			reseller.GET("/marketplace", func(c *gin.Context) {
+				shopID, _ := c.Get("shop_id")
 				var filters products.MarketplaceFilters
 				c.ShouldBindQuery(&filters)
+				// Auto-detect reseller's country for filtering
+				if filters.Country == "" {
+					var shopCountry string
+					db.QueryRow(c.Request.Context(), `SELECT COALESCE(country,'') FROM shops WHERE id = $1`, shopID).Scan(&shopCountry)
+					if shopCountry != "" {
+						filters.Country = shopCountry
+					}
+				}
 				limit := getIntQuery(c, "limit", 20)
 				offset := getIntQuery(c, "offset", 0)
 				listings, total, err := productsSvc.ListMarketplace(c.Request.Context(), filters, limit, offset)

@@ -441,6 +441,12 @@ func (s *Service) ListMarketplace(ctx context.Context, filters MarketplaceFilter
 		args = append(args, filters.MaxPrice)
 		argN++
 	}
+	if filters.Country != "" {
+		// Show products where supplier ships to this country (or ships worldwide with empty shipping_countries)
+		baseWhere += fmt.Sprintf(` AND (sl.shipping_countries = '[]'::jsonb OR sl.shipping_countries @> $%d::jsonb)`, argN)
+		args = append(args, `"`+filters.Country+`"`)
+		argN++
+	}
 
 	var total int
 	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM supplier_listings sl %s`, baseWhere)
