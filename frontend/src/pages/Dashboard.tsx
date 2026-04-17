@@ -121,6 +121,60 @@ export default function Dashboard() {
         <Layout.Section>
           <div className="page-header-accent" />
         </Layout.Section>
+        {/* Getting Started Checklist */}
+        {isSupplier && ((data?.active_listings ?? 0) === 0 || !data?.paypal_email || !data?.shipping_countries?.length) && (
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="300">
+                <Text as="h2" variant="headingMd">🚀 Getting Started</Text>
+                <Divider />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {[
+                    { done: !!data?.paypal_email, label: 'Add your PayPal email', action: () => navigate('/supplier/setup'), actionLabel: 'Go to Settings' },
+                    { done: (data?.shipping_countries?.length || 0) > 0, label: 'Select shipping countries', action: () => setCountryModal(true), actionLabel: 'Select' },
+                    { done: (data?.active_listings ?? 0) > 0, label: 'List your first product', action: () => navigate('/supplier/listings'), actionLabel: 'Add Product' },
+                  ].map((step, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: '8px', background: step.done ? '#f0fdf4' : '#f8fafc' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, background: step.done ? '#166534' : '#e2e8f0', color: step.done ? '#fff' : '#94a3b8' }}>
+                          {step.done ? '✓' : i + 1}
+                        </span>
+                        <span style={{ fontSize: '14px', fontWeight: 500, color: step.done ? '#166534' : '#1e293b', textDecoration: step.done ? 'line-through' : 'none' }}>{step.label}</span>
+                      </div>
+                      {!step.done && <button onClick={step.action} style={{ padding: '4px 12px', fontSize: '12px', fontWeight: 600, background: '#1e40af', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>{step.actionLabel}</button>}
+                    </div>
+                  ))}
+                </div>
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+        )}
+        {!isSupplier && ((data?.imported_products ?? 0) === 0 || !data?.paypal_email) && (
+          <Layout.Section>
+            <Card>
+              <BlockStack gap="300">
+                <Text as="h2" variant="headingMd">🚀 Getting Started</Text>
+                <Divider />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {[
+                    { done: !!data?.paypal_email, label: 'Add your PayPal email', action: () => navigate('/reseller/settings'), actionLabel: 'Go to Settings' },
+                    { done: (data?.imported_products ?? 0) > 0, label: 'Import your first product from Marketplace', action: () => navigate('/marketplace'), actionLabel: 'Browse' },
+                  ].map((step, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderRadius: '8px', background: step.done ? '#f0fdf4' : '#f8fafc' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <span style={{ width: '24px', height: '24px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: 700, background: step.done ? '#166534' : '#e2e8f0', color: step.done ? '#fff' : '#94a3b8' }}>
+                          {step.done ? '✓' : i + 1}
+                        </span>
+                        <span style={{ fontSize: '14px', fontWeight: 500, color: step.done ? '#166534' : '#1e293b', textDecoration: step.done ? 'line-through' : 'none' }}>{step.label}</span>
+                      </div>
+                      {!step.done && <button onClick={step.action} style={{ padding: '4px 12px', fontSize: '12px', fontWeight: 600, background: '#1e40af', color: '#fff', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>{step.actionLabel}</button>}
+                    </div>
+                  ))}
+                </div>
+              </BlockStack>
+            </Card>
+          </Layout.Section>
+        )}
         {isSupplier && (data?.active_listings ?? 0) === 0 && (
           <Layout.Section>
             <Banner tone="info" action={{ content: 'Add Products', onAction: () => navigate('/supplier/listings') }}>
