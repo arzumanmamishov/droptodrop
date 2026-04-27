@@ -636,6 +636,7 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 						"inventoryItemId": inventoryItemID,
 						"locationId":      locGID,
 						"quantity":        availableQty,
+						"compareQuantity": nil,
 					})
 				}
 				setInvQuery := `mutation setInventory($input: InventorySetQuantitiesInput!) {
@@ -646,10 +647,9 @@ func (w *Worker) handleCreateProduct(ctx context.Context, payload json.RawMessag
 				}`
 				setInvVars := map[string]interface{}{
 					"input": map[string]interface{}{
-						"name":                  "available",
-						"reason":                "correction",
-						"ignoreCompareQuantity": true,
-						"quantities":            quantities,
+						"name":       "available",
+						"reason":     "correction",
+						"quantities": quantities,
 					},
 				}
 				var setInvResp json.RawMessage
@@ -884,8 +884,8 @@ func (w *Worker) handleSyncProduct(ctx context.Context, payload json.RawMessage)
 						var setResp json.RawMessage
 						client.GraphQL(ctx, `mutation($input: InventorySetQuantitiesInput!) { inventorySetQuantities(input: $input) { inventoryAdjustmentGroup { reason } userErrors { field message } } }`,
 							map[string]interface{}{"input": map[string]interface{}{
-								"name": "available", "reason": "correction", "ignoreCompareQuantity": true,
-								"quantities": []map[string]interface{}{{"inventoryItemId": invItemID, "locationId": locationID, "quantity": qty}},
+								"name": "available", "reason": "correction",
+								"quantities": []map[string]interface{}{{"inventoryItemId": invItemID, "locationId": locationID, "quantity": qty, "compareQuantity": nil}},
 							}}, &setResp)
 
 						w.logger.Info().Int("qty", qty).Float64("price", newPrice).Msg("variant synced to Shopify")

@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	apiVersion     = "2024-10"
+	apiVersion     = "2026-04"
 	graphqlPath    = "/admin/api/%s/graphql.json"
 	restPath       = "/admin/api/%s"
 )
@@ -465,14 +465,14 @@ func (c *Client) SetInventoryQuantity(ctx context.Context, inventoryItemID int64
 
 	variables := map[string]interface{}{
 		"input": map[string]interface{}{
-			"name":                  "available",
-			"reason":                "correction",
-			"ignoreCompareQuantity": true,
+			"name":   "available",
+			"reason": "correction",
 			"quantities": []map[string]interface{}{
 				{
-					"inventoryItemId": itemGID,
-					"locationId":      locationGID,
-					"quantity":        quantity,
+					"inventoryItemId":  itemGID,
+					"locationId":       locationGID,
+					"quantity":         quantity,
+					"compareQuantity":  nil,
 				},
 			},
 		},
