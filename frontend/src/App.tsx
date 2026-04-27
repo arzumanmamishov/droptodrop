@@ -98,6 +98,21 @@ export default function App() {
             <Route path="*" element={<Onboarding onComplete={(role) => setShop({ ...shop, role: role as Shop['role'] })} />} />
           </Routes>
         ) : shop ? (
+          <>
+            {/* App Bridge Navigation Menu */}
+            <ui-nav-menu>
+              <a href="/" rel="home">Dashboard</a>
+              {shop.role === 'supplier' && <a href="/supplier/listings">Listings</a>}
+              {shop.role === 'supplier' && <a href="/orders">Orders</a>}
+              {shop.role === 'reseller' && <a href="/marketplace">Marketplace</a>}
+              {shop.role === 'reseller' && <a href="/imports">Imports</a>}
+              {shop.role === 'reseller' && <a href="/orders">Orders</a>}
+              <a href="/messages">Messages</a>
+              <a href="/payouts">Payouts</a>
+              <a href="/returns">Returns</a>
+              <a href="/billing">Billing</a>
+              <a href="/support">Help</a>
+            </ui-nav-menu>
           <AppFrame shop={shop}>
             <Routes>
               <Route path="/" element={<Dashboard />} />
@@ -140,6 +155,7 @@ export default function App() {
               <Route path="*" element={<Navigate to="/" />} />
             </Routes>
           </AppFrame>
+          </>
         ) : (
           <div style={{ padding: '3rem', textAlign: 'center', maxWidth: '500px', margin: '0 auto' }}>
             <img src="/pngdrop.png" alt="DropToDrop" style={{ width: '80px', height: '80px', objectFit: 'contain', marginBottom: '16px' }} />
