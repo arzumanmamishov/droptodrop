@@ -568,11 +568,11 @@ func main() {
 							}
 							client.RegisterWebhook(bgCtx, topic, cfg.Shopify.AppURL+paths[topic])
 						}
-						// Fetch and save shop name from Shopify
+						// Fetch and save shop name + country from Shopify
 						shopInfo, err := client.GetShopInfo(bgCtx)
 						if err == nil && shopInfo != nil {
-							db.Exec(bgCtx, `UPDATE shops SET name = $1, email = $2 WHERE id = $3 AND (name = '' OR name IS NULL)`,
-								shopInfo["name"], shopInfo["email"], shopID.(string))
+							db.Exec(bgCtx, `UPDATE shops SET name = COALESCE(NULLIF($1,''), name), email = COALESCE(NULLIF($2,''), email), country = COALESCE(NULLIF($3,''), country) WHERE id = $4`,
+								shopInfo["name"], shopInfo["email"], shopInfo["country"], shopID.(string))
 						}
 					}
 				}

@@ -573,7 +573,7 @@ func (c *Client) GetVariantInventoryItem(ctx context.Context, variantID int64) (
 
 // GetShopInfo fetches shop name and email from Shopify.
 func (c *Client) GetShopInfo(ctx context.Context) (map[string]string, error) {
-	query := `{ shop { name email myshopifyDomain } }`
+	query := `{ shop { name email myshopifyDomain primaryDomain { host } billingAddress { countryCodeV2 city province } } }`
 
 	var result struct {
 		Data struct {
@@ -581,6 +581,11 @@ func (c *Client) GetShopInfo(ctx context.Context) (map[string]string, error) {
 				Name             string `json:"name"`
 				Email            string `json:"email"`
 				MyshopifyDomain  string `json:"myshopifyDomain"`
+				BillingAddress   struct {
+					CountryCodeV2 string `json:"countryCodeV2"`
+					City          string `json:"city"`
+					Province      string `json:"province"`
+				} `json:"billingAddress"`
 			} `json:"shop"`
 		} `json:"data"`
 	}
@@ -590,7 +595,8 @@ func (c *Client) GetShopInfo(ctx context.Context) (map[string]string, error) {
 	}
 
 	return map[string]string{
-		"name":  result.Data.Shop.Name,
+		"name":    result.Data.Shop.Name,
+		"country": result.Data.Shop.BillingAddress.CountryCodeV2,
 		"email": result.Data.Shop.Email,
 	}, nil
 }
